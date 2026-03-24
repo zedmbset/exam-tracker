@@ -17,6 +17,7 @@ const SHEET_ID        = process.env.SHEET_ID   || '';
 const SHEET_TAB       = process.env.SHEET_TAB  || 'Sheet1';
 const HEADER_ROW      = parseInt(process.env.HEADER_ROW || '1');
 const SERVICE_ACCOUNT = JSON.parse(process.env.SERVICE_ACCOUNT_JSON || '{}');
+const DRIVE_FOLDER_ID = process.env.DRIVE_FOLDER_ID || '';
 // ──────────────────────────────────────────────────────────────────────────
 
 // ── Service Account → OAuth2 access token (JWT) ───────────────────────────
@@ -110,7 +111,11 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const fileBuffer   = req.file.buffer;
     const name         = filename || req.file.originalname;
 
-    const metadata = JSON.stringify({ name, mimeType: 'application/pdf' });
+    // Include folder ID if set
+    const meta = { name, mimeType: 'application/pdf' };
+    if (DRIVE_FOLDER_ID) meta.parents = [DRIVE_FOLDER_ID];
+
+    const metadata = JSON.stringify(meta);
     const form     = new FormData();
     form.append('metadata', Buffer.from(metadata), { contentType: 'application/json', filename: 'metadata.json' });
     form.append('file', fileBuffer, { contentType: 'application/pdf', filename: name });
