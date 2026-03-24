@@ -93,8 +93,14 @@
   .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .btn-primary:hover { background: #0C447C; }
   .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-ghost { border-color: transparent; background: transparent; }
+  .btn-ghost:hover { background: var(--bg3); border-color: var(--border); }
   .btn-danger { border-color: var(--red-border); color: var(--red-text); }
   .btn-danger:hover { background: var(--red-bg); }
+
+  /* Share button */
+  .share-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; border: 0.5px solid var(--border); background: transparent; color: var(--text3); cursor: pointer; transition: all 0.15s; }
+  .share-btn:hover { background: var(--blue-bg); color: var(--blue-text); border-color: var(--blue-border); }
 
   /* Modal */
   .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
@@ -192,7 +198,7 @@
               <tr>
                 <th>Wilaya</th><th>Year</th><th>Rotation</th><th>Module</th>
                 <th>Status</th><th>Exam type</th><th>Drive</th><th>Quiz link</th>
-                <th>MBset</th><th>N° Qst</th><th>Missing</th>
+                <th>MBset</th><th>N° Qst</th><th>Missing</th><th></th>
               </tr>
             </thead>
             <tbody id="tableBody"></tbody>
@@ -227,8 +233,7 @@
 
 <script>
 // ── Config ──────────────────────────────────────────────────────────────────
-// The backend URL — when running on Railway this is the same origin
-const API = '';  // empty = same origin; change to 'https://your-app.railway.app' if frontend is hosted elsewhere
+const API = '';  // empty = same origin
 
 const COLS = {
   ID_Exams:0, Wilaya:1, Year:2, Level:3, Rotation:4, Module:5,
@@ -236,14 +241,14 @@ const COLS = {
   DBTbl:11, Membre:12, Tags:13, Drive:14, QuizLink:15,
   ExamStatus:16, MBsetStatus:17, Mbset:18, NQst:19, MissingQsts:20
 };
-const EXAM_STATUS_OPTIONS = ['✅ Completed','In Progress','Pending','Not Started'];
-const EXAM_TYPE_OPTIONS   = ['Exam + CT','Exam only','CT only','Other'];
+const EXAM_STATUS_OPTIONS  = ['✅ Completed','In Progress','Pending','Not Started'];
+const EXAM_TYPE_OPTIONS    = ['Exam + CT','Exam only','CT only','Other'];
 const MBSET_STATUS_OPTIONS = ['Imported','Pending','Not needed'];
 
-let sheetData = [];
-let headers   = [];
-let sheetTab  = 'Sheet1';
-let headerRow = 1;
+let sheetData    = [];
+let headers      = [];
+let sheetTab     = 'Sheet1';
+let headerRow    = 1;
 let activeRowIdx = null;
 let pendingFile  = null;
 
@@ -264,9 +269,9 @@ async function loadSheet() {
     const data = await (await fetch(`${API}/api/sheet`)).json();
     if (data.error) throw new Error(data.error);
     const rows = data.values || [];
-    const hi = headerRow - 1;
-    headers   = rows[hi] || [];
-    sheetData = rows.slice(hi + 1).map((r, i) => {
+    const hi   = headerRow - 1;
+    headers    = rows[hi] || [];
+    sheetData  = rows.slice(hi + 1).map((r, i) => {
       while (r.length < headers.length) r.push('');
       return { _rowIndex: hi + 2 + i, cells: r };
     });
@@ -313,11 +318,11 @@ function isComplete(row){ return getMissing(row).length===0; }
 
 // ── Stats & filters ──────────────────────────────────────────────────────────
 function renderStats() {
-  const total=sheetData.length;
-  const done=sheetData.filter(r=>(cell(r,'Status')||cell(r,'Exam Status')).includes('Completed')).length;
-  const hasDrive=sheetData.filter(r=>cell(r,'Drive')||cell(r,'Orgnl Exam')).length;
-  const hasMbset=sheetData.filter(r=>(cell(r,'Mbset')||cell(r,'MBset Status')).includes('✅')||cell(r,'MBset Status')==='Imported').length;
-  const pct=total?Math.round(done/total*100):0;
+  const total   = sheetData.length;
+  const done    = sheetData.filter(r=>(cell(r,'Status')||cell(r,'Exam Status')).includes('Completed')).length;
+  const hasDrive= sheetData.filter(r=>cell(r,'Drive')||cell(r,'Orgnl Exam')).length;
+  const hasMbset= sheetData.filter(r=>(cell(r,'Mbset')||cell(r,'MBset Status')).includes('✅')||cell(r,'MBset Status')==='Imported').length;
+  const pct     = total?Math.round(done/total*100):0;
   document.getElementById('statsRow').innerHTML=`
     <div class="stat"><div class="stat-label">Total rows</div><div class="stat-val">${total}</div><div class="stat-sub">${[...new Set(sheetData.map(r=>cell(r,'Wilaya')).filter(Boolean))].join(', ')}</div></div>
     <div class="stat"><div class="stat-label">Completed</div><div class="stat-val">${done}</div><div class="stat-sub" style="color:var(--green-text)">${pct}% done</div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div>
@@ -337,11 +342,11 @@ function populateFilters() {
 }
 
 function getFiltered() {
-  const q=document.getElementById('searchBox').value.toLowerCase();
-  const fw=document.getElementById('fWilaya').value;
-  const fy=document.getElementById('fYear').value;
-  const fs=document.getElementById('fSemester').value;
-  const fst=document.getElementById('fStatus').value;
+  const q  = document.getElementById('searchBox').value.toLowerCase();
+  const fw = document.getElementById('fWilaya').value;
+  const fy = document.getElementById('fYear').value;
+  const fs = document.getElementById('fSemester').value;
+  const fst= document.getElementById('fStatus').value;
   return sheetData.filter(r=>{
     if(q&&!(`${cell(r,'Wilaya')} ${cell(r,'Module')} ${cell(r,'Rotation')} ${cell(r,'Level')}`).toLowerCase().includes(q))return false;
     if(fw&&cell(r,'Wilaya')!==fw)return false;
@@ -364,19 +369,22 @@ function renderTable(){
   const rows=getFiltered();
   document.getElementById('rowCount').textContent=rows.length+' rows';
   const tbody=document.getElementById('tableBody');
-  if(!rows.length){tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:2rem;">No rows match filters</td></tr>`;return;}
+  if(!rows.length){tbody.innerHTML=`<tr><td colspan="12" style="text-align:center;color:var(--text3);padding:2rem;">No rows match filters</td></tr>`;return;}
   tbody.innerHTML=rows.map(r=>{
-    const missing=getMissing(r);
-    const comp=missing.length===0;
-    const status=cell(r,'Status')||cell(r,'Exam Status');
-    const drive=cell(r,'Drive')||cell(r,'Orgnl Exam');
-    const quiz=cell(r,'Quiz Link');
-    const mbset=cell(r,'Mbset')||cell(r,'MBset Status');
-    const nqst=cell(r,'N° of Qst')||cell(r,'NQst');
-    const examType=cell(r,'Exam Status')!==cell(r,'Status')?cell(r,'Exam Status'):'';
-    const dotClass=missing.length===0?'dot-green':missing.length<=2?'dot-amber':'dot-red';
-    const missingLabel=comp?`<span style="font-size:11px;color:var(--green-text)">all filled</span>`:`<span class="dot ${dotClass}"></span><span style="font-size:12px;color:var(--amber-text)">${missing.length} field${missing.length>1?'s':''}</span>`;
-    const idx=sheetData.indexOf(r);
+    const missing  = getMissing(r);
+    const comp     = missing.length===0;
+    const status   = cell(r,'Status')||cell(r,'Exam Status');
+    const drive    = cell(r,'Drive')||cell(r,'Orgnl Exam');
+    const quiz     = cell(r,'Quiz Link');
+    const mbset    = cell(r,'Mbset')||cell(r,'MBset Status');
+    const nqst     = cell(r,'N° of Qst')||cell(r,'NQst');
+    const examType = cell(r,'Exam Status')!==cell(r,'Status')?cell(r,'Exam Status'):'';
+    const dotClass = missing.length===0?'dot-green':missing.length<=2?'dot-amber':'dot-red';
+    const missingLabel = comp
+      ?`<span style="font-size:11px;color:var(--green-text)">all filled</span>`
+      :`<span class="dot ${dotClass}"></span><span style="font-size:12px;color:var(--amber-text)">${missing.length} field${missing.length>1?'s':''}</span>`;
+    const idx      = sheetData.indexOf(r);
+    const examId   = cell(r,'ID_Exams') || r._rowIndex;
     return`<tr class="${comp?'complete':'has-missing'}" onclick="${comp?'':'openFill('+idx+')'}">
       <td>${wilayaBadge(cell(r,'Wilaya'))}</td>
       <td>${cell(r,'Year')}</td>
@@ -389,8 +397,20 @@ function renderTable(){
       <td>${mbset&&(mbset.includes('✅')||mbset==='Imported')?`<span class="badge badge-green">imported</span>`:`<span class="badge badge-gray">none</span>`}</td>
       <td style="text-align:center;">${nqst||'<span class="empty-val">—</span>'}</td>
       <td style="white-space:nowrap;">${missingLabel}</td>
+      <td onclick="event.stopPropagation()" style="text-align:center;padding:6px 8px;">
+        <button class="share-btn" onclick="shareExam('${examId}',event)" title="Copy share link">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </td>
     </tr>`;
   }).join('');
+}
+
+// ── Share ────────────────────────────────────────────────────────────────────
+function shareExam(id, e) {
+  if (e) e.stopPropagation();
+  const url = `${location.origin}/exam?id=${encodeURIComponent(id)}`;
+  navigator.clipboard.writeText(url).then(() => notify('Share link copied! 🔗', 'success'));
 }
 
 // ── Fill modal ───────────────────────────────────────────────────────────────
@@ -474,13 +494,11 @@ async function saveRow(){
   const btn=document.getElementById('saveBtn');
   btn.textContent='Saving…';btn.disabled=true;
 
-  // Collect form values
   [['Status'],['Exam Status'],['Quiz Link'],['MBset Status'],['Mbset'],['N° of Qst'],['Missing Qsts']].forEach(([col])=>{
     const el=document.getElementById('field_'+col);
     if(el)setCell(row,col,el.value);
   });
 
-  // Upload PDF via backend
   if(pendingFile){
     try{
       const fname=`${cell(row,'Wilaya')}_${cell(row,'Year')}_${cell(row,'Rotation')}_${cell(row,'Module')}.pdf`.replace(/\s+/g,'_');
@@ -495,7 +513,6 @@ async function saveRow(){
     }catch(e){notify('Drive upload failed: '+e.message,'error');}
   }
 
-  // Write row via backend
   try{
     const r=await fetch(`${API}/api/sheet/${row._rowIndex}`,{
       method:'PUT',
