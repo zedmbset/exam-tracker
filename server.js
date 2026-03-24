@@ -111,24 +111,36 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const fileBuffer   = req.file.buffer;
     const name         = filename || req.file.originalname;
 
-    // Include folder ID if set
-    const meta = { name, mimeType: 'application/pdf' };
-    if (DRIVE_FOLDER_ID) meta.parents = [DRIVE_FOLDER_ID];
+    if (!DRIVE_FOLDER_ID) {
+      throw new Error('DRIVE_FOLDER_ID is not set in Railway environment variables. Please add it.');
+    }
+
+    // Metadata — always include the folder so the file lands in YOUR drive, not the service account's
+    const meta = {
+      name,
+      mimeType: 'application/pdf',
+      parents: [DRIVE_FOLDER_ID],
+    };
 
     const metadata = JSON.stringify(meta);
     const form     = new FormData();
     form.append('metadata', Buffer.from(metadata), { contentType: 'application/json', filename: 'metadata.json' });
     form.append('file', fileBuffer, { contentType: 'application/pdf', filename: name });
 
+    // ✅ FIX: supportsAllDrives=true allows uploading into shared/regular Drive folders
     const uploadRes = await fetch(
-      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
-      { method: 'POST', headers: { Authorization: `Bearer ${token}`, ...form.getHeaders() }, body: form }
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id&supportsAllDrives=true',
+      {
+        method : 'POST',
+        headers: { Authorization: `Bearer ${token}`, ...form.getHeaders() },
+        body   : form,
+      }
     );
     if (!uploadRes.ok) throw new Error(await uploadRes.text());
     const { id } = await uploadRes.json();
 
-    // Make the file publicly viewable
-    await fetch(`https://www.googleapis.com/drive/v3/files/${id}/permissions`, {
+    // ✅ FIX: supportsAllDrives=true also required for permissions endpoint
+    await fetch(`https://www.googleapis.com/drive/v3/files/${id}/permissions?supportsAllDrives=true`, {
       method : 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body   : JSON.stringify({ role: 'reader', type: 'anyone' }),
