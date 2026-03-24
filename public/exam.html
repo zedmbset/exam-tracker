@@ -237,7 +237,7 @@ let pendingFile = null;
 // ── Boot ─────────────────────────────────────────────────────────────────────
 async function boot() {
   const params = new URLSearchParams(location.search);
-  const id     = params.get('id');
+  const id     = decodeURIComponent(params.get('id') || '');
   if (!id) { showError('No ID provided', 'The URL is missing the exam ID parameter.'); return; }
 
   try {
