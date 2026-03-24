@@ -408,10 +408,11 @@ function renderTable(){
 // ── Share ────────────────────────────────────────────────────────────────────
 function shareExam(id, e) {
   if (e) e.stopPropagation();
-  const url = `${location.origin}/exam?id=${encodeURIComponent(id)}`;
+  // Make sure id is treated as a string
+  const safeId = String(id).trim();
+  const url = `${location.origin}/exam?id=${encodeURIComponent(safeId)}`;
   navigator.clipboard.writeText(url).then(() => notify('Share link copied! 🔗', 'success'));
 }
-
 // ── Fill modal ───────────────────────────────────────────────────────────────
 function openFill(idx){
   activeRowIdx=idx; pendingFile=null;
