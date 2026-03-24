@@ -489,7 +489,7 @@ async function saveRow(){
       const r=await fetch(`${API}/api/upload`,{method:'POST',body:fd});
       const d=await r.json();
       if(d.error)throw new Error(d.error);
-      setCell(row,'Drive',d.url);
+      setCell(row,'Orgnl Exam',d.url);
       notify('PDF uploaded to Drive ✅','success');
     }catch(e){notify('Drive upload failed: '+e.message,'error');}
   }
