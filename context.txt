@@ -672,6 +672,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       name,
       mimeType: 'application/pdf',
       parents: [DRIVE_FOLDER_ID],
+      driveId: DRIVE_FOLDER_ID, // ← add this only if parent IS the Shared Drive root
     };
 
     const metadata = JSON.stringify(meta);
