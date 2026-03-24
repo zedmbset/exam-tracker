@@ -664,15 +664,14 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const name         = filename || req.file.originalname;
 
     if (!DRIVE_FOLDER_ID) {
-      throw new Error('DRIVE_FOLDER_ID is not set in Railway environment variables. Please add it.');
+      throw new Error('DRIVE_FOLDER_ID is not set in Railway environment variables.');
     }
 
-    // Metadata — always include the folder so the file lands in YOUR drive, not the service account's
+    // ✅ Just the folder as parent — no driveId in metadata
     const meta = {
       name,
       mimeType: 'application/pdf',
       parents: [DRIVE_FOLDER_ID],
-      driveId: DRIVE_FOLDER_ID, // ← add this only if parent IS the Shared Drive root
     };
 
     const metadata = JSON.stringify(meta);
@@ -680,7 +679,6 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     form.append('metadata', Buffer.from(metadata), { contentType: 'application/json', filename: 'metadata.json' });
     form.append('file', fileBuffer, { contentType: 'application/pdf', filename: name });
 
-    // ✅ FIX: supportsAllDrives=true allows uploading into shared/regular Drive folders
     const uploadRes = await fetch(
       'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id&supportsAllDrives=true',
       {
@@ -692,7 +690,6 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     if (!uploadRes.ok) throw new Error(await uploadRes.text());
     const { id } = await uploadRes.json();
 
-    // ✅ FIX: supportsAllDrives=true also required for permissions endpoint
     await fetch(`https://www.googleapis.com/drive/v3/files/${id}/permissions?supportsAllDrives=true`, {
       method : 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
