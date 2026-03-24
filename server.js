@@ -12,6 +12,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
+// ← ADD THIS LINE RIGHT HERE
+app.get('/exam', (req, res) => {
+  res.sendFile(__dirname + '/public/exam.html');
+});
+
 // ── ENV VARS (set in Railway Variables tab) ────────────────────────────────
 const SHEET_ID        = process.env.SHEET_ID   || '';
 const SHEET_TAB       = process.env.SHEET_TAB  || 'Sheet1';
