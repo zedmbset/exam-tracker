@@ -25,6 +25,7 @@ const SHEET_TAB       = process.env.SHEET_TAB  || 'Sheet1';
 const HEADER_ROW      = parseInt(process.env.HEADER_ROW || '1');
 const SERVICE_ACCOUNT = JSON.parse(process.env.SERVICE_ACCOUNT_JSON || '{}');
 const DRIVE_FOLDER_ID = process.env.DRIVE_FOLDER_ID || '';
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 // ──────────────────────────────────────────────────────────────────────────
 
 // ── Service Account → OAuth2 access token (JWT) ───────────────────────────
@@ -157,7 +158,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
 // GET /api/config  →  send non-secret config to frontend
 app.get('/api/config', (req, res) => {
-  res.json({ sheetTab: SHEET_TAB, headerRow: HEADER_ROW });
+  res.json({ sheetTab: SHEET_TAB, headerRow: HEADER_ROW, googleClientId: GOOGLE_CLIENT_ID });
 });
 
 const PORT = process.env.PORT || 3000;

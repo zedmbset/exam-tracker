@@ -377,7 +377,8 @@ function renderTable(){
     const quiz     = cell(r,'Quiz Link');
     const mbset    = cell(r,'Mbset')||cell(r,'MBset Status');
     const nqst     = cell(r,'N° of Qst')||cell(r,'NQst');
-    const examType = cell(r,'Exam Status')!==cell(r,'Status')?cell(r,'Exam Status'):'';
+    const examTypeRaw = cell(r,'Exam Status')!==cell(r,'Status')?cell(r,'Exam Status'):'';
+    const examType = EXAM_TYPE_OPTIONS.includes(examTypeRaw) ? examTypeRaw : '';
     const dotClass = missing.length===0?'dot-green':missing.length<=2?'dot-amber':'dot-red';
     const missingLabel = comp
       ?`<span style="font-size:11px;color:var(--green-text)">all filled</span>`

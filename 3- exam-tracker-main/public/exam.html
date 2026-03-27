@@ -552,9 +552,7 @@
       const API = "";
 
       // ── Google Auth ──────────────────────────────────────────────────────────────
-      // PASTE YOUR CLIENT ID HERE after following the setup steps
-      const GOOGLE_CLIENT_ID = "YOUR_CLIENT_ID_HERE";
-
+      
       const COLS = {
         ID_Exams: 0,
         Wilaya: 1,
@@ -611,7 +609,12 @@
         boot();
       }
 
-      function initGoogleAuth() {
+      async function initGoogleAuth() {
+        let GOOGLE_CLIENT_ID = "";
+        try {
+          const cfg = await (await fetch(`${API}/api/config`)).json();
+          GOOGLE_CLIENT_ID = cfg.googleClientId || "";
+        } catch (e) { /* use empty string */ }
         // If already signed in (localStorage), skip sign-in screen
         const stored = localStorage.getItem("examTrackerUser");
         if (stored) {
