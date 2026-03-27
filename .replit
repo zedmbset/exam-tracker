@@ -18,14 +18,22 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd '3- exam-tracker-main' && PORT=5000 node server.js"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=5000 node server.js"
+waitForPort = 5000
 
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+SHEET_ID = "1D1kJfMNcWk2yiXF16YH2XcqOCHpPo3rJjrhzkBIh40g"
+SHEET_TAB = "Exams_Tracking"
+HEADER_ROW = "1"
+DRIVE_FOLDER_ID = "1ho5Goqx0D4i1EOZa-446W8kVIdyI-Yka"
