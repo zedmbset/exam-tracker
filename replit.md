@@ -5,12 +5,14 @@ A web-based dashboard for tracking medical exam data. Uses Google Sheets as the 
 ## Project Structure
 
 ```
-3- exam-tracker-main/
+exam-tracker/ (repo root)
 ├── server.js              # Express backend — all Google API calls go through here
 ├── package.json           # Node.js dependencies
-├── .env                   # Environment variables (never commit this file)
+├── package-lock.json      # Locked dependency versions
 ├── railway.toml           # Deployment config for Railway.app
 ├── DEPLOYMENT_GUIDE.md    # Setup and deployment instructions
+├── .gitignore             # Excludes .env, node_modules, attached_assets
+├── replit.md              # This file
 └── public/
     ├── index.html         # Main dashboard (stats, filters, table)
     └── exam.html          # Exam detail page (fill fields, upload PDF, Google sign-in)
@@ -26,18 +28,18 @@ A web-based dashboard for tracking medical exam data. Uses Google Sheets as the 
 
 ## Running the App
 
-The workflow runs: `cd '3- exam-tracker-main' && PORT=5000 node server.js`
+The workflow runs: `PORT=5000 node server.js`
 
 The app starts on port 5000 and serves static files from `public/`.
 
 ## Environment Variables
 
-Set these in `.env` (local) or in your deployment platform:
+All credentials are stored in Replit Secrets (not in any file). For local development, create a `.env` file at the project root:
 
 | Variable              | Description                                      |
 |-----------------------|--------------------------------------------------|
 | `SHEET_ID`            | Google Sheets spreadsheet ID                     |
-| `SHEET_TAB`           | Sheet tab name (default: `Sheet1`)               |
+| `SHEET_TAB`           | Sheet tab name (default: `Exams_Tracking`)       |
 | `HEADER_ROW`          | Row number of the header row (default: `1`)      |
 | `DRIVE_FOLDER_ID`     | Google Drive folder ID for PDF uploads           |
 | `SERVICE_ACCOUNT_JSON`| Full JSON of the Google service account key      |
@@ -50,7 +52,7 @@ Set these in `.env` (local) or in your deployment platform:
 | GET    | `/api/sheet`          | Read all rows from the sheet         |
 | PUT    | `/api/sheet/:rowIndex`| Write a single row back to the sheet |
 | POST   | `/api/upload`         | Upload a PDF to Google Drive         |
-| GET    | `/api/config`         | Send non-secret config to the frontend (sheet tab, header row, Google client ID) |
+| GET    | `/api/config`         | Send non-secret config to the frontend |
 
 ## Column Mapping (Google Sheet)
 
