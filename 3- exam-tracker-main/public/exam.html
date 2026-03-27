@@ -1,0 +1,1055 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Exam Details</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --bg2: #f7f7f5;
+        --bg3: #f0efe9;
+        --text: #1a1a18;
+        --text2: #6b6a65;
+        --text3: #9a9994;
+        --border: rgba(0, 0, 0, 0.12);
+        --border2: rgba(0, 0, 0, 0.22);
+        --blue-bg: #e6f1fb;
+        --blue-text: #185fa5;
+        --blue-border: #b5d4f4;
+        --green-bg: #eaf3de;
+        --green-text: #3b6d11;
+        --green-border: #c0dd97;
+        --amber-bg: #faeeda;
+        --amber-text: #854f0b;
+        --amber-border: #fac775;
+        --red-bg: #fcebeb;
+        --red-text: #a32d2d;
+        --red-border: #f7c1c1;
+        --purple-bg: #eeedfe;
+        --purple-text: #534ab7;
+        --purple-border: #cecbf6;
+        --accent: #185fa5;
+        --radius: 8px;
+        --radius-lg: 12px;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1c1c1a;
+          --bg2: #252523;
+          --bg3: #2e2e2b;
+          --text: #e8e7e1;
+          --text2: #9a9994;
+          --text3: #6b6a65;
+          --border: rgba(255, 255, 255, 0.1);
+          --border2: rgba(255, 255, 255, 0.2);
+          --blue-bg: #0c447c;
+          --blue-text: #b5d4f4;
+          --blue-border: #185fa5;
+          --green-bg: #27500a;
+          --green-text: #c0dd97;
+          --green-border: #3b6d11;
+          --amber-bg: #633806;
+          --amber-text: #fac775;
+          --amber-border: #854f0b;
+          --red-bg: #791f1f;
+          --red-text: #f7c1c1;
+          --red-border: #a32d2d;
+          --purple-bg: #3c3489;
+          --purple-text: #cecbf6;
+          --purple-border: #534ab7;
+        }
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--bg3);
+        color: var(--text);
+        font-size: 14px;
+        line-height: 1.5;
+        min-height: 100vh;
+      }
+
+      /* Topbar */
+      .topbar {
+        background: var(--bg);
+        border-bottom: 0.5px solid var(--border);
+        padding: 0 24px;
+        height: 52px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+      .topbar-title {
+        font-size: 15px;
+        font-weight: 500;
+      }
+      .topbar-right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      /* Main layout */
+      .main {
+        max-width: 780px;
+        margin: 0 auto;
+        padding: 28px 24px;
+      }
+
+      /* States */
+      .state-screen {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 50vh;
+        gap: 12px;
+        color: var(--text2);
+        text-align: center;
+      }
+      .spinner-lg {
+        width: 32px;
+        height: 32px;
+        border: 2.5px solid var(--border2);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      .error-card {
+        max-width: 420px;
+        background: var(--bg);
+        border: 0.5px solid var(--red-border);
+        border-radius: var(--radius-lg);
+        padding: 32px;
+        text-align: center;
+      }
+      .error-card h2 {
+        font-size: 17px;
+        font-weight: 500;
+        color: var(--red-text);
+        margin-bottom: 8px;
+      }
+      .error-card p {
+        font-size: 13px;
+        color: var(--text2);
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Exam card header */
+      .exam-card {
+        background: var(--bg);
+        border: 0.5px solid var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        margin-bottom: 16px;
+      }
+      .exam-card-header {
+        padding: 16px 24px;
+        border-bottom: 0.5px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .exam-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+
+      /* Badges */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 500;
+        white-space: nowrap;
+        border: 0.5px solid;
+      }
+      .badge-green {
+        background: var(--green-bg);
+        color: var(--green-text);
+        border-color: var(--green-border);
+      }
+      .badge-amber {
+        background: var(--amber-bg);
+        color: var(--amber-text);
+        border-color: var(--amber-border);
+      }
+      .badge-red {
+        background: var(--red-bg);
+        color: var(--red-text);
+        border-color: var(--red-border);
+      }
+      .badge-blue {
+        background: var(--blue-bg);
+        color: var(--blue-text);
+        border-color: var(--blue-border);
+      }
+      .badge-purple {
+        background: var(--purple-bg);
+        color: var(--purple-text);
+        border-color: var(--purple-border);
+      }
+      .badge-gray {
+        background: var(--bg2);
+        color: var(--text2);
+        border-color: var(--border);
+      }
+
+      /* Missing alert */
+      .missing-alert {
+        background: var(--amber-bg);
+        border: 0.5px solid var(--amber-border);
+        border-radius: var(--radius);
+        padding: 12px 16px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .missing-alert-icon {
+        font-size: 16px;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .missing-alert-text {
+        font-size: 13px;
+        color: var(--amber-text);
+      }
+      .missing-alert-text strong {
+        font-weight: 600;
+      }
+      .missing-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 6px;
+      }
+      .missing-tag {
+        font-size: 11px;
+        padding: 2px 8px;
+        background: rgba(133, 79, 11, 0.12);
+        border-radius: 20px;
+        color: var(--amber-text);
+        border: 0.5px solid var(--amber-border);
+      }
+
+      /* Edit form */
+      .edit-card {
+        background: var(--bg);
+        border: 0.5px solid var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+      }
+      .edit-card-header {
+        padding: 16px 20px;
+        border-bottom: 0.5px solid var(--border);
+        background: var(--bg2);
+      }
+      .edit-card-header h3 {
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .edit-card-header p {
+        font-size: 12px;
+        color: var(--text2);
+        margin-top: 2px;
+      }
+      .edit-card-body {
+        padding: 20px;
+      }
+      .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .form-grid .full {
+        grid-column: 1 / -1;
+      }
+      .form-row {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .form-row label {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text2);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .form-row input,
+      .form-row select {
+        width: 100%;
+        padding: 8px 10px;
+        border: 0.5px solid var(--border2);
+        border-radius: var(--radius);
+        background: var(--bg);
+        color: var(--text);
+        font-size: 13px;
+      }
+      .form-row input:focus,
+      .form-row select:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(24, 95, 165, 0.15);
+      }
+      .edit-card-footer {
+        padding: 14px 20px;
+        border-top: 0.5px solid var(--border);
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      /* Upload zone */
+      .upload-zone {
+        border: 1.5px dashed var(--border2);
+        border-radius: var(--radius);
+        padding: 20px;
+        text-align: center;
+        cursor: pointer;
+        transition:
+          border-color 0.15s,
+          background 0.15s;
+      }
+      .upload-zone:hover,
+      .upload-zone.dragover {
+        border-color: var(--accent);
+        background: var(--blue-bg);
+      }
+      .upload-zone p {
+        font-size: 13px;
+        color: var(--text2);
+      }
+      .upload-zone span {
+        font-size: 12px;
+        color: var(--text3);
+        display: block;
+        margin-top: 3px;
+      }
+      .upload-file-name {
+        font-size: 12px;
+        color: var(--green-text);
+        background: var(--green-bg);
+        padding: 5px 10px;
+        border-radius: var(--radius);
+        margin-top: 8px;
+        display: none;
+      }
+
+      /* Buttons */
+      .btn {
+        padding: 8px 16px;
+        border: 0.5px solid var(--border2);
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--text);
+        font-size: 13px;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .btn:hover {
+        background: var(--bg2);
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent);
+      }
+      .btn-primary:hover {
+        background: #0c447c;
+      }
+      .btn-sm {
+        padding: 5px 10px;
+        font-size: 12px;
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      /* Notification */
+      .notif {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        padding: 12px 16px;
+        border-radius: var(--radius);
+        font-size: 13px;
+        z-index: 500;
+        transform: translateY(80px);
+        opacity: 0;
+        transition:
+          transform 0.25s,
+          opacity 0.25s;
+        max-width: 320px;
+      }
+      .notif.show {
+        transform: translateY(0);
+        opacity: 1;
+      }
+      .notif.success {
+        background: var(--green-bg);
+        color: var(--green-text);
+        border: 0.5px solid var(--green-border);
+      }
+      .notif.error {
+        background: var(--red-bg);
+        color: var(--red-text);
+        border: 0.5px solid var(--red-border);
+      }
+      .notif.info {
+        background: var(--blue-bg);
+        color: var(--blue-text);
+        border: 0.5px solid var(--blue-border);
+      }
+
+      @media (max-width: 640px) {
+        .main {
+          padding: 16px 12px;
+        }
+        .form-grid {
+          grid-template-columns: 1fr;
+        }
+        .exam-card-header {
+          flex-direction: column;
+        }
+        .topbar {
+          padding: 0 12px;
+        }
+      }
+      /* Sign-in screen */
+      .signin-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 16px; background: var(--bg3); }
+      .signin-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 40px 36px; text-align: center; max-width: 360px; width: 100%; }
+      .signin-card h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+      .signin-card p { font-size: 13px; color: var(--text2); margin-bottom: 24px; line-height: 1.6; }
+      /* User badge in topbar */
+      .user-badge { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text2); }
+      .user-badge img { width: 24px; height: 24px; border-radius: 50%; }
+      .signout-btn { font-size: 11px; padding: 3px 8px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: transparent; color: var(--text3); cursor: pointer; }
+      .signout-btn:hover { background: var(--bg2); color: var(--text); }
+    </style>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+  </head>
+  <body>
+    <!-- Sign-in screen (shown until user authenticates) -->
+    <div class="signin-screen" id="signInScreen" style="display:none">
+      <div class="signin-card">
+        <h2>Sign in to continue</h2>
+        <p>Sign in with your Gmail account to fill in and save exam data. Your email is recorded automatically.</p>
+        <div id="googleSignInBtn"></div>
+      </div>
+    </div>
+
+    <div id="appShell" style="display:none">
+    <div class="topbar">
+      <!-- Back button hidden: team members should not navigate away from exam page -->
+      <span class="topbar-title" id="topbarTitle" style="color: var(--text3)"
+        >Loading…</span
+      >
+      <span id="topbarWilaya" style="margin-left: 4px"></span>
+      <div class="topbar-right">
+        <div
+          id="syncPill"
+          style="
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            background: var(--bg2);
+            color: var(--text3);
+          "
+        >
+          Loading
+        </div>
+        <div class="user-badge" id="userBadge"></div>
+      </div>
+    </div>
+
+    <div class="main" id="mainContent">
+      <!-- Loading state -->
+      <div id="loadingScreen" class="state-screen">
+        <div class="spinner-lg"></div>
+        <span>Fetching exam details…</span>
+      </div>
+
+      <!-- Error state -->
+      <div id="errorScreen" class="state-screen" style="display: none">
+        <div class="error-card">
+          <h2 id="errorTitle">Exam not found</h2>
+          <p id="errorMsg">
+            No exam found with this ID. The link may be invalid or the exam may
+            have been removed.
+          </p>
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div id="examContent" style="display: none">
+        <!-- Missing fields alert -->
+        <div id="missingAlert" class="missing-alert" style="display: none">
+          <div class="missing-alert-icon">⚠️</div>
+          <div class="missing-alert-text">
+            <strong>This exam has missing fields.</strong> Fill them in below
+            and click Save.
+            <div class="missing-tags" id="missingTags"></div>
+          </div>
+        </div>
+
+        <!-- Exam card: badges + status only (no duplicate title, no details section, no links section) -->
+        <div class="exam-card">
+          <div class="exam-card-header">
+            <div class="exam-meta" id="examMeta"></div>
+            <div id="examStatusBadge"></div>
+          </div>
+        </div>
+
+        <!-- Edit form -->
+        <div class="edit-card" id="editCard">
+          <div class="edit-card-header">
+            <h3>Fill missing fields</h3>
+            <p>Changes are saved directly to the Google Sheet</p>
+          </div>
+          <div class="edit-card-body">
+            <div class="form-grid" id="formGrid"></div>
+          </div>
+          <div class="edit-card-footer">
+            <button
+              class="btn btn-sm btn-primary"
+              id="saveBtn"
+              onclick="saveRow()"
+            >
+              Save changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    </div><!-- /appShell -->
+
+    <div class="notif" id="notif"></div>
+
+    <script>
+      // ── Config ───────────────────────────────────────────────────────────────────
+      const API = "";
+
+      // ── Google Auth ──────────────────────────────────────────────────────────────
+      // PASTE YOUR CLIENT ID HERE after following the setup steps
+      const GOOGLE_CLIENT_ID = "YOUR_CLIENT_ID_HERE";
+
+      const COLS = {
+        ID_Exams: 0,
+        Wilaya: 1,
+        Year: 2,
+        Level: 3,
+        Rotation: 4,
+        Module: 5,
+        Start: 6,
+        End: 7,
+        ExamDate: 8,
+        Status: 9,
+        OrgnlExam: 10,
+        DBTbl: 11,
+        Membre: 12,
+        Tags: 13,
+        Drive: 14,
+        QuizLink: 15,
+        ExamStatus: 16,
+        MBsetStatus: 17,
+        Mbset: 18,
+        NQst: 19,
+        MissingQsts: 20,
+      };
+      const EXAM_STATUS_OPTIONS = [
+        "✅ Completed",
+        "In Progress",
+        "Pending",
+        "Not Started",
+      ];
+      const EXAM_TYPE_OPTIONS = ["Exam + CT", "Exam only", "CT only", "Other"];
+      const MBSET_STATUS_OPTIONS = ["Imported", "Pending", "Not needed"];
+
+      let sheetData = [];
+      let headers = [];
+      let headerRow = 1;
+      let activeRow = null;
+      let pendingFile = null;
+      let googleUser = null;
+
+      // ── Google Auth ──────────────────────────────────────────────────────────────
+      function handleCredentialResponse(response) {
+        try {
+          // Decode JWT payload (middle part between the two dots)
+          const payload = JSON.parse(atob(response.credential.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+          googleUser = { email: payload.email, name: payload.name, picture: payload.picture || "" };
+          localStorage.setItem("examTrackerUser", JSON.stringify(googleUser));
+        } catch (e) {
+          console.error("Auth decode error", e);
+          return;
+        }
+        document.getElementById("signInScreen").style.display = "none";
+        document.getElementById("appShell").style.display = "block";
+        updateUserBadge();
+        boot();
+      }
+
+      function initGoogleAuth() {
+        // If already signed in (localStorage), skip sign-in screen
+        const stored = localStorage.getItem("examTrackerUser");
+        if (stored) {
+          try {
+            googleUser = JSON.parse(stored);
+            document.getElementById("signInScreen").style.display = "none";
+            document.getElementById("appShell").style.display = "block";
+            updateUserBadge();
+            boot();
+            return;
+          } catch (e) {
+            localStorage.removeItem("examTrackerUser");
+          }
+        }
+        // Show sign-in screen and render Google button
+        document.getElementById("signInScreen").style.display = "flex";
+        if (GOOGLE_CLIENT_ID === "YOUR_CLIENT_ID_HERE") {
+          document.getElementById("googleSignInBtn").innerHTML =
+            '<p style="color:var(--red-text);font-size:12px;">⚠️ Client ID not configured. See setup instructions in exam.html.</p>';
+          return;
+        }
+        google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleCredentialResponse });
+        google.accounts.id.renderButton(document.getElementById("googleSignInBtn"), {
+          type: "standard", size: "large", theme: "outline", text: "signin_with", shape: "rectangular", width: 280,
+        });
+      }
+
+      function updateUserBadge() {
+        if (!googleUser) return;
+        const badge = document.getElementById("userBadge");
+        badge.innerHTML =
+          (googleUser.picture ? `<img src="${googleUser.picture}" alt="">` : "") +
+          `<span>${googleUser.email}</span>` +
+          `<button class="signout-btn" onclick="signOut()">Sign out</button>`;
+      }
+
+      function signOut() {
+        googleUser = null;
+        localStorage.removeItem("examTrackerUser");
+        location.reload();
+      }
+
+      // ── Boot ─────────────────────────────────────────────────────────────────────
+      async function boot() {
+        const params = new URLSearchParams(location.search);
+        const id = decodeURIComponent(params.get("id") || "");
+        if (!id) {
+          showError(
+            "No ID provided",
+            "The URL is missing the exam ID parameter.",
+          );
+          return;
+        }
+
+        try {
+          const cfg = await (await fetch(`${API}/api/config`)).json();
+          headerRow = cfg.headerRow || 1;
+        } catch (e) {
+          /* use defaults */
+        }
+
+        await loadAndFind(id);
+      }
+
+      async function loadAndFind(id) {
+        try {
+          const data = await (await fetch(`${API}/api/sheet`)).json();
+          if (data.error) throw new Error(data.error);
+
+          const rows = data.values || [];
+          const hi = headerRow - 1;
+          headers = rows[hi] || [];
+          sheetData = rows.slice(hi + 1).map((r, i) => {
+            while (r.length < headers.length) r.push("");
+            return { _rowIndex: hi + 2 + i, cells: r };
+          });
+
+          const idIdx = headers.findIndex(
+            (h) => h && h.toLowerCase().replace(/[\s_]/g, "") === "idexams",
+          );
+          let found = null;
+
+          if (idIdx >= 0) {
+            found = sheetData.find(
+              (r) => (r.cells[idIdx] || "").trim() === id.trim(),
+            );
+          }
+          if (!found && !isNaN(Number(id))) {
+            found = sheetData.find((r) => r._rowIndex === Number(id));
+          }
+
+          if (!found) {
+            showError(
+              "Exam not found",
+              `No exam found with ID "${id}". The link may be invalid.`,
+            );
+            return;
+          }
+
+          activeRow = found;
+          renderExam(found);
+        } catch (e) {
+          showError("Connection error", e.message);
+        }
+      }
+
+      // ── Helpers ──────────────────────────────────────────────────────────────────
+      function colIdx(name) {
+        const i = headers.indexOf(name);
+        if (i >= 0) return i;
+        for (const [k, v] of Object.entries(COLS)) {
+          if (headers[v] && k === name) return v;
+        }
+        return headers.findIndex(
+          (h) =>
+            h &&
+            h.toLowerCase().replace(/[\s_]/g, "") ===
+              name.toLowerCase().replace(/[\s_]/g, ""),
+        );
+      }
+      function cell(row, n) {
+        const i = colIdx(n);
+        return i >= 0 ? row.cells[i] || "" : "";
+      }
+      function setCell(row, n, v) {
+        const i = colIdx(n);
+        if (i >= 0) {
+          while (row.cells.length <= i) row.cells.push("");
+          row.cells[i] = v;
+        }
+      }
+
+      function getMissing(row) {
+        const m = [];
+        if (!cell(row, "Status") && !cell(row, "Exam Status")) m.push("Status");
+        if (!cell(row, "Drive") && !cell(row, "Orgnl Exam")) m.push("Drive");
+        if (!cell(row, "Quiz Link")) m.push("Quiz Link");
+        if (!cell(row, "MBset Status")) m.push("MBset Status");
+        if (!cell(row, "N° of Qst") && !cell(row, "NQst")) m.push("N° Qst");
+        return m;
+      }
+
+      function badge(text, variant) {
+        return `<span class="badge badge-${variant}">${text}</span>`;
+      }
+
+      // Convert any common date format → YYYY-MM-DD for <input type="date">
+      function toDateInputValue(str) {
+        if (!str) return "";
+        str = str.trim();
+        // Already YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+        // M/D/YYYY or MM/DD/YYYY or DD/MM/YYYY (with / or -)
+        const m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (m) {
+          const a = parseInt(m[1]), b = parseInt(m[2]), yr = m[3];
+          // If second part > 12, it must be the day → MM/DD/YYYY (US format, like Google Sheets)
+          if (b > 12) return `${yr}-${String(a).padStart(2,"0")}-${String(b).padStart(2,"0")}`;
+          // If first part > 12, it must be the day → DD/MM/YYYY
+          if (a > 12) return `${yr}-${String(b).padStart(2,"0")}-${String(a).padStart(2,"0")}`;
+          // Both ≤ 12: assume MM/DD/YYYY (Google Sheets default)
+          return `${yr}-${String(a).padStart(2,"0")}-${String(b).padStart(2,"0")}`;
+        }
+        // Try native Date parse as last resort
+        const d = new Date(str);
+        if (!isNaN(d)) return d.toISOString().slice(0, 10);
+        return "";
+      }
+
+      // ── Render ────────────────────────────────────────────────────────────────────
+      function renderExam(row) {
+        const missing = getMissing(row);
+        const status = cell(row, "Status") || cell(row, "Exam Status");
+        const wilaya = cell(row, "Wilaya");
+        const module = cell(row, "Module");
+        const year = cell(row, "Year");
+        const rotation = cell(row, "Rotation");
+        const level = cell(row, "Level");
+
+        // Year: use only last 2 digits (e.g. "2026" → "26")
+        const yearShort = year.length >= 3 ? year.slice(-2) : year;
+
+        // Topbar title: Level + Module + Year(short) + Rotation
+        const titleParts = [level, module, yearShort + rotation].filter(
+          Boolean,
+        );
+        document.getElementById("topbarTitle").textContent =
+          titleParts.join(" ") || "Exam details";
+        document.getElementById("topbarTitle").style.color = "";
+
+        // Wilaya badge in topbar
+        const topbarWilaya = document.getElementById("topbarWilaya");
+        if (wilaya) {
+          const wClass = wilaya.toLowerCase().includes("stf")
+            ? "badge-purple"
+            : wilaya.toLowerCase().includes("msila")
+              ? "badge-blue"
+              : "badge-gray";
+          topbarWilaya.innerHTML = `<span class="badge ${wClass}" style="font-size:11px;">${wilaya}</span>`;
+        } else {
+          topbarWilaya.innerHTML = "";
+        }
+
+        // Sync pill
+        const pill = document.getElementById("syncPill");
+        pill.textContent =
+          missing.length === 0 ? "Complete" : `${missing.length} missing`;
+        pill.style.background =
+          missing.length === 0 ? "var(--green-bg)" : "var(--amber-bg)";
+        pill.style.color =
+          missing.length === 0 ? "var(--green-text)" : "var(--amber-text)";
+
+        // Badges row (no duplicate title — title is in topbar only)
+        const metaEl = document.getElementById("examMeta");
+        const wClass = wilaya.toLowerCase().includes("stf")
+          ? "badge-purple"
+          : wilaya.toLowerCase().includes("msila")
+            ? "badge-blue"
+            : "badge-gray";
+        metaEl.innerHTML = [
+          wilaya ? `<span class="badge ${wClass}">${wilaya}</span>` : "",
+          year ? `<span class="badge badge-gray">${year}</span>` : "",
+          level ? `<span class="badge badge-gray">${level}</span>` : "",
+          rotation ? `<span class="badge badge-blue">${rotation}</span>` : "",
+        ]
+          .filter(Boolean)
+          .join("");
+
+        // Status badge
+        const statusEl = document.getElementById("examStatusBadge");
+        if (status) {
+          statusEl.innerHTML = status.includes("Completed")
+            ? badge("Completed", "green")
+            : badge(status || "Unknown", "amber");
+        } else {
+          statusEl.innerHTML = badge("No status", "red");
+        }
+
+        // Missing alert
+        if (missing.length > 0) {
+          document.getElementById("missingAlert").style.display = "flex";
+          document.getElementById("missingTags").innerHTML = missing
+            .map((m) => `<span class="missing-tag">${m}</span>`)
+            .join("");
+        }
+
+        // Edit form
+        buildEditForm(row, missing);
+
+        // Show content
+        document.getElementById("loadingScreen").style.display = "none";
+        document.getElementById("examContent").style.display = "block";
+      }
+
+      function buildEditForm(row, missing) {
+        const grid = document.getElementById("formGrid");
+        grid.innerHTML = "";
+
+        const addField = (colName, label, type, options) => {
+          const div = document.createElement("div");
+          div.className = "form-row";
+          const current = cell(row, colName);
+          const isMissing = missing.some(
+            (m) =>
+              m.toLowerCase().replace(/[°\s]/g, "") ===
+              colName.toLowerCase().replace(/[°\s]/g, ""),
+          );
+          let input;
+          if (type === "select") {
+            input = `<select id="field_${colName}"><option value="">— select —</option>${options.map((o) => `<option value="${o}"${current === o ? " selected" : ""}>${o}</option>`).join("")}</select>`;
+          } else if (type === "url") {
+            input = `<input type="url" id="field_${colName}" value="${current}" placeholder="https://…">`;
+          } else if (type === "number") {
+            input = `<input type="number" id="field_${colName}" value="${current}" min="0">`;
+          } else if (type === "date") {
+            input = `<input type="date" id="field_${colName}" value="${toDateInputValue(current)}">`;
+          } else if (type === "email") {
+            input = `<input type="email" id="field_${colName}" value="${current}" placeholder="yourname@gmail.com" pattern="[a-zA-Z0-9._%+\\-]+@gmail\\.com" title="Please enter a Gmail address (@gmail.com)">`;
+          } else {
+            input = `<input type="text" id="field_${colName}" value="${current}" placeholder="${label}">`;
+          }
+          const highlight = isMissing ? 'style="color:var(--amber-text)"' : "";
+          div.innerHTML = `<label ${highlight}>${label}${isMissing ? " *" : ""}</label>${input}`;
+          grid.appendChild(div);
+        };
+
+        // PDF upload (full width)
+        const uploadDiv = document.createElement("div");
+        uploadDiv.className = "form-row full";
+        uploadDiv.innerHTML = `
+    <label>Upload exam PDF to Drive</label>
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()"
+      ondragover="event.preventDefault();this.classList.add('dragover')"
+      ondragleave="this.classList.remove('dragover')" ondrop="handleDrop(event)">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:6px;color:var(--text3)">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <p>Click or drag & drop exam PDF</p><span>PDF, max 20MB</span>
+      <div class="upload-file-name" id="uploadFileName"></div>
+    </div>
+    <input type="file" id="fileInput" accept=".pdf" style="display:none" onchange="handleFileSelect(this)">
+    ${
+      cell(row, "Drive") || cell(row, "Orgnl Exam")
+        ? `<div style="margin-top:6px;font-size:12px;color:var(--text2)">Current: <a href="${cell(row, "Drive") || cell(row, "Orgnl Exam")}" target="_blank" style="color:var(--blue-text)">View existing file ↗</a></div>`
+        : ""
+    }`;
+        grid.appendChild(uploadDiv);
+
+        addField("Status", "Exam status", "select", EXAM_STATUS_OPTIONS);
+        addField("Exam Status", "Exam type", "select", EXAM_TYPE_OPTIONS);
+        addField("Quiz Link", "Quiz link (MBset)", "url");
+        addField(
+          "MBset Status",
+          "MBset status",
+          "select",
+          MBSET_STATUS_OPTIONS,
+        );
+        // MBset label hidden per user request
+        addField("N° of Qst", "Number of questions", "number");
+        addField("Missing Qsts", "Missing questions", "number");
+        addField("Start", "Start date", "date");
+        addField("Exam Date", "Exam date", "date");
+
+        // Member: auto-filled from signed-in Google account, read-only
+        const membrDiv = document.createElement("div");
+        membrDiv.className = "form-row";
+        const membrCurrent = googleUser ? googleUser.email : cell(row, "Membre");
+        membrDiv.innerHTML = `<label>Member</label><input type="email" id="field_Membre" value="${membrCurrent}" readonly style="background:var(--bg2);color:var(--text2);cursor:default;" title="Auto-filled from your Google account">`;
+        grid.appendChild(membrDiv);
+      }
+
+      function handleFileSelect(input) {
+        if (input.files[0]) setFile(input.files[0]);
+      }
+      function handleDrop(e) {
+        e.preventDefault();
+        document.getElementById("uploadZone").classList.remove("dragover");
+        if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+      }
+      function setFile(f) {
+        pendingFile = f;
+        const el = document.getElementById("uploadFileName");
+        el.textContent = f.name + " (" + Math.round(f.size / 1024) + " KB)";
+        el.style.display = "block";
+      }
+
+      // ── Save ─────────────────────────────────────────────────────────────────────
+      async function saveRow() {
+        if (!activeRow) return;
+
+        // Auto-set Member from signed-in Google account
+        if (googleUser && googleUser.email) {
+          setCell(activeRow, "Membre", googleUser.email);
+          const membrEl = document.getElementById("field_Membre");
+          if (membrEl) membrEl.value = googleUser.email;
+        }
+
+        const btn = document.getElementById("saveBtn");
+        btn.textContent = "Saving…";
+        btn.disabled = true;
+
+        [
+          ["Status"],
+          ["Exam Status"],
+          ["Quiz Link"],
+          ["MBset Status"],
+          ["N° of Qst"],
+          ["Missing Qsts"],
+          ["Start"],
+          ["Exam Date"],
+          ["Membre"],
+        ].forEach(([col]) => {
+          const el = document.getElementById("field_" + col);
+          if (el) setCell(activeRow, col, el.value);
+        });
+
+        if (pendingFile) {
+          try {
+            const fname =
+              `${cell(activeRow, "Wilaya")}_${cell(activeRow, "Year")}_${cell(activeRow, "Rotation")}_${cell(activeRow, "Module")}.pdf`.replace(
+                /\s+/g,
+                "_",
+              );
+            const fd = new FormData();
+            fd.append("file", pendingFile, fname);
+            fd.append("filename", fname);
+            const r = await fetch(`${API}/api/upload`, {
+              method: "POST",
+              body: fd,
+            });
+            const d = await r.json();
+            if (d.error) throw new Error(d.error);
+            setCell(activeRow, "Orgnl Exam", d.url);
+            notify("PDF uploaded to Drive ✅", "success");
+          } catch (e) {
+            notify("Drive upload failed: " + e.message, "error");
+          }
+        }
+
+        try {
+          const r = await fetch(`${API}/api/sheet/${activeRow._rowIndex}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cells: activeRow.cells }),
+          });
+          const d = await r.json();
+          if (d.error) throw new Error(d.error);
+          notify("Saved successfully ✅", "success");
+          renderExam(activeRow);
+        } catch (e) {
+          notify("Sheet write failed: " + e.message, "error");
+        }
+
+        btn.textContent = "Save changes";
+        btn.disabled = false;
+        pendingFile = null;
+      }
+
+      // ── Utils ─────────────────────────────────────────────────────────────────────
+      function showError(title, msg) {
+        document.getElementById("loadingScreen").style.display = "none";
+        document.getElementById("errorScreen").style.display = "flex";
+        document.getElementById("errorTitle").textContent = title;
+        document.getElementById("errorMsg").textContent = msg;
+      }
+      function notify(msg, type) {
+        const el = document.getElementById("notif");
+        el.textContent = msg;
+        el.className = `notif ${type} show`;
+        setTimeout(() => el.classList.remove("show"), 3500);
+      }
+
+      // Wait for Google GSI library to load, then init auth
+      if (typeof google !== "undefined") {
+        initGoogleAuth();
+      } else {
+        window.addEventListener("load", initGoogleAuth);
+      }
+    </script>
+  </body>
+</html>
