@@ -446,6 +446,67 @@
       .user-badge img { width: 24px; height: 24px; border-radius: 50%; }
       .signout-btn { font-size: 11px; padding: 3px 8px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: transparent; color: var(--text3); cursor: pointer; }
       .signout-btn:hover { background: var(--bg2); color: var(--text); }
+
+      /* Prompt card */
+      .prompt-card {
+        background: var(--bg);
+        border: 0.5px solid var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        margin-top: 16px;
+      }
+      .prompt-card-header {
+        padding: 16px 20px;
+        border-bottom: 0.5px solid var(--border);
+        background: var(--bg2);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .prompt-card-header-text h3 {
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .prompt-card-header-text p {
+        font-size: 12px;
+        color: var(--text2);
+        margin-top: 2px;
+      }
+      .prompt-body { padding: 20px; }
+      .prompt-text {
+        font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+        font-size: 12.5px;
+        line-height: 1.7;
+        color: var(--text);
+        background: var(--bg3);
+        border: 0.5px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .copy-btn {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border: 0.5px solid var(--border2);
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--text);
+        font-size: 12px;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s, border-color 0.15s;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .copy-btn:hover { background: var(--bg2); }
+      .copy-btn.copied {
+        background: var(--green-bg);
+        color: var(--green-text);
+        border-color: var(--green-border);
+      }
     </style>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
@@ -538,6 +599,23 @@
             >
               Save changes
             </button>
+          </div>
+        </div>
+
+        <!-- AI Prompt card -->
+        <div class="prompt-card">
+          <div class="prompt-card-header">
+            <div class="prompt-card-header-text">
+              <h3>Prompt IA — Génération QCM</h3>
+              <p>Copiez ce prompt et collez-le dans votre IA avec le fichier de l'examen</p>
+            </div>
+            <button class="copy-btn" id="copyPromptBtn" onclick="copyPrompt()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copier
+            </button>
+          </div>
+          <div class="prompt-body">
+            <div class="prompt-text" id="promptText"></div>
           </div>
         </div>
       </div>
@@ -864,9 +942,64 @@
         // Edit form
         buildEditForm(row, missing);
 
+        // AI Prompt
+        renderPrompt(row);
+
         // Show content
         document.getElementById("loadingScreen").style.display = "none";
         document.getElementById("examContent").style.display = "block";
+      }
+
+      function renderPrompt(row) {
+        const module = cell(row, "Module") || "[Préciser l'unité ici]";
+        const nQst = cell(row, "NQst") || "[Préciser le nombre]";
+        const promptEl = document.getElementById("promptText");
+        const text =
+`Examen de médecine sous forme de QCMs
+
+Instructions de base :
+- Langue : Français
+- Unité : ${module}
+- Nombre de QCMs : ${nQst}
+- Format : 5 propositions (A, B, C, D, E)
+
+From the original exam, generate a Markdown Data Table with the following columns:
+
+1. Tag: Use the question number in the exact format ["No. X"], e.g., ["No. 1"], ["No. 2"]… (Keep square brackets and quotation marks).
+2. Cas:
+   - Find text between "Cas clinique:" and question
+   - Insert in Column Cas on row before first related question
+   - Preserve all clinical details
+3. Text: Insert the full question exactly as written, without including answer choices.
+4. Correct: Write only the correct answer letter(s) (A–E) based on the correction key. If multiple are correct, write them together (e.g., ACD).
+5. A, B, C, D, E: Include the full text of each choice. Remove the letters ("A.", "B."…) and keep only the option text.
+
+Format Instructions (Strict):
+
+- Layout: Output MUST be a rendered Markdown table (using | and ---).
+- No Code Blocks: Do NOT wrap the table in a code block; provide it as a standard visual table.
+- Column Order: Tag | Cas | Text | Correct | A | B | C | D | E.
+- Precision: Keep the original spelling, wording, and punctuation of the exam exactly.
+- Google Sheets Compatibility: Ensure there are no line breaks (enters) within a single cell, as this breaks Google Sheets pasting. Ensure the table is continuous without interruptions.
+
+At the end:
+Provide a full report listing all issues or notes found (missing corrections, incomplete choices, formatting problems, etc.).`;
+        promptEl.textContent = text;
+      }
+
+      function copyPrompt() {
+        const text = document.getElementById("promptText").textContent;
+        navigator.clipboard.writeText(text).then(() => {
+          const btn = document.getElementById("copyPromptBtn");
+          btn.classList.add("copied");
+          btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copié !`;
+          setTimeout(() => {
+            btn.classList.remove("copied");
+            btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier`;
+          }, 2500);
+        }).catch(() => {
+          notify("Impossible de copier — sélectionnez le texte manuellement.", "error");
+        });
       }
 
       function buildEditForm(row, missing) {
