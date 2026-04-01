@@ -12,10 +12,17 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static('public', {
+  setHeaders(res, path) {
+    if (path.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    }
+  }
+}));
 
 // ── FIX: Serve exam.html for /exam route ──────────────────────────────────
 app.get('/exam', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.sendFile(__dirname + '/public/exam.html');
 });
 
@@ -122,16 +129,25 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       throw new Error('DRIVE_FOLDER_ID is not set in environment variables.');
     }
 
+    const ext = (name.split('.').pop() || '').toLowerCase();
+    const mimeMap = {
+      'pdf':  'application/pdf',
+      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'xls':  'application/vnd.ms-excel',
+      'csv':  'text/csv',
+    };
+    const mimeType = mimeMap[ext] || 'application/octet-stream';
+
     const meta = {
       name,
-      mimeType: 'application/pdf',
+      mimeType,
       parents: [DRIVE_FOLDER_ID],
     };
 
     const metadata = JSON.stringify(meta);
     const form     = new FormData();
     form.append('metadata', Buffer.from(metadata), { contentType: 'application/json', filename: 'metadata.json' });
-    form.append('file', fileBuffer, { contentType: 'application/pdf', filename: name });
+    form.append('file', fileBuffer, { contentType: mimeType, filename: name });
 
     const uploadRes = await fetch(
       'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id&supportsAllDrives=true',
@@ -151,6 +167,33 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     });
 
     res.json({ url: `https://drive.google.com/file/d/${id}/view` });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/drive-download?id=FILE_ID  →  proxy-download a Drive file via service account
+app.get('/api/drive-download', async (req, res) => {
+  const fileId = (req.query.id || '').replace(/[^a-zA-Z0-9_\-]/g, '');
+  if (!fileId) return res.status(400).json({ error: 'Missing file id' });
+  try {
+    const token = await getAccessToken();
+    const metaRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType&supportsAllDrives=true`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!metaRes.ok) throw new Error(await metaRes.text());
+    const { name, mimeType } = await metaRes.json();
+
+    const fileRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!fileRes.ok) throw new Error(await fileRes.text());
+
+    res.setHeader('Content-Type', mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(name || fileId)}"`);
+    fileRes.body.pipe(res);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

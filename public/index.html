@@ -102,33 +102,61 @@
   .share-btn:hover { background: var(--blue-bg); color: var(--blue-text); border-color: var(--blue-border); }
 
   /* Modal */
-  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(3px); z-index: 200; align-items: flex-start; justify-content: center; padding: 32px 16px; overflow-y: auto; }
   .modal-backdrop.open { display: flex; }
-  .modal { background: var(--bg); border-radius: var(--radius-lg); border: 0.5px solid var(--border); width: 100%; max-width: 620px; }
-  .modal-header { padding: 18px 20px 14px; border-bottom: 0.5px solid var(--border); display: flex; align-items: flex-start; gap: 12px; }
-  .modal-title { font-size: 15px; font-weight: 500; }
-  .modal-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
-  .modal-close { margin-left: auto; background: none; border: none; font-size: 18px; color: var(--text3); cursor: pointer; padding: 2px 6px; }
-  .modal-close:hover { color: var(--text); }
-  .modal-body { padding: 20px; }
-  .modal-footer { padding: 14px 20px; border-top: 0.5px solid var(--border); display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+  .modal { background: var(--bg); border-radius: 14px; border: 0.5px solid var(--border); width: 100%; max-width: 660px; box-shadow: 0 24px 64px rgba(0,0,0,0.18); overflow: hidden; }
+  .modal-accent { height: 3px; background: linear-gradient(90deg, var(--accent) 0%, #7C3AED 100%); }
+  .modal-header { padding: 20px 22px 16px; display: flex; align-items: flex-start; gap: 14px; }
+  .modal-icon { width: 36px; height: 36px; border-radius: 10px; background: var(--blue-bg); border: 0.5px solid var(--blue-border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--blue-text); }
+  .modal-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .modal-sub { font-size: 12px; color: var(--text2); margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .modal-sub-chip { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 20px; padding: 1px 8px; font-size: 11px; color: var(--text2); }
+  .modal-close { margin-left: auto; background: var(--bg2); border: 0.5px solid var(--border); width: 28px; height: 28px; border-radius: 8px; font-size: 15px; color: var(--text3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0; }
+  .modal-close:hover { background: var(--red-bg); border-color: var(--red-border); color: var(--red-text); }
+  .modal-body { padding: 0 22px 8px; }
+  .modal-footer { padding: 14px 22px; border-top: 0.5px solid var(--border); display: flex; align-items: center; gap: 10px; justify-content: flex-end; background: var(--bg2); }
+  .modal-req-note { font-size: 11px; color: var(--text3); margin-right: auto; }
+  .modal-req-note span { color: var(--red-text); font-weight: 600; }
+
+  /* Section divider */
+  .form-section { margin: 18px 0 12px; }
+  .form-section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); display: flex; align-items: center; gap: 6px; padding-bottom: 8px; border-bottom: 0.5px solid var(--border); margin-bottom: 14px; }
+
+  /* Identity chip row */
+  .identity-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0 4px; }
+  .id-chip { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 12px; display: flex; align-items: center; gap: 5px; }
+  .id-chip-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; }
+  .id-chip-value { font-weight: 500; color: var(--text); }
 
   /* Form */
   .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .form-grid .full { grid-column: 1 / -1; }
   .form-row { display: flex; flex-direction: column; gap: 5px; }
-  .form-row label { font-size: 11px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: 0.04em; }
-  .form-row input, .form-row select, .form-row textarea { width: 100%; padding: 8px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 13px; }
-  .form-row input:focus, .form-row select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(24,95,165,0.15); }
-  .form-row .prefilled { font-size: 13px; color: var(--text2); padding: 7px 10px; background: var(--bg2); border-radius: var(--radius); border: 0.5px solid var(--border); }
+  .form-row label { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 4px; }
+  .form-row label .req { color: var(--red-text); font-size: 12px; line-height: 1; }
+  .form-row input, .form-row select, .form-row textarea { width: 100%; padding: 9px 11px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 13px; transition: border-color 0.15s, box-shadow 0.15s; }
+  .form-row input:focus, .form-row select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(24,95,165,0.12); }
+  .form-row input.invalid, .form-row select.invalid { border-color: var(--red-border); box-shadow: 0 0 0 3px rgba(163,45,45,0.1); }
+  .field-hint { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .field-error { font-size: 11px; color: var(--red-text); margin-top: 2px; display: none; }
+  .form-row .prefilled { font-size: 13px; color: var(--text2); padding: 9px 11px; background: var(--bg2); border-radius: var(--radius); border: 0.5px solid var(--border); }
+  .form-row textarea { width: 100%; padding: 9px 11px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 12px; font-family: 'SFMono-Regular', Consolas, monospace; resize: vertical; min-height: 110px; transition: border-color 0.15s, box-shadow 0.15s; }
+  .form-row textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(24,95,165,0.12); }
+  .form-row textarea.invalid { border-color: var(--red-border); box-shadow: 0 0 0 3px rgba(163,45,45,0.1); }
+  .file-status { display: flex; align-items: center; gap: 8px; padding: 8px 11px; border-radius: var(--radius); font-size: 12px; margin-top: 6px; }
+  .file-status.has-file { background: var(--green-bg); border: 0.5px solid var(--green-border); color: var(--green-text); }
+  .file-status.no-file { background: var(--bg2); border: 0.5px solid var(--border); color: var(--text3); }
+  .file-status a { color: var(--blue-text); text-decoration: none; font-weight: 500; }
+  .file-status a:hover { text-decoration: underline; }
 
   /* Upload zone */
-  .upload-zone { border: 1.5px dashed var(--border2); border-radius: var(--radius); padding: 24px; text-align: center; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+  .upload-zone { border: 1.5px dashed var(--border2); border-radius: var(--radius); padding: 16px 20px; display: flex; align-items: center; gap: 14px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
   .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: var(--blue-bg); }
-  .upload-zone-icon { font-size: 24px; margin-bottom: 6px; }
-  .upload-zone p { font-size: 13px; color: var(--text2); }
-  .upload-zone span { font-size: 12px; color: var(--text3); display: block; margin-top: 3px; }
-  .upload-file-name { font-size: 12px; color: var(--green-text); background: var(--green-bg); padding: 5px 10px; border-radius: var(--radius); margin-top: 8px; display: none; }
+  .upload-zone-icon { flex-shrink: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--bg2); border: 0.5px solid var(--border); display: flex; align-items: center; justify-content: center; }
+  .upload-zone .upload-text { min-width: 0; }
+  .upload-zone p { font-size: 13px; color: var(--text2); font-weight: 500; }
+  .upload-zone span { font-size: 11px; color: var(--text3); display: block; margin-top: 2px; }
+  .upload-file-name { font-size: 12px; color: var(--green-text); background: var(--green-bg); border: 0.5px solid var(--green-border); padding: 5px 10px; border-radius: var(--radius); margin-top: 8px; display: none; }
 
   /* Sync & notifications */
   .sync-pill { font-size: 11px; padding: 3px 10px; border-radius: 20px; display: inline-flex; align-items: center; gap: 5px; }
@@ -196,8 +224,8 @@
             <thead>
               <tr>
                 <th>Wilaya</th><th>Year</th><th>Rotation</th><th>Module</th>
-                <th>Status</th><th>Exam type</th><th>Drive</th><th>Quiz link</th>
-                <th>MBset</th><th>N° Qst</th><th>Missing</th><th></th>
+                <th>Status</th><th>OrigPDF</th><th>Quiz_Tbl</th>
+                <th>N° Qst</th><th>Missing</th><th></th>
               </tr>
             </thead>
             <tbody id="tableBody"></tbody>
@@ -211,19 +239,34 @@
 <!-- Fill modal -->
 <div class="modal-backdrop" id="fillModal">
   <div class="modal">
+    <div class="modal-accent"></div>
     <div class="modal-header">
-      <div>
+      <div class="modal-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </div>
+      <div style="min-width:0;">
         <div class="modal-title" id="modalTitle">Fill missing fields</div>
         <div class="modal-sub" id="modalSub"></div>
       </div>
+      <a id="modalOpenLink" href="#" target="_blank"
+        style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border:0.5px solid var(--border2);border-radius:8px;font-size:12px;font-weight:500;color:var(--text2);text-decoration:none;white-space:nowrap;transition:background 0.15s;"
+        onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''"
+        title="Open full 7-step workflow">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        Open
+      </a>
       <button class="modal-close" onclick="closeModal()">&times;</button>
     </div>
     <div class="modal-body">
-      <div class="form-grid" id="formGrid"></div>
+      <div id="formGrid"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-sm btn-danger" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-sm btn-primary" id="saveBtn" onclick="saveRow()">Save to sheet</button>
+      <div class="modal-req-note"><span>*</span> Required fields</div>
+      <button class="btn btn-sm" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-sm btn-primary" id="saveBtn" onclick="saveRow()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px"><polyline points="20 6 9 17 4 12"/></svg>
+        Save to sheet
+      </button>
     </div>
   </div>
 </div>
@@ -235,14 +278,74 @@
 const API = '';  // empty = same origin
 
 const COLS = {
-  ID_Exams:0, Wilaya:1, Year:2, Level:3, Rotation:4, Module:5,
-  Start:6, End:7, ExamDate:8, Status:9, OrgnlExam:10,
-  DBTbl:11, Membre:12, Tags:13, Drive:14, QuizLink:15,
-  ExamStatus:16, MBsetStatus:17, Mbset:18, NQst:19, MissingQsts:20
+  ID_Exams:0, Wilaya:1, Year:2, Level:3, Rotation:4, Period:5,
+  Module:6, Start:7, End:8, ExamDate:9, Status:10,
+  OrigPDF:11, Quiz_Tbl:12, Membre:13, Tags:14, Quiz_Link:15,
 };
 const EXAM_STATUS_OPTIONS  = ['✅ Completed','In Progress','Pending','Not Started'];
-const EXAM_TYPE_OPTIONS    = ['Exam + CT','Exam only','CT only','Other'];
-const MBSET_STATUS_OPTIONS = ['Imported','Pending','Not needed'];
+
+// ── Date helpers ─────────────────────────────────────────────────────────────
+function toDateInputValue(str) {
+  if (!str) return '';
+  str = str.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  const m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (m) {
+    const a = parseInt(m[1]), b = parseInt(m[2]), yr = m[3];
+    if (b > 12) return `${yr}-${String(a).padStart(2,'0')}-${String(b).padStart(2,'0')}`;
+    if (a > 12) return `${yr}-${String(b).padStart(2,'0')}-${String(a).padStart(2,'0')}`;
+    return `${yr}-${String(a).padStart(2,'0')}-${String(b).padStart(2,'0')}`;
+  }
+  const d = new Date(str);
+  if (!isNaN(d)) return d.toISOString().slice(0, 10);
+  return '';
+}
+
+// ── Annotations parser/serializer ────────────────────────────────────────────
+// Syntax: "3m, 7s, 15-17m, 20s"  — m=missing, s=schema/table
+function parseAnnotations(str) {
+  const missingPos = [], schemaQsts = [];
+  if (!str || !str.trim()) return { missingPos, schemaQsts, missingQsts: 0 };
+  str.split(',').forEach(part => {
+    const m = part.trim().match(/^(\d+)(?:-(\d+))?([ms])$/i);
+    if (!m) return;
+    const from = parseInt(m[1]), to = m[2] ? parseInt(m[2]) : from;
+    const tag = m[3].toLowerCase();
+    for (let i = from; i <= to; i++) {
+      if (tag === 'm') missingPos.push(i);
+      else if (tag === 's') schemaQsts.push(i);
+    }
+  });
+  return { missingPos, schemaQsts, missingQsts: missingPos.length };
+}
+function annotationsToString(tags) {
+  const entries = [];
+  (tags.missingPos || []).forEach(p => entries.push({ pos: +p, tag: 'm' }));
+  (tags.schemaQsts  || []).forEach(p => entries.push({ pos: +p, tag: 's' }));
+  entries.sort((a, b) => a.pos - b.pos);
+  return entries.map(e => e.pos + e.tag).join(', ');
+}
+
+function tsvToCsv(tsv) {
+  return tsv.trim().split('\n').map(line =>
+    line.split('\t').map(v => {
+      v = v.trim();
+      if (v.includes(',') || v.includes('"') || v.includes('\n')) return '"' + v.replace(/"/g, '""') + '"';
+      return v;
+    }).join(',')
+  ).join('\n');
+}
+
+function parseRangeInput(str) {
+  if (!str || !str.trim()) return [];
+  const result = [];
+  str.split(',').forEach(part => {
+    const m = part.trim().match(/^(\d+)-(\d+)$/);
+    if (m) { for (let i=+m[1]; i<=+m[2]; i++) result.push(i); }
+    else if (/^\d+$/.test(part.trim())) result.push(parseInt(part.trim(), 10));
+  });
+  return result;
+}
 
 let sheetData    = [];
 let headers      = [];
@@ -304,13 +407,20 @@ function colIdx(name) {
 function cell(row, n)       { const i=colIdx(n); return i>=0?(row.cells[i]||''):''; }
 function setCell(row, n, v) { const i=colIdx(n); if(i>=0){while(row.cells.length<=i)row.cells.push('');row.cells[i]=v;} }
 
+function parseTags(row) {
+  let tags = {};
+  const raw = cell(row, 'Tags');
+  if (raw) { try { tags = JSON.parse(raw); } catch(e) { /* not JSON */ } }
+  return tags;
+}
+
 function getMissing(row) {
+  const tags = parseTags(row);
   const m=[];
-  if (!cell(row,'Status')&&!cell(row,'Exam Status'))   m.push('Status');
-  if (!cell(row,'Drive')&&!cell(row,'Orgnl Exam'))     m.push('Drive');
-  if (!cell(row,'Quiz Link'))                           m.push('Quiz Link');
-  if (!cell(row,'MBset Status'))                        m.push('MBset Status');
-  if (!cell(row,'N° of Qst')&&!cell(row,'NQst'))       m.push('N° Qst');
+  if (!cell(row,'Status'))                              m.push('Status');
+  if (!cell(row,'OrigPDF'))                             m.push('OrigPDF');
+  if (!cell(row,'Quiz_Tbl'))                            m.push('Quiz_Tbl');
+  if (!tags.nQst)                                       m.push('N° Qst');
   return m;
 }
 function isComplete(row){ return getMissing(row).length===0; }
@@ -318,15 +428,15 @@ function isComplete(row){ return getMissing(row).length===0; }
 // ── Stats & filters ──────────────────────────────────────────────────────────
 function renderStats() {
   const total   = sheetData.length;
-  const done    = sheetData.filter(r=>(cell(r,'Status')||cell(r,'Exam Status')).includes('Completed')).length;
-  const hasDrive= sheetData.filter(r=>cell(r,'Drive')||cell(r,'Orgnl Exam')).length;
-  const hasMbset= sheetData.filter(r=>(cell(r,'Mbset')||cell(r,'MBset Status')).includes('✅')||cell(r,'MBset Status')==='Imported').length;
+  const done    = sheetData.filter(r=>cell(r,'Status').includes('Completed')).length;
+  const hasOrigPDF = sheetData.filter(r=>cell(r,'OrigPDF')).length;
+  const hasQuizTbl = sheetData.filter(r=>cell(r,'Quiz_Tbl')).length;
   const pct     = total?Math.round(done/total*100):0;
   document.getElementById('statsRow').innerHTML=`
     <div class="stat"><div class="stat-label">Total rows</div><div class="stat-val">${total}</div><div class="stat-sub">${[...new Set(sheetData.map(r=>cell(r,'Wilaya')).filter(Boolean))].join(', ')}</div></div>
     <div class="stat"><div class="stat-label">Completed</div><div class="stat-val">${done}</div><div class="stat-sub" style="color:var(--green-text)">${pct}% done</div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div>
-    <div class="stat"><div class="stat-label">With Drive</div><div class="stat-val">${hasDrive}</div><div class="stat-sub">${total-hasDrive} missing</div></div>
-    <div class="stat"><div class="stat-label">MBset imported</div><div class="stat-val">${hasMbset}</div><div class="stat-sub">${total-hasMbset} pending</div></div>`;
+    <div class="stat"><div class="stat-label">With OrigPDF</div><div class="stat-val">${hasOrigPDF}</div><div class="stat-sub">${total-hasOrigPDF} missing</div></div>
+    <div class="stat"><div class="stat-label">With Quiz_Tbl</div><div class="stat-val">${hasQuizTbl}</div><div class="stat-sub">${total-hasQuizTbl} missing</div></div>`;
 }
 
 function populateFilters() {
@@ -368,35 +478,33 @@ function renderTable(){
   const rows=getFiltered();
   document.getElementById('rowCount').textContent=rows.length+' rows';
   const tbody=document.getElementById('tableBody');
-  if(!rows.length){tbody.innerHTML=`<tr><td colspan="12" style="text-align:center;color:var(--text3);padding:2rem;">No rows match filters</td></tr>`;return;}
+  if(!rows.length){tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:2rem;">No rows match filters</td></tr>`;return;}
   tbody.innerHTML=rows.map(r=>{
     const missing  = getMissing(r);
     const comp     = missing.length===0;
-    const status   = cell(r,'Status')||cell(r,'Exam Status');
-    const drive    = cell(r,'Drive')||cell(r,'Orgnl Exam');
-    const quiz     = cell(r,'Quiz Link');
-    const mbset    = cell(r,'Mbset')||cell(r,'MBset Status');
-    const nqst     = cell(r,'N° of Qst')||cell(r,'NQst');
-    const examTypeRaw = cell(r,'Exam Status')!==cell(r,'Status')?cell(r,'Exam Status'):'';
-    const examType = EXAM_TYPE_OPTIONS.includes(examTypeRaw) ? examTypeRaw : '';
-    const dotClass = missing.length===0?'dot-green':missing.length<=2?'dot-amber':'dot-red';
-    const missingLabel = comp
-      ?`<span style="font-size:11px;color:var(--green-text)">all filled</span>`
-      :`<span class="dot ${dotClass}"></span><span style="font-size:12px;color:var(--amber-text)">${missing.length} field${missing.length>1?'s':''}</span>`;
+    const status   = cell(r,'Status');
+    const drive    = cell(r,'OrigPDF');
+    const quiz     = cell(r,'Quiz_Tbl');
+    const tagsR    = parseTags(r);
+    const nqst     = tagsR.nQst || '';
+    const missingCount = (tagsR.missingPos?.length != null) ? tagsR.missingPos.length : (tagsR.missingQsts ?? null);
+    const missingQstsLabel = (missingCount != null)
+      ? (missingCount > 0
+        ? `<span style="font-size:12px;color:var(--amber-text);font-weight:500;">${missingCount}</span>`
+        : `<span style="font-size:11px;color:var(--green-text)">0</span>`)
+      : '<span class="empty-val">—</span>';
     const idx      = sheetData.indexOf(r);
     const examId   = cell(r,'ID_Exams') || r._rowIndex;
-    return`<tr class="${comp?'complete':'has-missing'}" onclick="${comp?'':'openFill('+idx+')'}">
+    return`<tr class="${comp?'complete':'has-missing'}" onclick="location.href='/exam?id='+encodeURIComponent('${examId}')" style="cursor:pointer;">
       <td>${wilayaBadge(cell(r,'Wilaya'))}</td>
       <td>${cell(r,'Year')}</td>
       <td>${cell(r,'Rotation')||'<span class="empty-val">—</span>'}</td>
       <td style="max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${cell(r,'Module')}">${cell(r,'Module')}</td>
       <td>${status?`<span class="badge badge-green">done</span>`:`<span class="badge badge-red">empty</span>`}</td>
-      <td>${examType?`<span style="font-size:12px;color:var(--text2)">${examType}</span>`:'<span class="empty-val">—</span>'}</td>
       <td>${drive?`<div class="link-cell"><a href="${drive}" target="_blank" onclick="event.stopPropagation()">Drive ↗</a></div>`:'<span class="empty-val">—</span>'}</td>
       <td>${quiz?`<div class="link-cell"><a href="${quiz}" target="_blank" onclick="event.stopPropagation()">Quiz ↗</a></div>`:'<span class="empty-val">—</span>'}</td>
-      <td>${mbset&&(mbset.includes('✅')||mbset==='Imported')?`<span class="badge badge-green">imported</span>`:`<span class="badge badge-gray">none</span>`}</td>
       <td style="text-align:center;">${nqst||'<span class="empty-val">—</span>'}</td>
-      <td style="white-space:nowrap;">${missingLabel}</td>
+      <td style="text-align:center;">${missingQstsLabel}</td>
       <td onclick="event.stopPropagation()" style="text-align:center;padding:6px 8px;">
         <button class="share-btn" onclick="shareExam('${examId}',event)" title="Copy share link">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -419,59 +527,158 @@ function openFill(idx){
   activeRowIdx=idx; pendingFile=null;
   const row=sheetData[idx];
   const missing=getMissing(row);
-  document.getElementById('modalTitle').textContent=cell(row,'Module')+' — '+cell(row,'Wilaya')+' '+cell(row,'Year');
-  document.getElementById('modalSub').textContent=(cell(row,'Level')||'')+' · '+(cell(row,'Rotation')||'')+' · '+missing.length+' missing field'+(missing.length!==1?'s':'');
-  const grid=document.getElementById('formGrid');
-  grid.innerHTML='';
+  document.getElementById('modalTitle').textContent = cell(row,'Module') + ' — ' + cell(row,'Wilaya') + ' ' + cell(row,'Year');
 
-  const addPrefilled=(label,val)=>{
-    if(!val)return;
-    const div=document.createElement('div');div.className='form-row';
-    div.innerHTML=`<label>${label}</label><div class="prefilled">${val}</div>`;
-    grid.appendChild(div);
+  const chips = [cell(row,'Level'), cell(row,'Rotation'), cell(row,'Period'), missing.length + ' missing field' + (missing.length!==1?'s':'')]
+    .filter(Boolean)
+    .map(v => `<span class="modal-sub-chip">${v}</span>`)
+    .join('');
+  document.getElementById('modalSub').innerHTML = chips;
+
+  const examId = cell(row,'ID_Exams') || row._rowIndex;
+  document.getElementById('modalOpenLink').href = `${location.origin}/exam?id=${encodeURIComponent(examId)}`;
+
+  const grid = document.getElementById('formGrid');
+  grid.innerHTML = '';
+
+  // ── Identity chips ────────────────────────────────────────────────────────
+  const identChips = [
+    {label:'Wilaya', val:cell(row,'Wilaya')},
+    {label:'Year', val:cell(row,'Year')},
+    {label:'Level', val:cell(row,'Level')},
+    {label:'Rotation', val:cell(row,'Rotation')},
+    {label:'Module', val:cell(row,'Module')},
+  ].filter(c=>c.val);
+  if(identChips.length){
+    const chipsHtml = identChips.map(c=>`<div class="id-chip"><span class="id-chip-label">${c.label}</span><span class="id-chip-value">${c.val}</span></div>`).join('');
+    grid.insertAdjacentHTML('beforeend', `<div class="identity-chips">${chipsHtml}</div>`);
+  }
+
+  // helper to create a section header
+  const addSection = (icon, label) => {
+    grid.insertAdjacentHTML('beforeend', `
+      <div class="form-section">
+        <div class="form-section-label">${icon}&nbsp;${label}</div>
+        <div class="form-grid" id="section-${label.replace(/\s/g,'-')}"></div>
+      </div>`);
+    return document.getElementById('section-' + label.replace(/\s/g,'-'));
   };
-  const addField=(colName,label,type,options)=>{
-    const div=document.createElement('div');div.className='form-row';
-    const current=cell(row,colName);
-    let input;
-    if(type==='select') input=`<select id="field_${colName}"><option value="">— select —</option>${options.map(o=>`<option value="${o}"${current===o?' selected':''}>${o}</option>`).join('')}</select>`;
-    else if(type==='url') input=`<input type="url" id="field_${colName}" value="${current}" placeholder="https://…">`;
-    else if(type==='number') input=`<input type="number" id="field_${colName}" value="${current}" min="0">`;
-    else input=`<input type="text" id="field_${colName}" value="${current}" placeholder="${label}">`;
-    div.innerHTML=`<label>${label}</label>${input}`;
-    grid.appendChild(div);
+
+  // helper to append a form-row into a grid
+  const addRow = (container, html, full=false) => {
+    const div = document.createElement('div');
+    div.className = 'form-row' + (full ? ' full' : '');
+    div.innerHTML = html;
+    container.appendChild(div);
+    return div;
   };
 
-  addPrefilled('Wilaya',cell(row,'Wilaya'));
-  addPrefilled('Module',cell(row,'Module'));
-  addPrefilled('Rotation',cell(row,'Rotation'));
+  // ── Section 1: Files ──────────────────────────────────────────────────────
+  const filesGrid = addSection('📁', 'Files');
 
-  // PDF upload
-  const uploadDiv=document.createElement('div');uploadDiv.className='form-row full';
-  uploadDiv.innerHTML=`
-    <label>Upload exam PDF to Drive</label>
+  // ── OrigPDF ───────────────────────────────────────────────────────────────
+  const origPDFCurrent = cell(row,'OrigPDF');
+  const uploadDiv = document.createElement('div');
+  uploadDiv.className = 'form-row full';
+  uploadDiv.innerHTML = `
+    <label>Original exam PDF <span class="req">*</span></label>
+    ${origPDFCurrent
+      ? `<div class="file-status has-file">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+           File stored — <a href="${origPDFCurrent}" target="_blank">View PDF ↗</a>
+           <span style="margin-left:auto;color:var(--text3);font-size:11px;">Replace below</span>
+         </div>`
+      : `<div class="file-status no-file">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+           No PDF stored yet
+         </div>`}
     <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()"
       ondragover="event.preventDefault();this.classList.add('dragover')"
       ondragleave="this.classList.remove('dragover')" ondrop="handleDrop(event)">
       <div class="upload-zone-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text3)">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
       </div>
-      <p>Click or drag & drop exam PDF</p><span>PDF, max 20MB</span>
-      <div class="upload-file-name" id="uploadFileName"></div>
+      <div class="upload-text">
+        <p>${origPDFCurrent ? 'Upload replacement PDF' : 'Click or drag & drop exam PDF'}</p>
+        <span>PDF, max 20MB</span>
+        <div class="upload-file-name" id="uploadFileName"></div>
+      </div>
     </div>
     <input type="file" id="fileInput" accept=".pdf" style="display:none" onchange="handleFileSelect(this)">
-    ${cell(row,'Drive')||cell(row,'Orgnl Exam')?`<div style="margin-top:6px;font-size:12px;color:var(--text2)">Current: <a href="${cell(row,'Drive')||cell(row,'Orgnl Exam')}" target="_blank" style="color:var(--blue-text)">View existing file ↗</a></div>`:''}`;
-  grid.appendChild(uploadDiv);
+    <div style="margin-top:6px;">
+      <input type="url" id="field_OrigPDF" value="${origPDFCurrent||''}" placeholder="Or paste Drive URL directly…" style="font-size:12px;">
+    </div>`;
+  filesGrid.appendChild(uploadDiv);
 
-  addField('Status','Exam status','select',EXAM_STATUS_OPTIONS);
-  addField('Exam Status','Exam type','select',EXAM_TYPE_OPTIONS);
-  addField('Quiz Link','Quiz link (MBset)','url');
-  addField('MBset Status','MBset status','select',MBSET_STATUS_OPTIONS);
-  addField('Mbset','MBset label','text');
-  addField('N° of Qst','Number of questions','number');
-  addField('Missing Qsts','Missing questions','number');
+  // ── Section 2: QCM Table ──────────────────────────────────────────────────
+  const quizGrid = addSection('📊', 'QCM Table (Quiz_Tbl)');
+  const quizCurrent = cell(row,'Quiz_Tbl');
+
+  addRow(quizGrid, `
+    <label>Paste QCM data (TSV) <span class="req">*</span></label>
+    ${quizCurrent
+      ? `<div class="file-status has-file" style="margin-bottom:6px;">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+           CSV stored — <a href="${quizCurrent}" target="_blank">View file ↗</a>
+           <span style="margin-left:auto;color:var(--text3);font-size:11px;">Paste below to replace</span>
+         </div>`
+      : `<div class="file-status no-file" style="margin-bottom:6px;">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+           No CSV stored yet
+         </div>`}
+    <textarea id="tsv_Quiz_Tbl" placeholder="Paste TSV data here (tab-separated, copied from Excel or Google Sheets)&#10;&#10;Leave empty to keep the existing file."></textarea>
+    <div class="field-hint">Paste tab-separated data from Excel/Sheets. It will be converted to CSV and saved to Drive automatically.</div>`, true);
+
+  // ── Quiz Link ─────────────────────────────────────────────────────────────
+  const quizLinkCurrent = cell(row,'Quiz_Link') || '';
+  addRow(quizGrid, `
+    <label>Quiz Link <span style="font-size:11px;font-weight:400;color:var(--text3);">(optional)</span></label>
+    <input type="url" id="field_Quiz_Link" value="${quizLinkCurrent}" placeholder="https://app.mbset.co/…">
+    <div class="field-hint">Paste the MBset quiz link for this exam</div>`);
+
+  // ── Section 3: Tags / Metadata ────────────────────────────────────────────
+  const tagsGrid = addSection('🏷️', 'Tags & Metadata');
+  const rowTags = parseTags(row);
+
+  const rawExamDate = cell(row,'ExamDate') || cell(row,'Exam Date') || '';
+  const examDateVal = toDateInputValue(rawExamDate);
+  addRow(tagsGrid, `
+    <label>Exam Date</label>
+    <input type="date" id="field_ExamDate" value="${examDateVal}">
+    <div class="field-hint">Date the exam was originally given to students</div>`);
+
+  addRow(tagsGrid, `
+    <label>N° of questions <span class="req">*</span></label>
+    <input type="number" id="tags_nQst" value="${rowTags.nQst != null ? rowTags.nQst : ''}" min="0" placeholder="0">
+    <div class="field-hint">Total questions in this exam</div>`);
+
+  addRow(tagsGrid, `
+    <label>Question annotations</label>
+    <input type="text" id="tags_annotations" value="${annotationsToString(rowTags)}" placeholder="e.g. 3m, 7s, 15-17m, 20s">
+    <div class="field-hint"><b>m</b> = missing &nbsp;·&nbsp; <b>s</b> = has schema/table &nbsp;·&nbsp; ranges ok (e.g. 5-8m) &nbsp;·&nbsp; missing count is auto-calculated</div>`, true);
+
+  addRow(tagsGrid, `
+    <label>Has Corrigé Type (CT)</label>
+    <label style="flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:400;margin-top:2px;cursor:pointer;">
+      <input type="checkbox" id="tags_hasCT" ${rowTags.hasCT?'checked':''} style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;">
+      Original PDF includes a correction key
+    </label>`);
+
+  addRow(tagsGrid, `
+    <label>Has Clinical Cases (Cas cliniques)</label>
+    <label style="flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:400;margin-top:2px;cursor:pointer;">
+      <input type="checkbox" id="tags_hasCas" ${rowTags.hasCas?'checked':''} style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;">
+      Exam contains clinical cases
+    </label>`);
+
+  addRow(tagsGrid, `
+    <label>Has Combination Propositions (e.g. A+B+C)</label>
+    <label style="flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:400;margin-top:2px;cursor:pointer;">
+      <input type="checkbox" id="tags_hasComb" ${rowTags.hasComb?'checked':''} style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;">
+      Some answers are combinations of propositions
+    </label>`);
 
   document.getElementById('fillModal').classList.add('open');
 }
@@ -492,24 +699,91 @@ function setFile(f){
 async function saveRow(){
   if(activeRowIdx===null)return;
   const row=sheetData[activeRowIdx];
+
+  // ── Required field validation ─────────────────────────────────────────────
+  const origPDFEl  = document.getElementById('field_OrigPDF');
+  const tsvEl      = document.getElementById('tsv_Quiz_Tbl');
+  const nQstEl     = document.getElementById('tags_nQst');
+
+  const origPDFOk  = (origPDFEl && origPDFEl.value.trim()) || pendingFile || cell(row,'OrigPDF');
+  const quizOk     = (tsvEl && tsvEl.value.trim()) || cell(row,'Quiz_Tbl');
+  const nQstOk     = nQstEl && nQstEl.value.trim() && parseInt(nQstEl.value) > 0;
+
+  if(origPDFEl) origPDFEl.classList.toggle('invalid', !origPDFOk);
+  if(tsvEl)     tsvEl.classList.toggle('invalid', !quizOk);
+  if(nQstEl)    nQstEl.classList.toggle('invalid', !nQstOk);
+
+  if(!origPDFOk || !quizOk || !nQstOk){
+    notify('Please fill in all required fields (*)', 'error');
+    return;
+  }
+
   const btn=document.getElementById('saveBtn');
   btn.textContent='Saving…';btn.disabled=true;
 
-  [['Status'],['Exam Status'],['Quiz Link'],['MBset Status'],['Mbset'],['N° of Qst'],['Missing Qsts']].forEach(([col])=>{
-    const el=document.getElementById('field_'+col);
-    if(el)setCell(row,col,el.value);
+  // Save OrigPDF if manually pasted URL
+  const origPDFVal = origPDFEl && origPDFEl.value.trim();
+  if(origPDFVal) setCell(row,'OrigPDF',origPDFVal);
+
+  // TSV → CSV upload for Quiz_Tbl
+  const tsvContent = tsvEl && tsvEl.value.trim();
+  if(tsvContent){
+    try{
+      const csvContent = tsvToCsv(tsvContent);
+      const csvBlob = new Blob([csvContent], {type:'text/csv'});
+      const _prCsv = ((cell(row,'Period')||'') + (cell(row,'Rotation')||'')).replace(/\s+/g,'') || '';
+      const baseName = [cell(row,'Wilaya'),cell(row,'Year'),_prCsv||null,cell(row,'Module')]
+        .filter(Boolean).join('_').replace(/\s+/g,'_');
+      const fname = `${baseName}_QCM_V1.csv`;
+      const fd = new FormData();
+      fd.append('file', csvBlob, fname);
+      fd.append('filename', fname);
+      const r = await fetch(`${API}/api/upload`,{method:'POST',body:fd});
+      const d = await r.json();
+      if(d.error) throw new Error(d.error);
+      setCell(row,'Quiz_Tbl',d.url);
+      notify('QCM CSV uploaded to Drive ✅','success');
+    }catch(e){ notify('CSV upload failed: '+e.message,'error'); }
+  }
+
+  // Build and save Tags JSON from all tag fields
+  const existingTagsIdx = parseTags(row);
+  const annot = parseAnnotations(document.getElementById('tags_annotations')?.value||'');
+  const mergedTagsIdx = Object.assign({}, existingTagsIdx, {
+    nQst: parseInt(document.getElementById('tags_nQst')?.value||'')||0,
+    missingPos: annot.missingPos,
+    schemaQsts: annot.schemaQsts,
+    hasCT:   document.getElementById('tags_hasCT')?.checked   || false,
+    hasCas:  document.getElementById('tags_hasCas')?.checked  || false,
+    hasComb: document.getElementById('tags_hasComb')?.checked || false,
   });
+  delete mergedTagsIdx.missingQsts;
+  setCell(row,'Tags',JSON.stringify(mergedTagsIdx));
+
+  // Save Exam Date
+  const examDateEl = document.getElementById('field_ExamDate');
+  if(examDateEl && examDateEl.value) setCell(row,'ExamDate',examDateEl.value);
+
+  // Save Quiz Link
+  const quizLinkFieldEl = document.getElementById('field_Quiz_Link');
+  if(quizLinkFieldEl) setCell(row,'Quiz_Link', quizLinkFieldEl.value.trim());
+
+  const hasCTIdx = document.getElementById('tags_hasCT')?.checked || false;
+  const ctSuffixIdx = hasCTIdx ? '_CT' : '';
+  const nQstIdx = parseInt(document.getElementById('tags_nQst')?.value||'')||0;
+  const annotIdx = parseAnnotations(document.getElementById('tags_annotations')?.value||'');
 
   if(pendingFile){
     try{
-      const fname=`${cell(row,'Wilaya')}_${cell(row,'Year')}_${cell(row,'Rotation')}_${cell(row,'Module')}.pdf`.replace(/\s+/g,'_');
+      const _pr = ((cell(row,'Period')||'') + (cell(row,'Rotation')||'')).replace(/\s+/g,'') || '';
+      const fname=`${cell(row,'Wilaya')}_${cell(row,'Year')}${_pr?'_'+_pr:''}_${cell(row,'Module')}${ctSuffixIdx}_${nQstIdx}Q_${annotIdx.missingPos.length}miss_V1.pdf`.replace(/\s+/g,'_');
       const fd=new FormData();
       fd.append('file',pendingFile,fname);
       fd.append('filename',fname);
       const r=await fetch(`${API}/api/upload`,{method:'POST',body:fd});
       const d=await r.json();
       if(d.error)throw new Error(d.error);
-      setCell(row,'Orgnl Exam',d.url);
+      setCell(row,'OrigPDF',d.url);
       notify('PDF uploaded to Drive ✅','success');
     }catch(e){notify('Drive upload failed: '+e.message,'error');}
   }
