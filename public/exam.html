@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -122,7 +122,7 @@
         display: flex; align-items: flex-start; gap: 12px;
         box-shadow: 0 2px 8px rgba(154,90,8,0.08);
       }
-      .missing-alert-icon { font-size: 16px; flex-shrink: 0; margin-top: 2px; }
+          <div class="missing-alert-icon">Warning</div>
       .missing-alert-text { font-size: 13px; color: var(--amber-text); }
       .missing-alert-text strong { font-weight: 600; }
       .missing-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
@@ -222,7 +222,7 @@
       .copy-btn:hover { background: var(--bg3); border-color: var(--accent); color: var(--accent); }
       .copy-btn.copied { background: var(--green-bg); color: var(--green-text); border-color: var(--green-border); }
 
-      /* ── Step cards ── */
+      /* Step cards */
       .step-card {
         background: var(--bg);
         border: 1px solid var(--border);
@@ -377,6 +377,8 @@
       .report-prompt-text {
         margin-top: 12px !important;
         max-height: 260px !important;
+        white-space: normal !important;
+        overflow: visible !important;
       }
       .report-panel-admin .report-prompt-text {
         background: linear-gradient(135deg, #f3f1ff, #ede9fe) !important;
@@ -458,7 +460,7 @@
         box-shadow: var(--shadow-md);
       }
 
-      /* ── AI Double-Check step ── */
+      /* AI Double-Check step */
       .dc-phase {
         background: var(--bg2); border: 1px solid var(--border);
         border-radius: var(--radius); padding: 16px;
@@ -497,6 +499,10 @@
         .topbar { padding: 0 16px; }
       }
     </style>
+    
+    <!-- Import separated prompts -->
+    <script src="/prompts/digitizePrompt.js"></script>
+    <script src="/prompts/doubleCheckPrompt.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
@@ -511,7 +517,7 @@
 
     <div id="appShell" style="display:none">
     <div class="topbar">
-      <span class="topbar-title" id="topbarTitle" style="color: var(--text3)">Loading…</span>
+      <span class="topbar-title" id="topbarTitle" style="color: var(--text3)">Loading...</span>
       <div id="topbarTags" style="display:flex;align-items:center;gap:6px;margin-left:8px;flex-wrap:wrap;"></div>
       <div class="topbar-right">
         <div class="user-badge" id="userBadge"></div>
@@ -521,7 +527,7 @@
     <div class="main" id="mainContent">
       <div id="loadingScreen" class="state-screen">
         <div class="spinner-lg"></div>
-        <span>Fetching exam details…</span>
+        <span>Fetching exam details...</span>
       </div>
 
       <div id="errorScreen" class="state-screen" style="display: none">
@@ -534,7 +540,7 @@
       <div id="examContent" style="display: none">
         <!-- Missing fields alert -->
         <div id="missingAlert" class="missing-alert" style="display: none">
-          <div class="missing-alert-icon">⚠️</div>
+          <div class="missing-alert-icon">Warning</div>
           <div class="missing-alert-text">
             <strong>This exam has missing fields.</strong> Fill them in below and click Save.
             <div class="missing-tags" id="missingTags"></div>
@@ -559,9 +565,10 @@
         ID_Exams: 0, Wilaya: 1, Year: 2, Level: 3, Rotation: 4, Period: 5,
         Module: 6, Start: 7, End: 8, ExamDate: 9, Status: 10,
         OrigPDF: 11, Quiz_Tbl: 12, Membre: 13, Tags: 14, Quiz_Link: 15,
+        Admin_Report: 16, Public_Report: 17,
       };
 
-      const EXAM_STATUS_OPTIONS = ["✅ Completed", "In Progress", "Pending", "Not Started"];
+      const EXAM_STATUS_OPTIONS = ["Completed", "In Progress", "Pending", "Not Started"];
 
       let sheetData = [];
       let headers = [];
@@ -570,7 +577,7 @@
       let pendingFile = null;
       let googleUser = null;
 
-      // ── Google Auth ──────────────────────────────────────────────────────────
+      // Google Auth
       function handleCredentialResponse(response) {
         try {
           const payload = JSON.parse(atob(response.credential.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
@@ -597,7 +604,7 @@
         }
         document.getElementById("signInScreen").style.display = "flex";
         if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID === "YOUR_CLIENT_ID_HERE") {
-          document.getElementById("googleSignInBtn").innerHTML = '<p style="color:var(--red-text);font-size:12px;">⚠️ Client ID not configured.</p>';
+          document.getElementById("googleSignInBtn").innerHTML = '<p style="color:var(--red-text);font-size:12px;">Warning: Client ID not configured.</p>';
           return;
         }
         google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleCredentialResponse });
@@ -613,7 +620,7 @@
       }
       function signOut() { googleUser = null; localStorage.removeItem("examTrackerUser"); location.reload(); }
 
-      // ── Boot ────────────────────────────────────────────────────────────────
+      // Boot
       async function boot() {
         const params = new URLSearchParams(location.search);
         const id = decodeURIComponent(params.get("id") || "");
@@ -643,7 +650,7 @@
         } catch (e) { showError("Connection error", e.message); }
       }
 
-      // ── Helpers ─────────────────────────────────────────────────────────────
+      // Helpers
       function colIdx(name) {
         const i = headers.indexOf(name);
         if (i >= 0) return i;
@@ -658,6 +665,26 @@
         const raw = cell(row, "Tags");
         if (raw) { try { tags = JSON.parse(raw); } catch(e) {} }
         return tags;
+      }
+      function setTags(row, tags) {
+        setCell(row, "Tags", JSON.stringify(tags));
+      }
+      function getStoredReportLink(row, type) {
+        const colName = type === "admin" ? "Admin_Report" : "Public_Report";
+        const direct = cell(row, colName);
+        if (direct) return direct;
+        const tags = parseTags(row);
+        return tags.reportLinks?.[type] || "";
+      }
+      function setStoredReportLink(row, type, url) {
+        const colName = type === "admin" ? "Admin_Report" : "Public_Report";
+        if (colIdx(colName) >= 0) {
+          setCell(row, colName, url);
+          return;
+        }
+        const tags = parseTags(row);
+        tags.reportLinks = { ...(tags.reportLinks || {}), [type]: url };
+        setTags(row, tags);
       }
 
       function parseAnnotations(str) {
@@ -690,7 +717,7 @@
         if (!cell(row, "Status"))   m.push("Status");
         if (!cell(row, "OrigPDF"))  m.push("OrigPDF");
         if (!cell(row, "Quiz_Tbl")) m.push("Quiz_Tbl");
-        if (!tags.nQst)             m.push("N° Qst");
+        if (!tags.nQst)             m.push("Nآ° Qst");
         return m;
       }
 
@@ -737,8 +764,23 @@
           return true;
         });
       }
+      function extractVerifiedTableRows(text, { skipHeader = false } = {}) {
+        const lines = text.split("\n");
+        const start = lines.findIndex(line => {
+          const t = line.trim();
+          if (!t) return false;
+          const lower = t.toLowerCase();
+          if (lower.startsWith("tag\t")) return true;
+          return /\btag\b/i.test(t) && /\bcas\b/i.test(t) && /\btext\b/i.test(t) && (t.includes("|") || t.includes("\t"));
+        });
+        const source = start >= 0 ? lines.slice(start).join("\n") : text;
+        return extractPipeRows(source, { skipHeader });
+      }
+      function hasValidationPassedSignal(text) {
+        return /VALIDATION PASSED\b/i.test(text);
+      }
       function pipeTableToCsv(text) {
-        return extractPipeRows(text).map(line => {
+        return extractVerifiedTableRows(text).map(line => {
           const t = line.trim();
           let parts;
           if (t.includes("\t")) {
@@ -758,12 +800,12 @@
 
       function driveDirectDownloadUrl(url) {
         if (!url) return url;
-        const m = url.match(/\/d\/([^/?#]+)/) || url.match(/[?&]id=([^&]+)/);
+        const m = url.match(/\/d\/([^\/?#]+)/) || url.match(/[?&]id=([^&]+)/);
         if (m) return `${API}/api/drive-download?id=${m[1]}`;
         return url;
       }
 
-      // ── Step checkbox state (localStorage) ─────────────────────────────────
+      // Step checkbox state (localStorage)
       function stepStateKey(examId) { return `examSteps_${examId}`; }
       function loadStepState(examId) {
         try { return JSON.parse(localStorage.getItem(stepStateKey(examId))) || {}; } catch(e) { return {}; }
@@ -780,7 +822,7 @@
         if (activeRow) renderReportCard(activeRow);
       }
 
-      // ── Report readiness validation ─────────────────────────────────────────
+      // Report readiness validation
       function validateReportReady() {
         if (!activeRow) return { ok: false, missing: ["No exam loaded"] };
         const examId  = cell(activeRow, "ID_Exams");
@@ -788,7 +830,7 @@
         const tags    = parseTags(activeRow);
         const missing = [];
 
-        const stepLabels = ["Step 1 — Upload PDF & metadata", "Step 2 — AI Digitization & Double Check", "Step 3 — Upload verified CSV", "Step 4 — MBset quiz link"];
+        const stepLabels = ["Step 1 - Upload PDF & metadata", "Step 2 - AI Digitization & Double Check", "Step 3 - Upload verified CSV", "Step 4 - MBset quiz link"];
         for (let i = 0; i < 4; i++) {
           if (!state[i]) missing.push(`${stepLabels[i]} not checked`);
         }
@@ -800,7 +842,7 @@
         return { ok: missing.length === 0, missing };
       }
 
-      // ── renderExam ──────────────────────────────────────────────────────────
+      // renderExam
       function renderExam(row) {
         const missing  = getMissing(row);
         const module   = cell(row, "Module");
@@ -815,7 +857,7 @@
         document.getElementById("topbarTitle").textContent = [module, pr].filter(Boolean).join(" ") || "Exam details";
         document.getElementById("topbarTitle").style.color = "";
 
-        // Tags: Level · Wilaya · Year (solid colored)
+        // Tags: Level آ· Wilaya آ· Year (solid colored)
         const tagsHtml = [
           level  ? `<span class="badge badge-solid-blue"   style="font-size:11px;">${level}</span>`   : "",
           wilaya ? `<span class="badge badge-solid-violet" style="font-size:11px;">${wilaya}</span>`  : "",
@@ -837,7 +879,7 @@
         document.getElementById("examContent").style.display = "block";
       }
 
-      // ── Summary card ────────────────────────────────────────────────────────
+      // Summary card
       function renderSummaryCard(row) {
         const status = cell(row, "Status");
         const statusHtml = status
@@ -858,7 +900,7 @@
         const itemsHtml = items.map(({ label, value, html }) => `
           <div class="summary-item">
             <div class="summary-item-label">${label}</div>
-            <div class="summary-item-value${(!html && !value) ? " empty" : ""}">${html || value || "—"}</div>
+            <div class="summary-item-value${(!html && !value) ? " empty" : ""}">${html || value || "-"}</div>
           </div>`).join("");
         document.getElementById("summaryCard").innerHTML = `
           <div class="summary-card">
@@ -867,7 +909,7 @@
           </div>`;
       }
 
-      // ── 7-step workflow ──────────────────────────────────────────────────────
+      // 7-step workflow
       function renderSteps(row) {
         const examId = cell(row, "ID_Exams") || String(row._rowIndex);
         const state  = loadStepState(examId);
@@ -915,7 +957,7 @@
         const pdfRow = pdfUrl
           ? `<div class="pdf-status-row">
                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-               <div class="pdf-status-text">File stored — <a href="${pdfUrl}" target="_blank" style="color:inherit;font-weight:600;">View PDF ↗</a></div>
+               <div class="pdf-status-text">File stored - <a href="${pdfUrl}" target="_blank" style="color:inherit;font-weight:600;">View PDF</a></div>
                ${hasCT}
              </div>`
           : `<div class="pdf-status-row missing">
@@ -935,7 +977,7 @@
             </svg>
             <div class="upload-compact-text">
               <p>${pdfUrl ? 'Upload a new version' : 'Upload exam PDF'}</p>
-              <span>PDF, max 20 MB — click or drag &amp; drop</span>
+              <span>PDF, max 20 MB - click or drag &amp; drop</span>
             </div>
           </div>
           <input type="file" id="pdfFileInput" accept=".pdf" style="display:none" onchange="handlePdfSelect(this)">
@@ -947,7 +989,7 @@
               <div class="form-row">
                 <label>Exam language</label>
                 <select id="tags_lang" onchange="refreshPromptText()" style="padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-size:13px;width:100%;cursor:pointer;">
-                  <option value="Français" ${(tags.lang || 'Français') === 'Français' ? 'selected' : ''}>Français</option>
+                  <option value="Francais" ${(tags.lang || 'Francais') === 'Francais' ? 'selected' : ''}>Francais</option>
                   <option value="English"  ${tags.lang === 'English' ? 'selected' : ''}>English</option>
                 </select>
               </div>
@@ -956,43 +998,43 @@
                 <input type="date" id="tags_examDate" value="${examDateVal}">
               </div>
               <div class="form-row">
-                <label>N° of questions <span style="color:var(--red-text)">*</span></label>
+                <label>Nآ° of questions <span style="color:var(--red-text)">*</span></label>
                 <input type="number" id="tags_nQst" value="${tags.nQst != null ? tags.nQst : ''}" min="0" placeholder="30">
               </div>
               <div class="form-row full">
                 <label>Question annotations</label>
                 <input type="text" id="tags_annotations" value="${annotationsToString(tags)}" placeholder="e.g. 3m, 7s, 15-17m, 20s" oninput="refreshPromptText()">
-                <div class="field-hint"><strong>m</strong> = missing &nbsp;·&nbsp; <strong>s</strong> = has schema/table &nbsp;·&nbsp; ranges ok (e.g. 5-8m)</div>
+                <div class="field-hint"><strong>m</strong> = missing &nbsp;آ·&nbsp; <strong>s</strong> = has schema/table &nbsp;آ·&nbsp; ranges ok (e.g. 5-8m)</div>
               </div>
               <div class="form-row">
-                <label>Has Corrigé Type (CT)</label>
+                <label>Has Corrige Type (CT)</label>
                 <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;background:var(--bg2);">
-                  <input type="checkbox" id="tags_hasCT" ${tags.hasCT ? "checked" : ""} style="width:auto;accent-color:var(--accent);"
-                    onchange="refreshPromptText();this.nextElementSibling.textContent=this.checked?'Yes — includes CT':'No CT'">
-                  <span style="font-size:13px;color:var(--text);">${tags.hasCT ? "Yes — includes CT" : "No CT"}</span>
+                  <input type="checkbox" id="tags_hasCT" ${tags.hasCT ? "checked" : ""} style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;"
+                    onchange="refreshPromptText();this.nextElementSibling.textContent=this.checked?'Yes - includes CT':'No CT'">
+                  <span style="font-size:13px;color:var(--text);">${tags.hasCT ? "Yes - includes CT" : "No CT"}</span>
                 </label>
               </div>
               <div class="form-row">
                 <label>Has Clinical Cases (Cas cliniques)</label>
                 <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;background:var(--bg2);">
-                  <input type="checkbox" id="tags_hasCas" ${tags.hasCas ? "checked" : ""} style="width:auto;accent-color:var(--accent);"
-                    onchange="refreshPromptText();this.nextElementSibling.textContent=this.checked?'Yes — has Cas cliniques':'No Cas cliniques'">
-                  <span style="font-size:13px;color:var(--text);">${tags.hasCas ? "Yes — has Cas cliniques" : "No Cas cliniques"}</span>
+                  <input type="checkbox" id="tags_hasCas" ${tags.hasCas ? "checked" : ""} style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;"
+                    onchange="refreshPromptText();this.nextElementSibling.textContent=this.checked?'Yes - has Cas cliniques':'No Cas cliniques'">
+                  <span style="font-size:13px;color:var(--text);">${tags.hasCas ? "Yes - has Cas cliniques" : "No Cas cliniques"}</span>
                 </label>
               </div>
               <div class="form-row">
                 <label>Has Association / Combination questions</label>
                 <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;background:var(--bg2);">
-                  <input type="checkbox" id="tags_hasComb" ${tags.hasComb ? "checked" : ""} style="width:auto;accent-color:var(--accent);"
-                    onchange="refreshPromptText();this.nextElementSibling.textContent=this.checked?'Yes — has association / combination questions':'No association questions'">
-                  <span style="font-size:13px;color:var(--text);">${tags.hasComb ? "Yes — has association / combination questions" : "No association questions"}</span>
+                  <input type="checkbox" id="tags_hasComb" ${tags.hasComb ? "checked" : ""} style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;"
+                    onchange="refreshPromptText();this.nextElementSibling.textContent=this.checked?'Yes - has association / combination questions':'No association questions'">
+                  <span style="font-size:13px;color:var(--text);">${tags.hasComb ? "Yes - has association / combination questions" : "No association questions"}</span>
                 </label>
               </div>
             </div>
           </div>`;
 
         const footer = `<button class="btn btn-sm btn-primary" id="saveStep1Btn" onclick="saveStep1()">Save</button>`;
-        return stepCardWrap(0, examId, state, "Upload PDF & fill exam data", pdfUrl ? "PDF stored — update metadata or re-upload" : "Upload PDF and fill in exam details", body, footer);
+        return stepCardWrap(0, examId, state, "Upload PDF & fill exam data", pdfUrl ? "PDF stored - update metadata or re-upload" : "Upload PDF and fill in exam details", body, footer);
       }
 
       function buildStep2(examId, state) {
@@ -1000,9 +1042,9 @@
           <!-- Phase 1 : Digitize -->
           <div class="dc-phase">
             <div class="dc-phase-header">
-              <span class="dc-phase-badge" style="background:linear-gradient(135deg,var(--accent),var(--accent2));">①</span>
+              <span class="dc-phase-badge" style="background:linear-gradient(135deg,var(--accent),var(--accent2));">1</span>
               <div>
-                <div class="dc-phase-title">Digitize — copy this prompt into an AI with the PDF</div>
+                <div class="dc-phase-title">Digitize - copy this prompt into an AI with the PDF</div>
                 <div class="dc-phase-sub">Use ChatGPT or Claude. Attach the original exam PDF.</div>
               </div>
               <button class="copy-btn" id="copyPromptBtn" onclick="copyPrompt()" style="margin-left:auto;flex-shrink:0;">
@@ -1014,25 +1056,25 @@
           </div>
 
           <div class="dc-divider">
-            <span>↓ the AI gives you a table — paste it below</span>
+            <span>The AI gives you a table - paste it below</span>
           </div>
 
           <!-- Phase 2 : Paste & verify -->
           <div class="dc-phase">
             <div class="dc-phase-header">
-              <span class="dc-phase-badge" style="background:linear-gradient(135deg,#f59e0b,#d97706);">②</span>
+              <span class="dc-phase-badge" style="background:linear-gradient(135deg,#f59e0b,#d97706);">2</span>
               <div>
                 <div class="dc-phase-title">Paste the AI output (TSV table)</div>
                 <div class="dc-phase-sub">Copy the TSV table the AI produced and paste it here. You can also paste it directly into Google Sheets to verify.</div>
               </div>
             </div>
             <textarea class="tsv-textarea dc-tsv" id="dcTsvInput" style="margin-top:10px;min-height:120px;"
-              placeholder="Paste the full TSV / Markdown table output from the AI here…"
+              placeholder="Paste the full TSV / Markdown table output from the AI here..."
               oninput="dcUpdateCount()"></textarea>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;gap:12px;">
               <span id="dcRowCount" style="font-size:11px;color:var(--text3);"></span>
               <button class="btn btn-primary btn-sm" onclick="dcGenerateCheckPrompt()">
-                Generate double-check prompt →
+                Generate double-check prompt ->
               </button>
             </div>
           </div>
@@ -1040,13 +1082,13 @@
           <!-- Phase 3 : Double-check result (hidden until generated) -->
           <div id="dcPhase3" style="display:none;">
             <div class="dc-divider">
-              <span>↓ paste this verification prompt into a second AI (with the PDF)</span>
+              <span>Paste this verification prompt into a second AI (with the PDF)</span>
             </div>
             <div class="dc-phase">
               <div class="dc-phase-header">
-                <span class="dc-phase-badge" style="background:linear-gradient(135deg,#10b981,#059669);">③</span>
+                <span class="dc-phase-badge" style="background:linear-gradient(135deg,#10b981,#059669);">3</span>
                 <div>
-                  <div class="dc-phase-title">Verify — copy this into a SECOND AI model</div>
+                  <div class="dc-phase-title">Verify - copy this into a SECOND AI model</div>
                   <div class="dc-phase-sub">Attach the original PDF again. The AI will audit the table and produce a fix report.</div>
                 </div>
                 <button class="copy-btn" id="copyDcBtn" onclick="dcCopyCheckPrompt()" style="margin-left:auto;flex-shrink:0;">
@@ -1061,240 +1103,57 @@
         return stepCardWrap(1, examId, state, "AI Digitization & Double Check", "Digitize with AI, then auto-verify with a second AI pass", body, "");
       }
 
-      function buildStep3(examId, state, csvUrl) {
-        const downloadHtml = csvUrl
-          ? `<a class="download-link" href="${driveDirectDownloadUrl(csvUrl)}" download>
-               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-               Download existing CSV
-             </a>`
-          : "";
-
-        const body = `
-          ${downloadHtml ? `<div style="margin-bottom:12px;">${downloadHtml}</div>` : ''}
-          <div class="form-row">
-            <label>
-              Paste the full AI validation output
-              <span style="font-size:11px;font-weight:400;color:var(--red-text);margin-left:6px;">Must contain ✅ VALIDATION PASSED</span>
-            </label>
-            <textarea class="tsv-textarea" id="combinedPasteInput"
-              placeholder='Paste the complete response from the double-check AI here (validation verdict + corrected table). The app detects "✅ VALIDATION PASSED", extracts the table automatically, and unlocks upload once all [INCERTAIN] tags are resolved.'
-              oninput="updateStep3ButtonState()"></textarea>
-            <div id="validationStatusBanner" class="validation-status-banner" style="display:none;"></div>
-            <div id="incertainStatusBanner" class="validation-status-banner" style="display:none;margin-top:4px;"></div>
-            <div class="field-hint">Table rows are extracted automatically — no need to paste separately.</div>
-          </div>`;
-        const footer = `<button class="btn btn-sm btn-primary" id="saveStep3Btn" onclick="saveStep3()" disabled style="opacity:.5;cursor:not-allowed;">Save &amp; Upload CSV</button>`;
-        return stepCardWrap(2, examId, state, "Upload verified QCM data", "Paste the full AI double-check response — table extracted automatically", body, footer);
-      }
-
-      function updateStep3ButtonState() {
-        const combined = (document.getElementById("combinedPasteInput")?.value || "").trim();
-        const btn     = document.getElementById("saveStep3Btn");
-        const vBanner = document.getElementById("validationStatusBanner");
-        const iBanner = document.getElementById("incertainStatusBanner");
-        if (!btn) return;
-
-        const CHECK_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
-        const WARN_SVG  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
-
-        if (!combined) {
-          if (vBanner) vBanner.style.display = "none";
-          if (iBanner) iBanner.style.display = "none";
-          btn.disabled = true; btn.style.opacity = ".5"; btn.style.cursor = "not-allowed";
-          return;
-        }
-
-        const tableLines = extractPipeRows(combined);
-
-        let validationOk = false;
-        if (vBanner) {
-          validationOk = /✅\s*VALIDATION PASSED/i.test(combined);
-          vBanner.style.display = "flex";
-          if (validationOk) {
-            vBanner.className = "validation-status-banner validation-ok";
-            vBanner.innerHTML = `${CHECK_SVG} Validation passed`;
-          } else {
-            vBanner.className = "validation-status-banner validation-fail";
-            vBanner.innerHTML = `${WARN_SVG} No ✅ VALIDATION PASSED signal found — fix issues and re-run the double check`;
-          }
-        }
-
-        let incertainOk = true;
-        if (iBanner) {
-          const tableText = tableLines.join("\n");
-          const matches = tableText.match(/\[INCERTAIN:[^\]]*\]/gi) || [];
-          if (matches.length > 0) {
-            incertainOk = false;
-            iBanner.style.display = "flex";
-            iBanner.className = "validation-status-banner validation-fail";
-            iBanner.innerHTML = `${WARN_SVG} ${matches.length} passage${matches.length > 1 ? "s" : ""} incertain${matches.length > 1 ? "s" : ""} dans le tableau — corrige tous les [INCERTAIN: …] avant d'importer`;
-          } else if (tableLines.length > 0) {
-            iBanner.style.display = "flex";
-            iBanner.className = "validation-status-banner validation-ok";
-            iBanner.innerHTML = `${CHECK_SVG} Tableau détecté (${tableLines.length} ligne${tableLines.length > 1 ? "s" : ""}) — aucun passage incertain`;
-          } else {
-            iBanner.style.display = "flex";
-            iBanner.className = "validation-status-banner validation-fail";
-            iBanner.innerHTML = `${WARN_SVG} Aucune ligne de tableau détectée dans le texte collé`;
-            incertainOk = false;
-          }
-        }
-
-        const ready = validationOk && incertainOk && tableLines.length > 0;
-        btn.disabled = !ready;
-        btn.style.opacity = ready ? "1" : ".5";
-        btn.style.cursor  = ready ? "" : "not-allowed";
-      }
-
       function buildStep4(examId, state, quizLink) {
         const body = `
           <div class="form-row">
             <label>MBset Quiz link <span style="font-size:11px;font-weight:400;color:var(--text3);">(optional)</span></label>
-            <input type="url" id="field_Quiz_Link" value="${quizLink || ''}" placeholder="https://app.mbset.co/…">
+            <input type="url" id="field_Quiz_Link" value="${quizLink || ''}" placeholder="https://app.mbset.co/...">
             <div class="field-hint">Paste the MBset quiz link for this exam once it has been imported</div>
           </div>`;
         const footer = `<button class="btn btn-sm btn-primary" id="saveStep4Btn" onclick="saveStep4()">Save link</button>`;
-        return stepCardWrap(3, examId, state, "Paste MBset quiz link", "Optional — paste after importing into MBset", body, footer);
+        return stepCardWrap(3, examId, state, "Paste MBset quiz link", "Optional - paste after importing into MBset", body, footer);
       }
 
-      // ── Prompt generation ────────────────────────────────────────────────────
-      function generatePrompt() {
-        if (!activeRow) return "";
-        const module      = cell(activeRow, "Module") || "[Préciser l'unité]";
-        const nQst        = parseInt(document.getElementById("tags_nQst")?.value || "") || parseTags(activeRow).nQst || "[Préciser le nombre]";
-        const hasCas      = document.getElementById("tags_hasCas")?.checked  || parseTags(activeRow).hasCas  || false;
-        const hasComb     = document.getElementById("tags_hasComb")?.checked || parseTags(activeRow).hasComb || false;
-        const hasCT       = document.getElementById("tags_hasCT")?.checked   || parseTags(activeRow).hasCT   || false;
-        const lang        = document.getElementById("tags_lang")?.value      || parseTags(activeRow).lang    || "Français";
-        const tags        = parseTags(activeRow);
-        const missingPos  = (document.getElementById("tags_annotations")
-          ? parseAnnotations(document.getElementById("tags_annotations").value || "").missingPos
-          : (tags.missingPos || []));
-        const schemaQsts  = (document.getElementById("tags_annotations")
-          ? parseAnnotations(document.getElementById("tags_annotations").value || "").schemaQsts
-          : (tags.schemaQsts || []));
-
-        const ctInstruction = hasCT
-          ? "\n  → Utilise UNIQUEMENT les réponses du Corrigé Type (CT) présent dans ce PDF. Ne jamais deviner ni paraphraser."
-          : "\n  → Aucun Corrigé Type disponible. La colonne Correct doit rester VIDE pour toutes les questions. Ne pas chercher de sources externes.";
-
-        const missingNote = missingPos.length > 0
-          ? `\n• Questions déclarées manquantes ou illisibles (numéros : ${missingPos.join(', ')}) : saute ces questions sans les halluciner. Signale-les dans la Section 1 du rapport.`
-          : "";
-
-        const year        = cell(activeRow, "Year") || "XXXX";
-        const schemaNote = schemaQsts.length > 0
-          ? `\n• Questions avec schéma ou image (numéros : ${schemaQsts.join(', ')}) : transcris le texte lisible dans Text, et remplis la colonne Image avec le nom : ${module}_${year}_[numéro de question] (ex : ${module}_${year}_${schemaQsts[0]}). Signale-les dans la Section 3 du rapport.`
-          : "";
-
-
-        return `Examen de médecine — Extraction des QCMs vers tableau Markdown
-══════════════════════════════════════════════════════════════
-
-▌ CONTEXTE DE L'EXAMEN
-• Langue : ${lang}
-• Unité : ${module}
-• Nombre total de QCMs déclarés : ${nQst}
-• Corrigé Type (CT) : ${hasCT ? "OUI — inclus dans ce PDF" : "NON — aucune réponse officielle disponible"}${ctInstruction}
-• Cas Cliniques : ${hasCas ? "OUI — présents dans cet examen" : "NON"}
-• Questions d'association : ${hasComb ? "OUI — présentes dans cet examen (voir Section 3)" : "NON"}${missingNote}${schemaNote}
-
-▌ SECTION 1 — FORMAT DE SORTIE
-Génère un tableau Markdown à partir de l'examen original avec la structure suivante :
-• Questions standard :        Tag | Cas | Text | Correct | A | B | C | D | E | Image
-• Questions d'association :   Tag | Cas | Text | Correct | A | B | C | D | E | F | G… | Hint | Image
-
-▌ SECTION 2 — RÈGLES PAR COLONNE
-
-1. TAG
-   Numéro de question en format JSON array à un élément : ["No. X"]
-   Exemples : ["No. 1"], ["No. 2"], ["No. 10"]…
-   Les crochets [ ] et les guillemets " " sont obligatoires — c'est un format JSON array.
-
-2. CAS
-   Définition : la colonne Cas contient l'énoncé complet du cas clinique, c'est-à-dire le texte narratif décrivant le patient — ses symptômes, ses résultats d'examens, ses antécédents, son contexte médical. C'est le "scénario" clinique qui précède les questions associées.
-
-   Extraction :
-   - Repère le texte qui apparaît entre "Cas clinique :" et la première question numérotée du cas.
-   - Ce texte est l'énoncé du cas. Copie-le intégralement dans la colonne Cas.
-   - Si l'énoncé est long, sépare les phrases ou paragraphes par un saut de ligne (\\n) pour éviter un bloc de texte illisible.
-   - Répète cet énoncé sur TOUTES les lignes des questions appartenant à ce cas (pas seulement la première).
-   - Préserve tous les détails cliniques sans rien omettre (signes, résultats, antécédents, contexte…).
-   - Un cas doit concerner au minimum 2 questions. Si une seule question y est liée, laisse la colonne Cas vide.
-
-3. TEXT
-   - Insère le texte complet de la question tel qu'il est rédigé dans l'examen. N'inclus ni les propositions ni la numérotation dans cette colonne.
-   - Si la question est longue ou comporte plusieurs parties, sépare les parties par un saut de ligne (\\n) pour éviter un bloc de texte compact.
-   - Si un mot, une phrase ou un passage est difficile à lire ou incertain → entoure-le du marqueur [INCERTAIN: texte_extrait]. Exemple : "Quel est le mécanisme de [INCERTAIN: la vasodilatation coronaire] ?" Ces marqueurs doivent être vérifiés et remplacés par le membre avant l'import final.
-   - Si une question est manquante ou totalement illisible → ne l'hallucine pas. Saute-la et signale-la dans la Section 1 du rapport.
-   - Si une question contient un schéma, une figure, un tableau ou une image → transcris uniquement le texte lisible de la question, et remplis la colonne Image (voir règle 6). Signale dans la Section 3 du rapport.
-
-4. CORRECT
-   ${hasCT
-     ? "Ce PDF contient un Corrigé Type. Utilise UNIQUEMENT ses réponses pour remplir cette colonne.\n   Si une réponse est absente du CT, laisse la cellule vide et signale-la en Section 2."
-     : "Aucun CT disponible. Laisse cette colonne VIDE pour toutes les questions.\n   Ne cherche pas de sources externes — laisser vide est la seule action correcte."}
-   - Si plusieurs réponses correctes → écris les lettres ensemble, sans espace ni ponctuation (ex : ACD).
-
-5. A, B, C, D, E (et F, G… pour les associations)
-   - Insère le texte complet de chaque proposition. Supprime le préfixe lettre ("A.", "B."…) et conserve uniquement le texte.
-   - Si un passage d'une proposition est incertain → applique le même marqueur [INCERTAIN: texte_extrait].
-   - Pour les questions d'association : chaque proposition numérotée devient une colonne lettre (voir Section 3).
-   - Ne laisse aucune colonne vide sans raison valide (question QROC ou proposition réellement absente).
-
-6. IMAGE
-   - Remplis cette colonne uniquement si la question contient un schéma, une figure, un tableau ou une image dans le PDF.
-   - Nom à utiliser : ${module}_${year}_[numéro de la question] — exemple : ${module}_${year}_3
-   - Si aucun visuel n'est présent pour cette question, laisse la colonne Image vide.
-
-▌ SECTION 3 — QUESTIONS D'ASSOCIATION
-Une question d'association fournit des propositions numérotées (1, 2, 3…) dont les options de réponse (A, B, C, D, E) sont des combinaisons de ces numéros.
-
-Traitement obligatoire :
-• Colonne TEXT : écris uniquement le texte principal de la question (le "stem").
-• Colonnes A, B, C, D, E, F, G… : mappe chaque proposition numérotée à une colonne lettre dans l'ordre croissant (1→A, 2→B, 3→C, 4→D, 5→E, 6→F…). Écris uniquement le texte de la proposition — supprime le numéro.
-• Colonne CORRECT : écris la lettre de l'option originale correcte (ex : D).
-• Colonne HINT : pour chaque option de réponse originale (A, B, C, D, E), traduis la combinaison de numéros en lettres selon le même mapping (1→A, 2→B…). Format attendu : ['XXX', 'XX', 'X', 'XXXXX', 'XX']
-• Signale ces questions dans la Section 4 du rapport final.
-
-▌ SECTION 4 — RÈGLES DE FORMATAGE STRICT
-• Sortie : tableau TSV (colonnes séparées par des tabulations, une ligne par question). Aucun autre format accepté.
-• Bloc de code obligatoire : encadre le tableau dans un bloc de code (\`\`\`tsv … \`\`\`) pour que l'interface affiche le bouton de copie natif et que le membre puisse coller directement dans Google Sheets.
-• Inclure la ligne d'en-tête : la première ligne du TSV doit être la ligne d'en-tête avec les noms de colonnes.
-• Ordre des colonnes (standard) :      Tag | Cas | Text | Correct | A | B | C | D | E | Image
-• Ordre des colonnes (association) :   Tag | Cas | Text | Correct | A | B | C | D | E | F | G… | Hint | Image
-• Fidélité absolue : préserve l'orthographe, la formulation et la ponctuation originales de l'examen, sans correction ni paraphrase.
-• Continuité : le tableau doit être continu sans texte intercalé entre les lignes.
-• Sauts de ligne : utilise \\n à l'intérieur des cellules pour les textes longs (cas cliniques, questions à plusieurs parties) afin d'améliorer la lisibilité.
-
-▌ SECTION 5 — RAPPORT FINAL (OBLIGATOIRE)
-Après le tableau, fournis un rapport structuré avec exactement 6 sections numérotées.
-Même si une section n'a rien à signaler, affiche : "Aucun problème détecté."
-
-1. Questions manquantes ou illisibles
-   Liste les numéros des questions absentes ou impossibles à lire dans le PDF.
-
-2. Corrections manquantes
-   Liste les numéros des questions dont la colonne Correct est vide (CT absent ou réponse absente du CT).
-
-3. Schémas ou images détectés
-   Liste les numéros des questions contenant un schéma, figure, tableau ou image, avec le nom Image généré.
-
-4. Questions d'association détectées
-   Liste les numéros des questions de type association trouvées dans l'examen.
-
-5. Cas cliniques — présence et complétude
-   Liste les cas cliniques présents et leur nombre de questions associées. Signale tout cas absent ou partiellement illisible.
-
-6. Passages incertains [INCERTAIN]
-   Liste chaque marqueur [INCERTAIN: …] trouvé dans le tableau, avec le numéro de question et la colonne concernée. Ces passages doivent être vérifiés et corrigés par le membre avant l'import final.`;
+      // Context Extractor
+      // Centralized function to extract clean data for prompt generation
+      function getExamContext() {
+        if (!activeRow) return {};
+        const tags = parseTags(activeRow);
+        return {
+          module: cell(activeRow, "Module") || "[Preciser l'unite]",
+          wilaya: cell(activeRow, "Wilaya") || "-",
+          year: cell(activeRow, "Year") || "XXXX",
+          level: cell(activeRow, "Level") || "-",
+          period: cell(activeRow, "Period") || "",
+          rotation: cell(activeRow, "Rotation") || "",
+          examDate: cell(activeRow, "ExamDate") || cell(activeRow, "Exam Date") || "-",
+          membre: cell(activeRow, "Membre") || googleUser?.email || "-",
+          status: cell(activeRow, "Status") || "-",
+          pdfUrl: cell(activeRow, "OrigPDF") || "",
+          csvUrl: cell(activeRow, "Quiz_Tbl") || "",
+          quizLink: cell(activeRow, "Quiz_Link") || "",
+          lang: document.getElementById("tags_lang")?.value || tags.lang || "Francais",
+          nQst: parseInt(document.getElementById("tags_nQst")?.value || "") || tags.nQst || "[Preciser le nombre]",
+          hasCT: document.getElementById("tags_hasCT")?.checked || tags.hasCT || false,
+          hasCas: document.getElementById("tags_hasCas")?.checked || tags.hasCas || false,
+          hasComb: document.getElementById("tags_hasComb")?.checked || tags.hasComb || false,
+          missingPos: document.getElementById("tags_annotations") ? parseAnnotations(document.getElementById("tags_annotations").value || "").missingPos : (tags.missingPos || []),
+          schemaQsts: document.getElementById("tags_annotations") ? parseAnnotations(document.getElementById("tags_annotations").value || "").schemaQsts : (tags.schemaQsts || []),
+        };
       }
 
+      // Prompt generation
       function refreshPromptText() {
         const el = document.getElementById("promptText");
-        if (el && activeRow) el.textContent = generatePrompt();
+        if (el && activeRow) {
+          const context = getExamContext();
+          if (typeof generateDigitizePrompt === "function") el.textContent = generateDigitizePrompt(context);
+          else if (typeof generatePrompt === "function") el.textContent = generatePrompt();
+          else el.textContent = "";
+        }
       }
 
-      // ── AI Double-Check helpers ──────────────────────────────────────────────
+      // AI Double-Check helpers
       function dcUpdateCount() {
         if (!activeRow) return;
         const raw = (document.getElementById("dcTsvInput")?.value || "").trim();
@@ -1310,18 +1169,21 @@ Même si une section n'a rien à signaler, affiche : "Aucun problème détecté.
 
         let cls = "dc-count-ok", label = `${count} rows`;
         if (nQst > 0) {
-          if (count === expected)      { cls = "dc-count-ok";    label = `${count} / ${expected} rows ✓`; }
-          else if (count < expected)   { cls = "dc-count-error"; label = `${count} / ${expected} rows — ${expected - count} missing`; }
-          else                          { cls = "dc-count-warn";  label = `${count} / ${expected} rows — ${count - expected} extra`; }
+          if (count === expected)      { cls = "dc-count-ok";    label = `${count} / ${expected} rows OK`; }
+          else if (count < expected)   { cls = "dc-count-error"; label = `${count} / ${expected} rows - ${expected - count} missing`; }
+          else                          { cls = "dc-count-warn";  label = `${count} / ${expected} rows - ${count - expected} extra`; }
         }
         el.innerHTML = `<span class="dc-count-badge ${cls}">${label}</span>`;
       }
 
       function dcGenerateCheckPrompt() {
         const tsvData = (document.getElementById("dcTsvInput")?.value || "").trim();
-        if (!tsvData) { notify("Paste the AI output first (Phase ②)", "error"); return; }
+        if (!tsvData) { notify("Paste the AI output first (Phase 2)", "error"); return; }
 
-        const prompt = generateDoubleCheckPrompt(tsvData);
+        const context = getExamContext();
+        const prompt = typeof generateDoubleCheckPromptFromContext === "function"
+          ? generateDoubleCheckPromptFromContext(context, tsvData)
+          : generateDoubleCheckPrompt(tsvData);
         const el = document.getElementById("dcCheckPromptText");
         const phase3 = document.getElementById("dcPhase3");
         if (el) el.textContent = prompt;
@@ -1329,7 +1191,7 @@ Même si une section n'a rien à signaler, affiche : "Aucun problème détecté.
           phase3.style.display = "block";
           phase3.scrollIntoView({ behavior: "smooth", block: "start" });
         }
-        notify("Double-check prompt ready — copy it (Phase ③)", "success");
+        notify("Double-check prompt ready - copy it (Phase 3)", "success");
       }
 
       function dcCopyCheckPrompt() {
@@ -1337,416 +1199,36 @@ Même si une section n'a rien à signaler, affiche : "Aucun problème détecté.
         if (!text) { notify("Generate the prompt first", "error"); return; }
         navigator.clipboard.writeText(text).then(() => {
           const btn = document.getElementById("copyDcBtn");
-          if (btn) { btn.classList.add("copied"); btn.textContent = "Copied ✓"; }
+          if (btn) { btn.classList.add("copied"); btn.textContent = "Copie"; }
           setTimeout(() => {
             if (btn) {
               btn.classList.remove("copied");
               btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy verification prompt`;
             }
           }, 2500);
-        }).catch(() => notify("Copy failed — select text manually.", "error"));
+        }).catch(() => notify("Copy failed - select text manually.", "error"));
       }
-
-      function generateDoubleCheckPrompt(tsvData) {
-        if (!activeRow) return "";
-        const tags        = parseTags(activeRow);
-        const module      = cell(activeRow, "Module")   || "—";
-        const wilaya      = cell(activeRow, "Wilaya")   || "—";
-        const year        = cell(activeRow, "Year")     || "—";
-        const lang        = tags.lang     || "Français";
-        const nQst        = tags.nQst     || "?";
-        const hasCT       = tags.hasCT    || false;
-        const hasCas      = tags.hasCas   || false;
-        const hasComb     = tags.hasComb  || false;
-        const missingPos  = tags.missingPos  || [];
-        const schemaQsts  = tags.schemaQsts  || [];
-        const missingCount = missingPos.length;
-        const expectedRows = typeof nQst === "number" ? nQst - missingCount : "?";
-
-        const missingLine = missingPos.length > 0
-          ? `• Questions déclarées manquantes (numéros : ${missingPos.join(', ')}) — ces numéros doivent être ABSENTS du tableau.`
-          : `• Aucune question déclarée manquante — les ${nQst} questions doivent toutes être présentes.`;
-
-        const schemaLine = schemaQsts.length > 0
-          ? `• Questions avec schéma déclarées (numéros : ${schemaQsts.join(', ')}) — vérifier que chaque ligne Text contient [Schéma non reproductible].`
-          : "";
-
-        const ctCheck = hasCT
-          ? `[C4] Corrigé Type — chaque valeur de la colonne Correct doit correspondre exactement à la réponse du CT présent dans le PDF. Aucune réponse devinée.`
-          : `[C4] Pas de CT — la colonne Correct doit être VIDE pour toutes les questions. Toute valeur présente est une erreur.`;
-
-        const casCheck = hasCas
-          ? `[C5] Cas Cliniques — le texte du cas doit apparaître dans la colonne Cas sur TOUTES les lignes des questions appartenant à ce cas (pas seulement la première). Vérifier complétude et fidélité au PDF.`
-          : "";
-
-        const combCheck = hasComb
-          ? `[C6] Questions d'association — vérifier que les questions d'association ont bien les colonnes F, G… supplémentaires avec les propositions numérotées mappées, et que la colonne Hint contient les combinaisons traduites en lettres.`
-          : "";
-
-        const schemaCheck = schemaQsts.length > 0
-          ? `[C7] Questions avec schéma (numéros : ${schemaQsts.join(', ')}) — vérifier que chaque ligne contient [Schéma non reproductible] dans la colonne Text.`
-          : "";
-
-        const optionalChecks = [ctCheck, casCheck, combCheck, schemaCheck].filter(Boolean).join("\n");
-
-        return `Tu es un auditeur qualité senior pour un projet de numérisation d'examens médicaux algériens.
-
-Tu vas recevoir le PDF original de l'examen ET le tableau TSV produit par un premier modèle IA.
-Ton rôle : comparer ligne par ligne le tableau TSV avec le PDF original et produire un rapport de validation rigoureux.
-
-══════════════════════════════════════════════════════════════
-▌ DONNÉES DE RÉFÉRENCE (vérité terrain)
-══════════════════════════════════════════════════════════════
-• Langue : ${lang}
-• Unité / Module : ${module}
-• Wilaya : ${wilaya} — Année : ${year}
-• Nombre total de QCMs déclarés : ${nQst}
-• Nombre de lignes attendues dans le tableau : ${expectedRows}
-• Corrigé Type (CT) disponible : ${hasCT ? "OUI" : "NON"}
-• Cas Cliniques : ${hasCas ? "OUI" : "NON"}
-• Questions d'association : ${hasComb ? "OUI" : "NON"}
-${missingLine}${schemaLine ? "\n" + schemaLine : ""}
-
-══════════════════════════════════════════════════════════════
-▌ TABLEAU TSV PRODUIT PAR LE PREMIER MODÈLE
-══════════════════════════════════════════════════════════════
-${tsvData}
-
-══════════════════════════════════════════════════════════════
-▌ INSTRUCTIONS DE VALIDATION
-══════════════════════════════════════════════════════════════
-Attache le PDF original de l'examen. Effectue une lecture complète du PDF, puis compare chaque ligne du tableau ci-dessus avec ce que tu lis dans le PDF.
-
-VÉRIFICATIONS STRUCTURELLES :
-[S1] Nombre de colonnes — chaque ligne de données doit avoir exactement 9 colonnes : Tag | Cas | Text | Correct | A | B | C | D | E
-[S2] Nombre de lignes — doit correspondre exactement à ${expectedRows} lignes (${nQst} total moins ${missingCount} manquantes déclarées)
-[S3] En-tête — doit être exactement : | Tag | Cas | Text | Correct | A | B | C | D | E |
-[S4] Séparateur — la deuxième ligne doit être | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-[S5] Format Tag — chaque Tag doit suivre le format exact ["No. X"], crochets et guillemets inclus
-
-VÉRIFICATIONS DE CONTENU (confrontation avec le PDF) :
-[C1] Colonne Text — lire chaque question dans le PDF et vérifier que le texte est complet, verbatim, non tronqué, non paraphrasé, non fusionné avec une autre question
-[C2] Propositions A–E — vérifier pour chaque question que toutes les propositions présentes dans le PDF sont bien transcrites, complètes, sans modification ni omission
-[C3] Questions manquantes — les numéros ${missingPos.length > 0 ? missingPos.join(', ') : "(aucun déclaré)"} doivent être absents du tableau. Si une question déclarée manquante est en fait lisible dans le PDF, c'est une erreur.
-${optionalChecks}
-[C8] Aucune hallucination — aucune question, proposition, réponse ou texte inventé qui n'existe pas dans le PDF original
-
-══════════════════════════════════════════════════════════════
-▌ FORMAT DE RÉPONSE OBLIGATOIRE
-══════════════════════════════════════════════════════════════
-Produis un rapport structuré, conçu pour être copié dans un éditeur de texte.
-Le membre lira chaque point, ajoutera sa décision sur la ligne →, puis te renverra le rapport complété.
-Ne produis le tableau TSV corrigé qu'après avoir reçu les décisions du membre.
-
-MISE EN FORME OBLIGATOIRE — DEUX BLOCS DE CODE SÉPARÉS :
-1. Encadre l'intégralité du rapport (ligne de statut + tous les blocs INCERTAIN/ERREUR + pied de page MODE D'EMPLOI) dans un seul bloc \`\`\`text … \`\`\`.
-   → Le membre obtient un bouton de copie unique pour copier le rapport entier dans son éditeur.
-2. Immédiatement après ce bloc, place le tableau TSV corrigé dans un bloc \`\`\`tsv … \`\`\` séparé.
-   → Le membre obtient un second bouton de copie pour le tableau seul.
-Aucun texte libre en dehors de ces deux blocs de code.
-
-──────────────────────────────────────────────────────────────
-LIGNE DE STATUT (première ligne de ta réponse, obligatoire) :
-  Si tout est conforme  → ✅ VALIDATION PASSED — no issues found
-  Si problèmes ou [INCERTAIN:]  → 🔴 VALIDATION FAILED — N point(s) à résoudre
-──────────────────────────────────────────────────────────────
-
-Ensuite, liste tous les points à résoudre en blocs uniformes.
-Utilise ce format EXACT pour chaque bloc (INCERTAIN ou ERREUR) :
-
-┌─ [TYPE] #N · [SÉVÉRITÉ] · [Code vérif.] ─────────────────┐
-  Tag      : [valeur du champ Tag, ex : ["No. 5"]]
-  Colonne  : [nom exact de la colonne]
-  Trouvé   : "[texte actuel dans le tableau]"
-  Attendu  : "[texte correct selon le PDF / suggestion]"
-  Motif    : [une phrase courte expliquant l'écart ou l'incertitude]
-└────────────────────────────────────────────────────────────┘
-→ Décision : [ VALIDER · REJETER · ou saisir la correction exacte ]
-
-Règles de remplissage des champs :
-• TYPE     : INCERTAIN (passage marqué [INCERTAIN:]) ou ERREUR (écart avec le PDF)
-• SÉVÉRITÉ : CRITIQUE / MAJEUR / MINEUR — ou INCERTAIN pour les passages marqués
-• Code     : S1…S5 / C1…C8 (vérifications définies ci-dessus) — ou "INCERTAIN" pour les passages marqués
-• Trouvé   : pour les INCERTAIN, mettre le marqueur complet [INCERTAIN: texte]
-• Attendu  : pour les INCERTAIN, mettre la suggestion avec justification brève
-
-Après tous les blocs, ajoute ce pied de page :
-══════════════════════════════════════════════════════════════
-📋 MODE D'EMPLOI MEMBRE
-Copie ce rapport dans ton éditeur. Pour chaque bloc →  Décision :
-  • VALIDER   → la correction proposée sera appliquée telle quelle
-  • REJETER   → l'original sera conservé (ou indique pourquoi)
-  • [texte]   → remplace la décision par le texte exact à insérer
-Renvoie le rapport complété ; je produirai alors le tableau TSV final corrigé.
-══════════════════════════════════════════════════════════════
-
-⚠️ Ne génère PAS le tableau TSV final avant d'avoir reçu les décisions du membre.
-⚠️ Si aucun point n'est à résoudre : un seul bloc \`\`\`text contenant uniquement ✅ VALIDATION PASSED, suivi du bloc \`\`\`tsv avec le tableau final.
-⚠️ Le membre ne pourra pas soumettre son CSV tant que le rapport ne contient pas "✅ VALIDATION PASSED".`;
-      }
+      
+      // Note: For the double check prompt, you would do the same:
+      // window.generateDoubleCheckPrompt(context)
 
       function copyPrompt() {
-        const text = generatePrompt();
+        const context = getExamContext();
+        const text = typeof generateDigitizePrompt === "function"
+          ? generateDigitizePrompt(context)
+          : "";
         navigator.clipboard.writeText(text).then(() => {
           const btn = document.getElementById("copyPromptBtn");
-          if (btn) { btn.classList.add("copied"); btn.textContent = "Copié ✓"; }
+          if (btn) { btn.classList.add("copied"); btn.textContent = "Copie"; }
           setTimeout(() => { if (btn) { btn.classList.remove("copied"); btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier le prompt`; } }, 2500);
-        }).catch(() => notify("Impossible de copier — sélectionnez le texte manuellement.", "error"));
+        }).catch(() => notify("Impossible de copier - selectionnez le texte manuellement.", "error"));
       }
 
-      // ── Report prompt ────────────────────────────────────────────────────────
-      function generateReportPrompt() {
-        if (!activeRow) return "";
-        const tags     = parseTags(activeRow);
-        const module   = cell(activeRow, "Module")   || "—";
-        const wilaya   = cell(activeRow, "Wilaya")   || "—";
-        const year     = cell(activeRow, "Year")     || "—";
-        const level    = cell(activeRow, "Level")    || "—";
-        const rotation = cell(activeRow, "Rotation") || "—";
-        const period   = cell(activeRow, "Period")   || "—";
-        const examDate = cell(activeRow, "ExamDate") || cell(activeRow, "Exam Date") || "—";
-        const membre   = cell(activeRow, "Membre")   || "—";
-        const status   = cell(activeRow, "Status")   || "—";
-        const pdfUrl   = cell(activeRow, "OrigPDF")  || null;
-        const csvUrl   = cell(activeRow, "Quiz_Tbl") || null;
-        const quizLink = cell(activeRow, "Quiz_Link")|| null;
-
-        const nQst     = tags.nQst     || "—";
-        const missing  = (tags.missingPos || []).length;
-        const schemas  = (tags.schemaQsts || []).length;
-        const missingList = (tags.missingPos || []).length > 0 ? (tags.missingPos || []).join(", ") : "None";
-        const schemaList  = (tags.schemaQsts || []).length > 0 ? (tags.schemaQsts  || []).join(", ") : "None";
-
-        const hasCT   = tags.hasCT   ? "Yes" : "No";
-        const hasCas  = tags.hasCas  ? "Yes" : "No";
-
-        const pdfLine   = pdfUrl   ? `- Original PDF (exam source): ${pdfUrl}` : "- Original PDF: Not uploaded yet";
-        const csvLine   = csvUrl   ? `- QCM Table (CSV): ${csvUrl}` : "- QCM Table (CSV): Not available yet";
-        const quizLine  = quizLink ? `- MBset Quiz Link: ${quizLink}` : "- MBset Quiz Link: Not set yet";
-
-        return `You are a professional medical education analyst and document designer.
-
-Generate a comprehensive, modern PDF-style report about the following exam digitization entry. The report is intended for an administrator who needs a clear overview of this exam's digitization status, data quality, and access to all source files and outputs.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EXAM IDENTITY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Module: ${module}
-- Wilaya: ${wilaya}
-- Year: ${year}
-- Level: ${level}
-- Rotation: ${rotation}
-- Period: ${period}
-- Exam Date: ${examDate}
-- Member (digitized by): ${membre}
-- Status: ${status}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DIGITIZATION DATA
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Total questions: ${nQst}
-- Missing questions: ${missing} (positions: ${missingList})
-- Questions with schemas/tables: ${schemas} (positions: ${schemaList})
-- Has Corrigé Type (CT): ${hasCT}
-- Has Cas Cliniques: ${hasCas}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SOURCES & OUTPUTS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${pdfLine}
-${csvLine}
-${quizLine}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REPORT REQUIREMENTS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Generate a beautifully formatted, modern PDF-ready report that includes:
-
-1. A bold header section with exam identity (Module, Wilaya, Year, Level, Rotation/Period)
-2. A status banner clearly showing digitization completion state
-3. A clean data table with all fields organized by category
-4. A "Digitization Quality" section with visual indicators for:
-   - Completeness (missing questions %)
-   - Presence of CT, Cas Cliniques, and Combinations
-5. A "Sources & Access" section with clearly labeled clickable links to all files
-6. A brief admin note summarizing any flags or issues to be aware of
-7. Modern design: use horizontal rules, bold section titles, emojis as icons, clean spacing
-
-Output the report as structured Markdown. Make it ready to paste into Notion, Google Docs, or convert directly to PDF.`;
-      }
-
-      // ── Public prompt generator ──────────────────────────────────────────────
-      function generatePublicPrompt() {
-        if (!activeRow) return "";
-        const tags     = parseTags(activeRow);
-        const module   = cell(activeRow, "Module")   || "—";
-        const wilaya   = cell(activeRow, "Wilaya")   || "—";
-        const year     = cell(activeRow, "Year")     || "—";
-        const level    = cell(activeRow, "Level")    || "—";
-        const rotation = cell(activeRow, "Rotation") || "—";
-        const period   = cell(activeRow, "Period")   || "—";
-        const examDate = cell(activeRow, "ExamDate") || cell(activeRow, "Exam Date") || "—";
-        const quizLink = cell(activeRow, "Quiz_Link") || null;
-
-        const nQst        = tags.nQst || "—";
-        const missingCount = (tags.missingPos || []).length;
-        const available   = typeof nQst === "number" ? nQst - missingCount : nQst;
-        const hasCT       = tags.hasCT   || false;
-        const hasCas      = tags.hasCas  || false;
-
-        const pr = (period + rotation).replace(/\s+/g, "") || "—";
-
-        const flags = [
-          hasCT   ? "✅ Corrigé Type (official answer key included)" : "",
-          hasCas  ? "✅ Cas Cliniques (clinical case questions)" : "",
-        ].filter(Boolean).join("\n");
-
-        const quizLine = quizLink
-          ? `🔗 MBset Quiz: ${quizLink}`
-          : "🔗 MBset Quiz: Coming soon";
-
-        return `You are a medical education content designer creating a clean, student-facing exam information card.
-
-Generate a modern, beautifully formatted public information card for this exam. It will be shared with students and the public — no internal data, no file links, no admin information.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EXAM INFORMATION (public)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Module: ${module}
-Wilaya: ${wilaya}
-Year: ${year}
-Level: ${level}
-Period / Rotation: ${pr}
-Exam Date: ${examDate}
-Questions available: ${available}
-${flags ? `\nContent flags:\n${flags}` : ""}
-${quizLine}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CARD REQUIREMENTS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Create a polished, student-friendly exam card in Markdown that includes:
-
-1. A bold, attractive header: Module name + Period/Rotation + Year (e.g., "📚 Dermatologie — P1R3 · 2026")
-2. A clean identity row: Wilaya · Level · Exam Date
-3. A "Questions" stat block showing the number of available questions
-4. Clearly labeled content badges for CT / Cas Cliniques / Combinations (only show what is present)
-5. A prominent "Practice on MBset" link button section
-6. A short, encouraging 1–2 sentence description of what students can practice with this exam
-7. Design: use emojis as visual anchors, horizontal dividers, bold labels, clean spacing
-8. Tone: professional but welcoming — aimed at medical students
-
-DO NOT include: member names, internal status, file links (PDF/CSV), missing question details, digitization metadata, or any admin information.
-
-Output as clean Markdown ready to paste into Notion, a Telegram channel post, or a website.`;
-      }
-
-      function renderReportCard(row) {
-        const card = document.getElementById("reportPromptCard");
-        if (!card) return;
-        card.style.display = "block";
-
-        const { ok, missing } = validateReportReady();
-
-        const lockBanner = ok ? "" : `
-          <div class="report-lock-banner">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0;color:#b45309;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <div>
-              <div class="report-lock-title">Complete all steps before generating reports</div>
-              <ul class="report-lock-list">${missing.map(m => `<li>${m}</li>`).join("")}</ul>
-            </div>
-          </div>`;
-
-        const disabledAttr = ok ? "" : "disabled";
-        const disabledStyle = ok ? "" : "opacity:.45;cursor:not-allowed;pointer-events:none;";
-
-        const copyIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
-
-        card.innerHTML = `
-          <div class="step-card">
-            <div class="step-card-header">
-              <div class="step-num-badge" style="background:linear-gradient(135deg,#6c47d9,#4f46e5);">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-              </div>
-              <div class="step-title-wrap">
-                <div class="step-title">Generate reports</div>
-                <div class="step-subtitle">Two prompts — one for internal admin use, one for public sharing</div>
-              </div>
-            </div>
-            <div class="step-body" style="padding:0;">
-              ${lockBanner}
-              <div class="report-panels" style="${ok ? "" : "opacity:.55;pointer-events:none;user-select:none;"}">
-
-                <!-- Admin prompt -->
-                <div class="report-panel report-panel-admin">
-                  <div class="report-panel-header">
-                    <div>
-                      <div class="report-panel-title">
-                        <span class="report-panel-badge" style="background:#6c47d9;">Admin</span>
-                        Admin report
-                      </div>
-                      <div class="report-panel-sub">Full internal report with all data, status, and file links</div>
-                    </div>
-                    <button class="copy-btn" id="copyReportBtn" onclick="copyReportPrompt()" ${disabledAttr} style="${disabledStyle}">
-                      ${copyIcon} Copy
-                    </button>
-                  </div>
-                  <div class="prompt-text report-prompt-text" id="reportPromptText">${generateReportPrompt().replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
-                </div>
-
-                <!-- Public prompt -->
-                <div class="report-panel report-panel-public">
-                  <div class="report-panel-header">
-                    <div>
-                      <div class="report-panel-title">
-                        <span class="report-panel-badge" style="background:#059669;">Public</span>
-                        Public card
-                      </div>
-                      <div class="report-panel-sub">Student-facing card — no internal data, ready to share</div>
-                    </div>
-                    <button class="copy-btn" id="copyPublicBtn" onclick="copyPublicPrompt()" ${disabledAttr} style="${disabledStyle}">
-                      ${copyIcon} Copy
-                    </button>
-                  </div>
-                  <div class="prompt-text report-prompt-text" id="publicPromptText">${generatePublicPrompt().replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
-                </div>
-
-              </div>
-            </div>
-          </div>`;
-      }
-
-      function copyReportPrompt() {
-        const { ok, missing } = validateReportReady();
-        if (!ok) { notify("Complete all steps first: " + missing[0], "error"); return; }
-        const text = generateReportPrompt();
-        navigator.clipboard.writeText(text).then(() => {
-          const btn = document.getElementById("copyReportBtn");
-          if (btn) { btn.classList.add("copied"); btn.textContent = "Copied ✓"; }
-          setTimeout(() => {
-            if (btn) { btn.classList.remove("copied"); btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy`; }
-          }, 2500);
-        }).catch(() => notify("Copy failed — select the text manually.", "error"));
-      }
-
-      function copyPublicPrompt() {
-        const { ok, missing } = validateReportReady();
-        if (!ok) { notify("Complete all steps first: " + missing[0], "error"); return; }
-        const text = generatePublicPrompt();
-        navigator.clipboard.writeText(text).then(() => {
-          const btn = document.getElementById("copyPublicBtn");
-          if (btn) { btn.classList.add("copied"); btn.textContent = "Copied ✓"; }
-          setTimeout(() => {
-            if (btn) { btn.classList.remove("copied"); btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy`; }
-          }, 2500);
-        }).catch(() => notify("Copy failed — select the text manually.", "error"));
-      }
-
-      // ── Step 1 save (PDF upload + metadata combined) ────────────────────────
+      // Step 1 save (PDF upload + metadata combined)
       async function saveStep1() {
         if (!activeRow) return;
         const btn = document.getElementById("saveStep1Btn");
-        btn.textContent = "Saving…"; btn.disabled = true;
+        btn.textContent = "Saving..."; btn.disabled = true;
 
         if (googleUser?.email) setCell(activeRow, "Membre", googleUser.email);
 
@@ -1756,7 +1238,7 @@ Output as clean Markdown ready to paste into Notion, a Telegram channel post, or
         const hasCombVal = document.getElementById("tags_hasComb")?.checked || false;
         const nQstVal    = parseInt(document.getElementById("tags_nQst")?.value || "") || 0;
         const examDateVal = document.getElementById("tags_examDate")?.value || "";
-        const langVal    = document.getElementById("tags_lang")?.value || "Français";
+        const langVal    = document.getElementById("tags_lang")?.value || "Francais";
         const annotations = parseAnnotations(document.getElementById("tags_annotations")?.value || "");
 
         if (examDateVal) setCell(activeRow, "ExamDate", examDateVal);
@@ -1775,7 +1257,7 @@ Output as clean Markdown ready to paste into Notion, a Telegram channel post, or
 
         // Upload PDF if a new file was selected
         if (pendingFile) {
-          btn.textContent = "Uploading PDF…";
+          btn.textContent = "Uploading PDF...";
           const ctSuffix = hasCTVal ? "_CT" : "";
           const _pr = (cell(activeRow, "Period") + cell(activeRow, "Rotation")).replace(/\s+/g, "");
           const baseName = [cell(activeRow, "Wilaya"), cell(activeRow, "Year"), _pr || null, cell(activeRow, "Module")]
@@ -1800,7 +1282,7 @@ Output as clean Markdown ready to paste into Notion, a Telegram channel post, or
 
         try {
           await writeSheet();
-          notify("Saved ✅", "success");
+          notify("Saved OK", "success");
           refreshPromptText();
           renderExam(activeRow);
         } catch (e) {
@@ -1809,68 +1291,11 @@ Output as clean Markdown ready to paste into Notion, a Telegram channel post, or
         btn.textContent = "Save"; btn.disabled = false;
       }
 
-      // ── Step 3 save (TSV → CSV → Drive) ─────────────────────────────────────
-      async function saveStep3() {
-        if (!activeRow) return;
-
-        const combined = (document.getElementById("combinedPasteInput")?.value || "").trim();
-        if (!combined) { notify("Paste the full AI validation output first", "error"); return; }
-        if (!/✅\s*VALIDATION PASSED/i.test(combined)) {
-          notify("No ✅ VALIDATION PASSED signal — fix issues and re-run the double check", "error"); return;
-        }
-
-        // Extract table rows from combined paste
-        const tableLines = extractPipeRows(combined);
-        if (!tableLines.length) { notify("No table rows found in the pasted content", "error"); return; }
-
-        const incertainMatches = tableLines.join("\n").match(/\[INCERTAIN:[^\]]*\]/gi) || [];
-        if (incertainMatches.length > 0) {
-          notify(`${incertainMatches.length} passage(s) [INCERTAIN] non résolus — corrige-les avant l'import`, "error"); return;
-        }
-
-        const btn = document.getElementById("saveStep3Btn");
-        btn.textContent = "Uploading…"; btn.disabled = true;
-
-        if (googleUser?.email) setCell(activeRow, "Membre", googleUser.email);
-
-        const hasCTVal = document.getElementById("tags_hasCT")?.checked || parseTags(activeRow).hasCT || false;
-        const nQstVal  = parseInt(document.getElementById("tags_nQst")?.value || "") || parseTags(activeRow).nQst || 0;
-        const annotations = parseAnnotations(document.getElementById("tags_annotations")?.value || "");
-        const ctSuffix = hasCTVal ? "_CT" : "";
-        const _period   = cell(activeRow, "Period")   || "";
-        const _rotation = cell(activeRow, "Rotation") || "";
-        const _pr = (_period + _rotation).replace(/\s+/g, "");
-        const baseName = [cell(activeRow, "Wilaya"), cell(activeRow, "Year"), _pr || null, cell(activeRow, "Module")]
-          .filter(Boolean).join("_").replace(/\s+/g, "_");
-        const fname = `${baseName}_QCM${ctSuffix}_${nQstVal}Q_${annotations.missingPos.length}miss_V1.csv`;
-
-        try {
-          const csvContent = pipeTableToCsv(combined);
-          const csvBlob = new Blob([csvContent], { type: "text/csv" });
-          const fd = new FormData();
-          fd.append("file", csvBlob, fname);
-          fd.append("filename", fname);
-          const r = await fetch(`${API}/api/upload`, { method: "POST", body: fd });
-          const d = await r.json();
-          if (d.error) throw new Error(d.error);
-          setCell(activeRow, "Quiz_Tbl", d.url);
-          await writeSheet();
-          notify("CSV uploaded to Drive ✅", "success");
-          const cp = document.getElementById("combinedPasteInput");
-          if (cp) cp.value = "";
-          updateStep3ButtonState();
-          renderExam(activeRow);
-        } catch (e) {
-          notify("CSV upload failed: " + e.message, "error");
-        }
-        btn.textContent = "Save & Upload CSV"; btn.disabled = false;
-      }
-
-      // ── Step 4 save (Quiz link) ──────────────────────────────────────────────
+      // Step 3 save (TSV -> CSV -> Drive)
       async function saveStep4() {
         if (!activeRow) return;
         const btn = document.getElementById("saveStep4Btn");
-        btn.textContent = "Saving…"; btn.disabled = true;
+        btn.textContent = "Saving..."; btn.disabled = true;
 
         const quizLink = (document.getElementById("field_Quiz_Link")?.value || "").trim();
         setCell(activeRow, "Quiz_Link", quizLink);
@@ -1879,7 +1304,7 @@ Output as clean Markdown ready to paste into Notion, a Telegram channel post, or
 
         try {
           await writeSheet();
-          notify("Quiz link saved ✅", "success");
+          notify("Quiz link saved OK", "success");
           renderReportCard(activeRow);
         } catch (e) {
           notify("Sheet write failed: " + e.message, "error");
@@ -1887,7 +1312,7 @@ Output as clean Markdown ready to paste into Notion, a Telegram channel post, or
         btn.textContent = "Save link"; btn.disabled = false;
       }
 
-      // ── Sheet write helper ──────────────────────────────────────────────────
+      // Sheet write helper
       async function writeSheet() {
         const r = await fetch(`${API}/api/sheet/${activeRow._rowIndex}`, {
           method: "PUT",
@@ -1898,7 +1323,7 @@ Output as clean Markdown ready to paste into Notion, a Telegram channel post, or
         if (d.error) throw new Error(d.error);
       }
 
-      // ── PDF file handlers ───────────────────────────────────────────────────
+      // PDF file handlers
       function handlePdfSelect(input) { if (input.files[0]) setPdfFile(input.files[0]); }
       function handlePdfDrop(e) {
         e.preventDefault();
@@ -1911,7 +1336,7 @@ Output as clean Markdown ready to paste into Notion, a Telegram channel post, or
         if (el) { el.textContent = f.name + " (" + Math.round(f.size / 1024) + " KB)"; el.style.display = "block"; }
       }
 
-      // ── Utilities ───────────────────────────────────────────────────────────
+      // Utilities
       function showError(title, msg) {
         document.getElementById("loadingScreen").style.display = "none";
         document.getElementById("errorScreen").style.display = "flex";
@@ -1924,7 +1349,7 @@ Output as clean Markdown ready to paste into Notion, a Telegram channel post, or
         setTimeout(() => el.classList.remove("show"), 3500);
       }
 
-      // ── Help popovers ───────────────────────────────────────────────────────
+      // Help popovers
       function initHelp() {
         const popover = document.createElement("div");
         popover.className = "help-popover"; popover.id = "helpPopover";
@@ -1945,6 +1370,316 @@ Output as clean Markdown ready to paste into Notion, a Telegram channel post, or
             popover.style.left = (rect.left + scrollX + rect.width / 2) + "px";
           } else { popover.style.display = "none"; popover._source = null; }
         });
+      }
+
+      function buildStep3(examId, state, csvUrl) {
+        const downloadHtml = csvUrl
+          ? `<a class="download-link" href="${driveDirectDownloadUrl(csvUrl)}" download>
+               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+               Download existing CSV
+             </a>`
+          : "";
+
+        const body = `
+          ${downloadHtml ? `<div style="margin-bottom:12px;">${downloadHtml}</div>` : ''}
+          <div class="form-row">
+            <label>
+              Paste the final AI audit block
+              <span style="font-size:11px;font-weight:400;color:var(--red-text);margin-left:6px;">Must contain VALIDATION PASSED and the final TSV in the same block</span>
+            </label>
+            <textarea class="tsv-textarea" id="combinedPasteInput"
+              placeholder='Paste one final AI block here: VALIDATION PASSED summary first, then the final TSV in the same block.'
+              oninput="updateStep3ButtonState()"></textarea>
+            <div id="validationStatusBanner" class="validation-status-banner" style="display:none;"></div>
+            <div id="incertainStatusBanner" class="validation-status-banner" style="display:none;margin-top:4px;"></div>
+            <div class="field-hint">Paste one combined final block only. The app ignores the summary and extracts the TSV automatically.</div>
+          </div>`;
+        const footer = `<button class="btn btn-sm btn-primary" id="saveStep3Btn" onclick="saveStep3()" disabled style="opacity:.5;cursor:not-allowed;">Save &amp; Upload CSV</button>`;
+        return stepCardWrap(2, examId, state, "Upload verified QCM data", "Paste one final AI audit block: validation summary + TSV together", body, footer);
+      }
+
+      function updateStep3ButtonState() {
+        const combined = (document.getElementById("combinedPasteInput")?.value || "").trim();
+        const btn = document.getElementById("saveStep3Btn");
+        const vBanner = document.getElementById("validationStatusBanner");
+        const iBanner = document.getElementById("incertainStatusBanner");
+        if (!btn) return;
+
+        const CHECK_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+        const WARN_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+
+        if (!combined) {
+          if (vBanner) vBanner.style.display = "none";
+          if (iBanner) iBanner.style.display = "none";
+          btn.disabled = true;
+          btn.style.opacity = ".5";
+          btn.style.cursor = "not-allowed";
+          return;
+        }
+
+        const tableLines = extractVerifiedTableRows(combined);
+        const validationOk = hasValidationPassedSignal(combined) && tableLines.length > 0;
+
+        if (vBanner) {
+          vBanner.style.display = "flex";
+          if (validationOk) {
+            vBanner.className = "validation-status-banner validation-ok";
+            vBanner.innerHTML = `${CHECK_SVG} Final audit block detected: VALIDATION PASSED + TSV`;
+          } else {
+            vBanner.className = "validation-status-banner validation-fail";
+            vBanner.innerHTML = `${WARN_SVG} Need one combined final block with VALIDATION PASSED and a detectable TSV table`;
+          }
+        }
+
+        let incertainOk = true;
+        if (iBanner) {
+          const tableText = tableLines.join("\n");
+          const matches = tableText.match(/\[INCERTAIN:[^\]]*\]/gi) || [];
+          iBanner.style.display = "flex";
+          if (!tableLines.length) {
+            iBanner.className = "validation-status-banner validation-fail";
+            iBanner.innerHTML = `${WARN_SVG} No TSV rows detected in the pasted final block`;
+            incertainOk = false;
+          } else if (matches.length > 0) {
+            iBanner.className = "validation-status-banner validation-fail";
+            iBanner.innerHTML = `${WARN_SVG} ${matches.length} unresolved [INCERTAIN] marker${matches.length > 1 ? "s" : ""} remain in the final TSV`;
+            incertainOk = false;
+          } else {
+            iBanner.className = "validation-status-banner validation-ok";
+            iBanner.innerHTML = `${CHECK_SVG} TSV detected (${tableLines.length} line${tableLines.length > 1 ? "s" : ""}) and no unresolved [INCERTAIN] markers`;
+          }
+        }
+
+        const ready = validationOk && incertainOk;
+        btn.disabled = !ready;
+        btn.style.opacity = ready ? "1" : ".5";
+        btn.style.cursor = ready ? "pointer" : "not-allowed";
+      }
+
+      async function saveStep3() {
+        if (!activeRow) return;
+
+        const combined = (document.getElementById("combinedPasteInput")?.value || "").trim();
+        if (!combined) { notify("Paste the final AI audit block first", "error"); return; }
+        if (!hasValidationPassedSignal(combined)) {
+          notify("No VALIDATION PASSED signal found in the final block", "error"); return;
+        }
+
+        const tableLines = extractVerifiedTableRows(combined);
+        if (!tableLines.length) { notify("No TSV table found in the pasted final block", "error"); return; }
+
+        const incertainMatches = tableLines.join("\n").match(/\[INCERTAIN:[^\]]*\]/gi) || [];
+        if (incertainMatches.length > 0) {
+          notify(`${incertainMatches.length} passage(s) [INCERTAIN] non resolus - corrige-les avant l'import`, "error"); return;
+        }
+
+        const btn = document.getElementById("saveStep3Btn");
+        btn.textContent = "Uploading...";
+        btn.disabled = true;
+
+        if (googleUser?.email) setCell(activeRow, "Membre", googleUser.email);
+
+        const hasCTVal = document.getElementById("tags_hasCT")?.checked || parseTags(activeRow).hasCT || false;
+        const nQstVal = parseInt(document.getElementById("tags_nQst")?.value || "") || parseTags(activeRow).nQst || 0;
+        const annotations = parseAnnotations(document.getElementById("tags_annotations")?.value || "");
+        const normalizeFilenamePart = (value) => String(value || "")
+          .trim()
+          .replace(/\s+/g, "_");
+        const wilaya = normalizeFilenamePart(cell(activeRow, "Wilaya"));
+        const level = normalizeFilenamePart(cell(activeRow, "Level"));
+        const module = normalizeFilenamePart(cell(activeRow, "Module"));
+        const year = String(cell(activeRow, "Year") || "").trim();
+        const yearShort = year ? year.slice(-2) : "";
+        const period = String(cell(activeRow, "Period") || "").replace(/\s+/g, "");
+        const rotation = String(cell(activeRow, "Rotation") || "").replace(/\s+/g, "");
+        const pr = `${period}${rotation}`;
+        const missCount = annotations.missingPos.length;
+        const fnameParts = [
+          wilaya || null,
+          level || null,
+          module || null,
+          `${yearShort}${pr}` || null,
+          nQstVal ? `${nQstVal}Q` : null,
+          hasCTVal ? "CT" : null,
+          missCount > 0 ? `${missCount}miss` : null,
+          "V1"
+        ].filter(Boolean);
+        const fname = `${fnameParts.join("_")}.csv`;
+
+        try {
+          const csvContent = "\uFEFF" + pipeTableToCsv(combined);
+          const csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+          const fd = new FormData();
+          fd.append("file", csvBlob, fname);
+          fd.append("filename", fname);
+          const r = await fetch(`${API}/api/upload`, { method: "POST", body: fd });
+          const d = await r.json();
+          if (d.error) throw new Error(d.error);
+          setCell(activeRow, "Quiz_Tbl", d.url);
+          await writeSheet();
+          notify("CSV uploaded to Drive OK", "success");
+          const cp = document.getElementById("combinedPasteInput");
+          if (cp) cp.value = "";
+          updateStep3ButtonState();
+          renderExam(activeRow);
+        } catch (e) {
+          notify("CSV upload failed: " + e.message, "error");
+        }
+        btn.textContent = "Save & Upload CSV";
+        btn.disabled = false;
+      }
+
+      // Final canonical report-generation overrides.
+      function renderReportCard(row) {
+        const card = document.getElementById("reportPromptCard");
+        if (!card) return;
+        card.style.display = "block";
+
+        const { ok, missing } = validateReportReady();
+        const adminUrl = getStoredReportLink(row, "admin");
+        const publicUrl = getStoredReportLink(row, "public");
+        const disabledAttr = ok ? "" : "disabled";
+        const disabledStyle = ok ? "" : "opacity:.45;cursor:not-allowed;pointer-events:none;";
+        const fileIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+
+        const lockBanner = ok ? "" : `
+          <div class="report-lock-banner">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0;color:#b45309;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <div>
+              <div class="report-lock-title">Complete all steps before generating reports</div>
+              <ul class="report-lock-list">${missing.map(m => `<li>${m}</li>`).join("")}</ul>
+            </div>
+          </div>`;
+
+        const renderPanel = (type, title, subtitle, badgeColor, url) => {
+          const btnId = type === "admin" ? "generateAdminReportBtn" : "generatePublicReportBtn";
+          const btnText = url ? "Regenerate PDF" : "Generate PDF";
+          const linksHtml = url
+            ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+                 <a class="download-link" href="${url}" target="_blank" rel="noopener noreferrer">${fileIcon} View PDF</a>
+                 <a class="download-link" href="${driveDirectDownloadUrl(url)}" download>${fileIcon} Download PDF</a>
+                 <button class="copy-btn" type="button" onclick="copyReportLink('${type}')">${fileIcon} Copy link</button>
+               </div>
+                <div class="field-hint" style="margin-top:8px;word-break:break-all;">Public URL: ${url}</div>`
+            : `<div class="field-hint" style="margin-top:10px;">No generated PDF stored yet.</div>`;
+
+          return `
+            <div class="report-panel ${type === "admin" ? "report-panel-admin" : "report-panel-public"}">
+              <div class="report-panel-header">
+                <div>
+                  <div class="report-panel-title">
+                    <span class="report-panel-badge" style="background:${badgeColor};">${type === "admin" ? "Admin" : "Public"}</span>
+                    ${title}
+                  </div>
+                  <div class="report-panel-sub">${subtitle}</div>
+                </div>
+                <button class="copy-btn" id="${btnId}" onclick="generateReportPdf('${type}')" ${disabledAttr} style="${disabledStyle}">
+                  ${fileIcon} ${btnText}
+                </button>
+              </div>
+              <div class="prompt-text report-prompt-text" style="max-height:none;white-space:normal;overflow:visible;">
+                <div style="font-weight:700;color:var(--text);margin-bottom:6px;">Direct generation</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.5;">The app builds this PDF directly, uploads it to Google Drive, and stores the public reader URL for this exam.</div>
+                ${linksHtml}
+              </div>
+            </div>`;
+        };
+
+        card.innerHTML = `
+          <div class="step-card">
+            <div class="step-card-header">
+              <div class="step-num-badge" style="background:linear-gradient(135deg,#6c47d9,#4f46e5);">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              </div>
+              <div class="step-title-wrap">
+                <div class="step-title">Generate reports</div>
+                <div class="step-subtitle">Create polished Admin/Public PDFs and upload them directly to Drive</div>
+              </div>
+            </div>
+            <div class="step-body" style="padding:0;">
+              ${lockBanner}
+              <div class="report-panels" style="${ok ? "" : "opacity:.55;pointer-events:none;user-select:none;"}">
+                ${renderPanel("admin", "Admin report", "Internal PDF with metadata, workflow state, and source links", "#6c47d9", adminUrl)}
+                ${renderPanel("public", "Public report", "Student-facing PDF with clean practice summary and public access links", "#059669", publicUrl)}
+              </div>
+            </div>
+          </div>`;
+      }
+
+      function buildReportPayload(type) {
+        const tags = parseTags(activeRow);
+        return {
+          type,
+          data: {
+            module: cell(activeRow, "Module"),
+            wilaya: cell(activeRow, "Wilaya"),
+            year: cell(activeRow, "Year"),
+            level: cell(activeRow, "Level"),
+            rotation: cell(activeRow, "Rotation"),
+            period: cell(activeRow, "Period"),
+          examDate: cell(activeRow, "ExamDate") || cell(activeRow, "Exam Date") || "-",
+            member: cell(activeRow, "Membre") || googleUser?.email || "",
+            status: cell(activeRow, "Status"),
+            pdfUrl: cell(activeRow, "OrigPDF"),
+            csvUrl: cell(activeRow, "Quiz_Tbl"),
+            quizLink: cell(activeRow, "Quiz_Link"),
+            tags,
+          }
+        };
+      }
+
+      async function generateReportPdf(type) {
+        const { ok, missing } = validateReportReady();
+        if (!ok) { notify("Complete all steps first: " + missing[0], "error"); return; }
+        if (!activeRow) return;
+
+        const btnId = type === "admin" ? "generateAdminReportBtn" : "generatePublicReportBtn";
+        const btn = document.getElementById(btnId);
+        const original = btn?.innerHTML || "";
+        if (btn) { btn.innerHTML = "Generating..."; btn.disabled = true; }
+
+        try {
+          if (googleUser?.email) setCell(activeRow, "Membre", googleUser.email);
+          const r = await fetch(`${API}/api/report-pdf`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(buildReportPayload(type)),
+          });
+          const raw = await r.text();
+          let d = null;
+          try {
+            d = raw ? JSON.parse(raw) : {};
+          } catch (parseError) {
+            if (!r.ok) {
+              throw new Error(`Server returned non-JSON response (${r.status}). The backend may need a restart to load /api/report-pdf.`);
+            }
+            throw new Error("Invalid JSON response from report endpoint");
+          }
+          if (!r.ok || d.error) throw new Error(d.error || "Report generation failed");
+
+          setStoredReportLink(activeRow, type, d.url);
+          await writeSheet();
+          notify(`${type === "admin" ? "Admin" : "Public"} report uploaded to Drive`, "success");
+          renderReportCard(activeRow);
+        } catch (e) {
+          notify(`Report generation failed: ${e.message}`, "error");
+          if (btn) { btn.innerHTML = original; btn.disabled = false; }
+        }
+      }
+
+      async function copyReportLink(type) {
+        if (!activeRow) return;
+        const url = getStoredReportLink(activeRow, type);
+        if (!url) {
+          notify(`No ${type} report link available yet`, "error");
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(url);
+          notify(`${type === "admin" ? "Admin" : "Public"} report link copied`, "success");
+        } catch (e) {
+          notify("Copy failed - select the link manually", "error");
+        }
       }
 
       if (typeof google !== "undefined") { initGoogleAuth(); }

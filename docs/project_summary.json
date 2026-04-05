@@ -1,0 +1,148 @@
+{
+  "generated": "2026-04-04T13:55:51.759Z",
+  "project_root": "C:\\Younes Hadjidj\\2- ZED Python scripts\\11- Telegram scripts\\exam-tracker",
+  "project_name": "exam-tracker-backend",
+  "version": "1.0.0",
+  "statistics": {
+    "totalFiles": 29,
+    "totalLines": 11655,
+    "totalComments": 401,
+    "totalFunctions": 135,
+    "totalClasses": 1,
+    "totalRoutes": 18,
+    "externalPackages": 8
+  },
+  "external_packages": [
+    "cors",
+    "crypto",
+    "dotenv",
+    "express",
+    "form-data",
+    "fs",
+    "multer",
+    "path"
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/exam",
+      "file": "00- Archive/codex-backup-2026-04-01-update-from-Exam-Tracker-VF/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sheet",
+      "file": "00- Archive/codex-backup-2026-04-01-update-from-Exam-Tracker-VF/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/sheet/:rowIndex",
+      "file": "00- Archive/codex-backup-2026-04-01-update-from-Exam-Tracker-VF/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload",
+      "file": "00- Archive/codex-backup-2026-04-01-update-from-Exam-Tracker-VF/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/config",
+      "file": "00- Archive/codex-backup-2026-04-01-update-from-Exam-Tracker-VF/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/exam",
+      "file": "00- Archive/Exam-Tracker-VF- Replit 50 dollars/Exam-Tracker-VF/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sheet",
+      "file": "00- Archive/Exam-Tracker-VF- Replit 50 dollars/Exam-Tracker-VF/server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/sheet/:rowIndex",
+      "file": "00- Archive/Exam-Tracker-VF- Replit 50 dollars/Exam-Tracker-VF/server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload",
+      "file": "00- Archive/Exam-Tracker-VF- Replit 50 dollars/Exam-Tracker-VF/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/drive-download",
+      "file": "00- Archive/Exam-Tracker-VF- Replit 50 dollars/Exam-Tracker-VF/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/config",
+      "file": "00- Archive/Exam-Tracker-VF- Replit 50 dollars/Exam-Tracker-VF/server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/exam",
+      "file": "server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/sheet",
+      "file": "server.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/sheet/:rowIndex",
+      "file": "server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload",
+      "file": "server.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/report-pdf",
+      "file": "server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/drive-download",
+      "file": "server.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/config",
+      "file": "server.js"
+    }
+  ],
+  "modules": [
+    "00- Archive/codex-backup-2026-04-01-update-from-Exam-Tracker-VF/public/exam.html",
+    "00- Archive/codex-backup-2026-04-01-update-from-Exam-Tracker-VF/public/index.html",
+    "00- Archive/codex-backup-2026-04-01-update-from-Exam-Tracker-VF/replit.md",
+    "00- Archive/codex-backup-2026-04-01-update-from-Exam-Tracker-VF/server.js",
+    "00- Archive/DEPLOYMENT_GUIDE.md",
+    "00- Archive/Exam-Tracker-VF- Replit 50 dollars/Exam-Tracker-VF/DEPLOYMENT_GUIDE.md",
+    "00- Archive/Exam-Tracker-VF- Replit 50 dollars/Exam-Tracker-VF/package.json",
+    "00- Archive/Exam-Tracker-VF- Replit 50 dollars/Exam-Tracker-VF/public/exam.html",
+    "00- Archive/Exam-Tracker-VF- Replit 50 dollars/Exam-Tracker-VF/public/index.html",
+    "00- Archive/Exam-Tracker-VF- Replit 50 dollars/Exam-Tracker-VF/railway.toml",
+    "00- Archive/Exam-Tracker-VF- Replit 50 dollars/Exam-Tracker-VF/replit.md",
+    "00- Archive/Exam-Tracker-VF- Replit 50 dollars/Exam-Tracker-VF/SCHEMA.md",
+    "00- Archive/Exam-Tracker-VF- Replit 50 dollars/Exam-Tracker-VF/server.js",
+    "adminReportPdf.js",
+    "package.json",
+    "project_doc_generator.js",
+    "public/digitizePrompt.js",
+    "public/doubleCheckPrompt.js",
+    "public/exam.html",
+    "public/EXAM_DATA.md",
+    "public/index.html",
+    "public/PROMPT_EDITING_RULES.md",
+    "public/_tmp_exam_inline_check.js",
+    "publicReportPdf.js",
+    "railway.toml",
+    "replit.md",
+    "reportPdfShared.js",
+    "SCHEMA.md",
+    "server.js"
+  ]
+}

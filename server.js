@@ -6,6 +6,9 @@ const multer   = require('multer');
 const fetch    = (...args) => import('node-fetch').then(({default: f}) => f(...args));
 const FormData = require('form-data');
 const crypto   = require('crypto');
+const { buildBaseReportFilename } = require('./reports/reportPdfShared');
+const { buildAdminReportBuffer } = require('./reports/adminReportPdf');
+const { buildPublicReportBuffer } = require('./reports/publicReportPdf');
 
 const app    = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -20,22 +23,61 @@ app.use(express.static('public', {
   }
 }));
 
-// ── FIX: Serve exam.html for /exam route ──────────────────────────────────
+// Route: serve exam.html for /exam
 app.get('/exam', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.sendFile(__dirname + '/public/exam.html');
 });
 
-// ── ENV VARS (set in Railway Variables tab) ────────────────────────────────
+// Environment variables (set in Railway Variables tab)
 const SHEET_ID        = process.env.SHEET_ID   || '';
 const SHEET_TAB       = process.env.SHEET_TAB  || 'Sheet1';
 const HEADER_ROW      = parseInt(process.env.HEADER_ROW || '1');
 const SERVICE_ACCOUNT = JSON.parse(process.env.SERVICE_ACCOUNT_JSON || '{}');
 const DRIVE_FOLDER_ID = process.env.DRIVE_FOLDER_ID || '';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
-// ──────────────────────────────────────────────────────────────────────────
 
-// ── Service Account → OAuth2 access token (JWT) ───────────────────────────
+
+async function uploadBufferToDrive(fileBuffer, name) {
+  const token = await getAccessToken();
+  if (!DRIVE_FOLDER_ID) {
+    throw new Error('DRIVE_FOLDER_ID is not set in environment variables.');
+  }
+
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  const mimeMap = {
+    pdf: 'application/pdf',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    xls: 'application/vnd.ms-excel',
+    csv: 'text/csv;charset=utf-8;',
+  };
+  const mimeType = mimeMap[ext] || 'application/octet-stream';
+  const meta = { name, mimeType, parents: [DRIVE_FOLDER_ID] };
+  const form = new FormData();
+  form.append('metadata', Buffer.from(JSON.stringify(meta)), { contentType: 'application/json', filename: 'metadata.json' });
+  form.append('file', fileBuffer, { contentType: mimeType, filename: name });
+
+  const uploadRes = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id&supportsAllDrives=true',
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, ...form.getHeaders() },
+      body: form,
+    }
+  );
+  if (!uploadRes.ok) throw new Error(await uploadRes.text());
+  const { id } = await uploadRes.json();
+
+  await fetch(`https://www.googleapis.com/drive/v3/files/${id}/permissions?supportsAllDrives=true`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+  });
+
+  return { id, url: `https://drive.google.com/file/d/${id}/view`, mimeType };
+}
+
+// Service Account -> OAuth2 access token (JWT)
 let cachedToken = null;
 let tokenExpiry = 0;
 
@@ -82,9 +124,9 @@ async function getAccessToken() {
   return cachedToken;
 }
 
-// ── Routes ─────────────────────────────────────────────────────────────────
+// Routes
 
-// GET /api/sheet  →  read all rows
+// GET /api/sheet -> read all rows
 app.get('/api/sheet', async (req, res) => {
   try {
     const token = await getAccessToken();
@@ -97,7 +139,7 @@ app.get('/api/sheet', async (req, res) => {
   }
 });
 
-// PUT /api/sheet/:rowIndex  →  write one row
+// PUT /api/sheet/:rowIndex -> write one row
 app.put('/api/sheet/:rowIndex', async (req, res) => {
   try {
     const token      = await getAccessToken();
@@ -117,62 +159,49 @@ app.put('/api/sheet/:rowIndex', async (req, res) => {
   }
 });
 
-// POST /api/upload  →  upload PDF to Google Drive, return shareable URL
+// POST /api/upload -> upload file to Google Drive and return shareable URL
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   try {
-    const token        = await getAccessToken();
     const { filename } = req.body;
     const fileBuffer   = req.file.buffer;
     const name         = filename || req.file.originalname;
-
-    if (!DRIVE_FOLDER_ID) {
-      throw new Error('DRIVE_FOLDER_ID is not set in environment variables.');
-    }
-
-    const ext = (name.split('.').pop() || '').toLowerCase();
-    const mimeMap = {
-      'pdf':  'application/pdf',
-      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'xls':  'application/vnd.ms-excel',
-      'csv':  'text/csv',
-    };
-    const mimeType = mimeMap[ext] || 'application/octet-stream';
-
-    const meta = {
-      name,
-      mimeType,
-      parents: [DRIVE_FOLDER_ID],
-    };
-
-    const metadata = JSON.stringify(meta);
-    const form     = new FormData();
-    form.append('metadata', Buffer.from(metadata), { contentType: 'application/json', filename: 'metadata.json' });
-    form.append('file', fileBuffer, { contentType: mimeType, filename: name });
-
-    const uploadRes = await fetch(
-      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id&supportsAllDrives=true',
-      {
-        method : 'POST',
-        headers: { Authorization: `Bearer ${token}`, ...form.getHeaders() },
-        body   : form,
-      }
-    );
-    if (!uploadRes.ok) throw new Error(await uploadRes.text());
-    const { id } = await uploadRes.json();
-
-    await fetch(`https://www.googleapis.com/drive/v3/files/${id}/permissions?supportsAllDrives=true`, {
-      method : 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body   : JSON.stringify({ role: 'reader', type: 'anyone' }),
-    });
-
-    res.json({ url: `https://drive.google.com/file/d/${id}/view` });
+    const uploaded = await uploadBufferToDrive(fileBuffer, name);
+    res.json({ url: uploaded.url });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// GET /api/drive-download?id=FILE_ID  →  proxy-download a Drive file via service account
+// POST /api/report-pdf -> generate admin/public PDF, upload to Drive, return public URL
+app.post('/api/report-pdf', async (req, res) => {
+  try {
+    const { type, data } = req.body || {};
+    if (!['admin', 'public'].includes(type)) {
+      return res.status(400).json({ error: 'Invalid report type. Use "admin" or "public".' });
+    }
+    if (!data || !data.module || !data.wilaya || !data.year) {
+      return res.status(400).json({ error: 'Missing report data.' });
+    }
+
+    const baseName = buildBaseReportFilename(data);
+    const suffix = type === 'admin' ? 'Admin_Report' : 'Public_Report';
+    const filename = `${baseName}_${suffix}_V1.pdf`;
+    const pdfBuffer = type === 'admin'
+      ? buildAdminReportBuffer(data)
+      : buildPublicReportBuffer(data);
+    const uploaded = await uploadBufferToDrive(pdfBuffer, filename);
+
+    res.json({
+      type,
+      filename,
+      url: uploaded.url,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
 app.get('/api/drive-download', async (req, res) => {
   const fileId = (req.query.id || '').replace(/[^a-zA-Z0-9_\-]/g, '');
   if (!fileId) return res.status(400).json({ error: 'Missing file id' });
@@ -199,7 +228,7 @@ app.get('/api/drive-download', async (req, res) => {
   }
 });
 
-// GET /api/config  →  send non-secret config to frontend
+
 app.get('/api/config', (req, res) => {
   res.json({ sheetTab: SHEET_TAB, headerRow: HEADER_ROW, googleClientId: GOOGLE_CLIENT_ID });
 });
