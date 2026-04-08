@@ -564,8 +564,8 @@
       const COLS = {
         ID_Exams: 0, Wilaya: 1, Year: 2, Level: 3, Rotation: 4, Period: 5,
         Module: 6, Start: 7, End: 8, ExamDate: 9, Status: 10,
-        OrigPDF: 11, Quiz_Tbl: 12, Membre: 13, Tags: 14, Quiz_Link: 15,
-        Admin_Report: 16, Public_Report: 17,
+        OrigPDF: 11, AffichagePDF: 12, Quiz_Tbl: 13, Membre: 14, Tags: 15, Quiz_Link: 16,
+        Admin_Report: 17, Public_Report: 18,
       };
 
       const EXAM_STATUS_OPTIONS = ["Completed", "In Progress", "Pending", "Not Started"];
@@ -574,7 +574,8 @@
       let headers = [];
       let headerRow = 1;
       let activeRow = null;
-      let pendingFile = null;
+      let pendingOrigPdfFile = null;
+      let pendingAffichagePdfFile = null;
       let googleUser = null;
 
       // Google Auth
@@ -664,6 +665,7 @@
         let tags = {};
         const raw = cell(row, "Tags");
         if (raw) { try { tags = JSON.parse(raw); } catch(e) {} }
+        if (!tags.subcategories) tags.subcategories = [];
         return tags;
       }
       function setTags(row, tags) {
@@ -717,7 +719,7 @@
         if (!cell(row, "Status"))   m.push("Status");
         if (!cell(row, "OrigPDF"))  m.push("OrigPDF");
         if (!cell(row, "Quiz_Tbl")) m.push("Quiz_Tbl");
-        if (!tags.nQst)             m.push("Nآ° Qst");
+        if (!tags.nQst)             m.push("N° Qst");
         return m;
       }
 
@@ -745,6 +747,187 @@
             return v;
           }).join(',')
         ).join('\n');
+      }
+
+      function escapeXml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&apos;");
+      }
+
+      function columnNumberToName(num) {
+        let name = "";
+        while (num > 0) {
+          const rem = (num - 1) % 26;
+          name = String.fromCharCode(65 + rem) + name;
+          num = Math.floor((num - 1) / 26);
+        }
+        return name;
+      }
+
+      function makeCrcTable() {
+        const table = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) {
+          let c = n;
+          for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+          table[n] = c >>> 0;
+        }
+        return table;
+      }
+
+      const CRC32_TABLE = makeCrcTable();
+
+      function crc32(bytes) {
+        let crc = 0 ^ (-1);
+        for (let i = 0; i < bytes.length; i++) {
+          crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ bytes[i]) & 0xFF];
+        }
+        return (crc ^ (-1)) >>> 0;
+      }
+
+      function createStoredZip(files) {
+        const encoder = new TextEncoder();
+        const localParts = [];
+        const centralParts = [];
+        let offset = 0;
+
+        for (const file of files) {
+          const nameBytes = encoder.encode(file.name);
+          const dataBytes = encoder.encode(file.content);
+          const crc = crc32(dataBytes);
+
+          const localHeader = new Uint8Array(30 + nameBytes.length);
+          const localView = new DataView(localHeader.buffer);
+          localView.setUint32(0, 0x04034b50, true);
+          localView.setUint16(4, 20, true);
+          localView.setUint16(6, 0, true);
+          localView.setUint16(8, 0, true);
+          localView.setUint16(10, 0, true);
+          localView.setUint16(12, 0, true);
+          localView.setUint32(14, crc, true);
+          localView.setUint32(18, dataBytes.length, true);
+          localView.setUint32(22, dataBytes.length, true);
+          localView.setUint16(26, nameBytes.length, true);
+          localView.setUint16(28, 0, true);
+          localHeader.set(nameBytes, 30);
+
+          localParts.push(localHeader, dataBytes);
+
+          const centralHeader = new Uint8Array(46 + nameBytes.length);
+          const centralView = new DataView(centralHeader.buffer);
+          centralView.setUint32(0, 0x02014b50, true);
+          centralView.setUint16(4, 20, true);
+          centralView.setUint16(6, 20, true);
+          centralView.setUint16(8, 0, true);
+          centralView.setUint16(10, 0, true);
+          centralView.setUint16(12, 0, true);
+          centralView.setUint16(14, 0, true);
+          centralView.setUint32(16, crc, true);
+          centralView.setUint32(20, dataBytes.length, true);
+          centralView.setUint32(24, dataBytes.length, true);
+          centralView.setUint16(28, nameBytes.length, true);
+          centralView.setUint16(30, 0, true);
+          centralView.setUint16(32, 0, true);
+          centralView.setUint16(34, 0, true);
+          centralView.setUint16(36, 0, true);
+          centralView.setUint32(38, 0, true);
+          centralView.setUint32(42, offset, true);
+          centralHeader.set(nameBytes, 46);
+
+          centralParts.push(centralHeader);
+          offset += localHeader.length + dataBytes.length;
+        }
+
+        const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+        const endRecord = new Uint8Array(22);
+        const endView = new DataView(endRecord.buffer);
+        endView.setUint32(0, 0x06054b50, true);
+        endView.setUint16(4, 0, true);
+        endView.setUint16(6, 0, true);
+        endView.setUint16(8, files.length, true);
+        endView.setUint16(10, files.length, true);
+        endView.setUint32(12, centralSize, true);
+        endView.setUint32(16, offset, true);
+        endView.setUint16(20, 0, true);
+
+        return new Blob([...localParts, ...centralParts, endRecord], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        });
+      }
+
+      function tsvLinesToWorkbookBlob(tableLines) {
+        const rows = tableLines.map(line => line.split("\t"));
+        const maxCols = rows.reduce((max, row) => Math.max(max, row.length), 0) || 1;
+        const lastRef = `${columnNumberToName(maxCols)}${rows.length || 1}`;
+
+        const sheetRows = rows.map((row, rowIndex) => {
+          const cells = row.map((value, colIndex) => {
+            const ref = `${columnNumberToName(colIndex + 1)}${rowIndex + 1}`;
+            return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+          }).join("");
+          return `<row r="${rowIndex + 1}">${cells}</row>`;
+        }).join("");
+
+        const sheetXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+          `<dimension ref="A1:${lastRef}"/>` +
+          `<sheetViews><sheetView workbookViewId="0"/></sheetViews>` +
+          `<sheetFormatPr defaultRowHeight="15"/>` +
+          `<sheetData>${sheetRows}</sheetData>` +
+          `</worksheet>`;
+
+        const workbookXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+          `<sheets><sheet name="QCM" sheetId="1" r:id="rId1"/></sheets>` +
+          `</workbook>`;
+
+        const workbookRelsXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+          `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>` +
+          `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+          `</Relationships>`;
+
+        const relsXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+          `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
+          `</Relationships>`;
+
+        const stylesXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+          `<fonts count="1"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts>` +
+          `<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>` +
+          `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
+          `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
+          `<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>` +
+          `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
+          `</styleSheet>`;
+
+        const contentTypesXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+          `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+          `<Default Extension="xml" ContentType="application/xml"/>` +
+          `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+          `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+          `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+          `</Types>`;
+
+        return createStoredZip([
+          { name: "[Content_Types].xml", content: contentTypesXml },
+          { name: "_rels/.rels", content: relsXml },
+          { name: "xl/workbook.xml", content: workbookXml },
+          { name: "xl/_rels/workbook.xml.rels", content: workbookRelsXml },
+          { name: "xl/worksheets/sheet1.xml", content: sheetXml },
+          { name: "xl/styles.xml", content: stylesXml },
+        ]);
       }
 
       function isTableSepRow(line) {
@@ -803,6 +986,13 @@
         const m = url.match(/\/d\/([^\/?#]+)/) || url.match(/[?&]id=([^&]+)/);
         if (m) return `${API}/api/drive-download?id=${m[1]}`;
         return url;
+      }
+
+      function driveOpenInSheetsUrl(url) {
+        if (!url) return "";
+        const m = url.match(/\/d\/([^\/?#]+)/) || url.match(/[?&]id=([^&]+)/);
+        if (!m) return "";
+        return `https://docs.google.com/spreadsheets/d/${m[1]}/edit`;
       }
 
       // Step checkbox state (localStorage)
@@ -916,19 +1106,22 @@
         const tags   = parseTags(row);
 
         const pdfUrl  = cell(row, "OrigPDF");
+        const affichagePdfUrl = cell(row, "AffichagePDF");
         const csvUrl  = cell(row, "Quiz_Tbl");
         const quizLink = cell(row, "Quiz_Link");
         const examDateVal = toDateInputValue(cell(row, "ExamDate") || cell(row, "Exam Date"));
 
         // Build all steps
         const steps = [
-          buildStep1(row, examId, state, pdfUrl, tags, examDateVal),
+          buildStep1(row, examId, state, pdfUrl, affichagePdfUrl, tags, examDateVal),
           buildStep2(examId, state),
           buildStep3(examId, state, csvUrl),
           buildStep4(examId, state, quizLink),
         ];
 
         document.getElementById("stepsContainer").innerHTML = steps.join("");
+
+        initSubcategories();
 
         // Re-init prompt after render (reads live values)
         refreshPromptText();
@@ -952,36 +1145,64 @@
         </div>`;
       }
 
-      function buildStep1(row, examId, state, pdfUrl, tags, examDateVal) {
+      function buildStep1(row, examId, state, pdfUrl, affichagePdfUrl, tags, examDateVal) {
         const hasCT  = tags.hasCT  ? '<span class="badge badge-amber" style="font-size:10px;">CT</span>' : '<span class="badge badge-gray" style="font-size:10px;">No CT</span>';
-        const pdfRow = pdfUrl
-          ? `<div class="pdf-status-row">
+        const buildPdfUploadBlock = ({ kind, title, storedUrl, statusBadge = "", emptyText, uploadText }) => {
+          const downloadUrl = driveDirectDownloadUrl(storedUrl);
+          const storedRow = storedUrl
+            ? `<div class="pdf-status-row">
                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-               <div class="pdf-status-text">File stored - <a href="${pdfUrl}" target="_blank" style="color:inherit;font-weight:600;">View PDF</a></div>
-               ${hasCT}
+               <div class="pdf-status-text">File stored - <a href="${storedUrl}" target="_blank" style="color:inherit;font-weight:600;">View PDF</a></div>
+               <a class="download-link" href="${downloadUrl}" download>
+                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                 Download PDF
+               </a>
+               ${statusBadge}
              </div>`
-          : `<div class="pdf-status-row missing">
+            : `<div class="pdf-status-row missing">
                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-               <div class="pdf-status-text">No PDF uploaded yet</div>
+               <div class="pdf-status-text">${emptyText}</div>
              </div>`;
+          return `
+            <div>
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-bottom:10px;">${title}</div>
+              ${storedRow}
+              <div class="upload-compact" id="uploadZone_${kind}" onclick="document.getElementById('pdfFileInput_${kind}').click()"
+                ondragover="event.preventDefault();this.classList.add('dragover')"
+                ondragleave="this.classList.remove('dragover')" ondrop="handlePdfDrop(event, '${kind}')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text3);flex-shrink:0;">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <div class="upload-compact-text">
+                  <p>${uploadText}</p>
+                  <span>PDF, max 20 MB - click or drag &amp; drop</span>
+                </div>
+              </div>
+              <input type="file" id="pdfFileInput_${kind}" accept=".pdf" style="display:none" onchange="handlePdfSelect(this, '${kind}')">
+              <div class="upload-file-name" id="pdfFileName_${kind}"></div>
+            </div>`;
+        };
 
         const body = `
-          ${pdfRow}
-          <div class="upload-compact" id="uploadZone" onclick="document.getElementById('pdfFileInput').click()"
-            ondragover="event.preventDefault();this.classList.add('dragover')"
-            ondragleave="this.classList.remove('dragover')" ondrop="handlePdfDrop(event)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text3);flex-shrink:0;">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="17 8 12 3 7 8"/>
-              <line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            <div class="upload-compact-text">
-              <p>${pdfUrl ? 'Upload a new version' : 'Upload exam PDF'}</p>
-              <span>PDF, max 20 MB - click or drag &amp; drop</span>
-            </div>
+          <div class="form-grid" style="margin-bottom:20px;">
+            ${buildPdfUploadBlock({
+              kind: "orig",
+              title: "Original PDF",
+              storedUrl: pdfUrl,
+              statusBadge: hasCT,
+              emptyText: "No original PDF uploaded yet",
+              uploadText: pdfUrl ? "Upload a new original PDF" : "Upload original exam PDF"
+            })}
+            ${buildPdfUploadBlock({
+              kind: "affichage",
+              title: "Affichage PDF",
+              storedUrl: affichagePdfUrl,
+              emptyText: "No affichage PDF uploaded yet",
+              uploadText: affichagePdfUrl ? "Upload a new affichage PDF" : "Upload affichage PDF"
+            })}
           </div>
-          <input type="file" id="pdfFileInput" accept=".pdf" style="display:none" onchange="handlePdfSelect(this)">
-          <div class="upload-file-name" id="pdfFileName"></div>
 
           <div style="margin:20px 0 16px;border-top:1px solid var(--border);padding-top:18px;">
             <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-bottom:16px;">Exam metadata</div>
@@ -998,13 +1219,13 @@
                 <input type="date" id="tags_examDate" value="${examDateVal}">
               </div>
               <div class="form-row">
-                <label>Nآ° of questions <span style="color:var(--red-text)">*</span></label>
+                <label>Total N° of questions in the exam <span style="color:var(--red-text)">*</span></label>
                 <input type="number" id="tags_nQst" value="${tags.nQst != null ? tags.nQst : ''}" min="0" placeholder="30">
               </div>
               <div class="form-row full">
                 <label>Question annotations</label>
                 <input type="text" id="tags_annotations" value="${annotationsToString(tags)}" placeholder="e.g. 3m, 7s, 15-17m, 20s" oninput="refreshPromptText()">
-                <div class="field-hint"><strong>m</strong> = missing &nbsp;آ·&nbsp; <strong>s</strong> = has schema/table &nbsp;آ·&nbsp; ranges ok (e.g. 5-8m)</div>
+                <div class="field-hint"><strong>m</strong> = missing &nbsp;&middot;&nbsp; <strong>s</strong> = has schema/table &nbsp;&middot;&nbsp; ranges ok (e.g. 5-8m)</div>
               </div>
               <div class="form-row">
                 <label>Has Corrige Type (CT)</label>
@@ -1030,11 +1251,20 @@
                   <span style="font-size:13px;color:var(--text);">${tags.hasComb ? "Yes - has association / combination questions" : "No association questions"}</span>
                 </label>
               </div>
+              <!-- Subcategories for Unit/Résidanat exams -->
+              <div id="subcategorySection" class="form-row full" style="display:none;margin-top:16px;">
+                <label style="font-weight:700;color:var(--text3);">Parts of the exam (Unit / Résidanat only)</label>
+                <div class="field-hint" id="subcategoryHelp" style="margin-bottom:10px;">
+                  Enter the exact QCM range for each part, for example: 1-20, 21-40.
+                </div>
+                <div id="subcategoryList" style="display:flex;flex-direction:column;gap:8px;"></div>
+              </div>
             </div>
           </div>`;
 
         const footer = `<button class="btn btn-sm btn-primary" id="saveStep1Btn" onclick="saveStep1()">Save</button>`;
-        return stepCardWrap(0, examId, state, "Upload PDF & fill exam data", pdfUrl ? "PDF stored - update metadata or re-upload" : "Upload PDF and fill in exam details", body, footer);
+        const step1Ready = pdfUrl ? "Original PDF stored - update metadata or re-upload files" : "Upload original PDF and optional affichage PDF";
+        return stepCardWrap(0, examId, state, "Upload PDFs & fill exam data", step1Ready, body, footer);
       }
 
       function buildStep2(examId, state) {
@@ -1119,6 +1349,19 @@
       function getExamContext() {
         if (!activeRow) return {};
         const tags = parseTags(activeRow);
+
+        // Parse subcategories from Tags.subcategories if available
+        let subcategories = [];
+        try {
+          const subcatStr = tags.subcategories || "[]";
+          if (subcatStr && subcatStr.trim() !== "[]") {
+            subcategories = JSON.parse(subcatStr);
+          }
+        } catch (e) {
+          console.warn("Failed to parse subcategories:", e);
+          subcategories = [];
+        }
+
         return {
           module: cell(activeRow, "Module") || "[Preciser l'unite]",
           wilaya: cell(activeRow, "Wilaya") || "-",
@@ -1130,6 +1373,7 @@
           membre: cell(activeRow, "Membre") || googleUser?.email || "-",
           status: cell(activeRow, "Status") || "-",
           pdfUrl: cell(activeRow, "OrigPDF") || "",
+          affichagePdfUrl: cell(activeRow, "AffichagePDF") || "",
           csvUrl: cell(activeRow, "Quiz_Tbl") || "",
           quizLink: cell(activeRow, "Quiz_Link") || "",
           lang: document.getElementById("tags_lang")?.value || tags.lang || "Francais",
@@ -1139,8 +1383,143 @@
           hasComb: document.getElementById("tags_hasComb")?.checked || tags.hasComb || false,
           missingPos: document.getElementById("tags_annotations") ? parseAnnotations(document.getElementById("tags_annotations").value || "").missingPos : (tags.missingPos || []),
           schemaQsts: document.getElementById("tags_annotations") ? parseAnnotations(document.getElementById("tags_annotations").value || "").schemaQsts : (tags.schemaQsts || []),
+          subcategoryMapEnabled: isMappedExam(activeRow),
+          subcategories: subcategories
         };
       }
+
+      // ── Subcategory management ────────────────────────────────────────────────
+      const SUBCATEGORY_PRESETS = {
+        "2|Unit 1": ["Anatomie", "Biophysique", "Histologie", "Physiologie"],
+        "2|Unit 2": ["Anatomie", "Biochimie", "Histologie", "Physiologie"],
+        "2|Unit 3": ["Anatomie", "Biochimie", "Histologie", "Physiologie"],
+        "2|Unit 4": ["Anatomie", "Biochimie", "Histologie", "Physiologie"],
+        "2|Unit 5": ["Anatomie", "Biophysique", "Histologie", "Physiologie"],
+        "3|Unit 1": ["Biochimie", "Physiopathologie", "Psychologie médicale", "Radiologie", "Sémiologie"],
+        "3|Unit 2": ["Biochimie", "Physiopathologie", "Radiologie", "Sémiologie"],
+        "3|Unit 3": ["Biochimie", "Physiopathologie", "Radiologie", "Sémiologie"],
+        "3|Unit 4": ["Biochimie", "Physiopathologie", "Radiologie", "Sémiologie"],
+        "7|Résidanat": ["Biologie", "Médicale", "Chirurgie"],
+      };
+
+      let subcategories = [];
+
+      function getSubcategoryPreset(row) {
+        if (!row) return [];
+        const level = String(cell(row, "Level") || "").trim();
+        const module = String(cell(row, "Module") || "").trim();
+        return SUBCATEGORY_PRESETS[`${level}|${module}`] || [];
+      }
+
+      function isMappedExam(row) {
+        return getSubcategoryPreset(row).length > 0;
+      }
+
+      function normalizeSubcategories(rawSubcategories, expectedNames) {
+        const source = Array.isArray(rawSubcategories) ? rawSubcategories : [];
+        if (!expectedNames.length) return [];
+
+        const byName = new Map();
+        source.forEach((item) => {
+          const name = String(item?.name || "").trim();
+          if (!name) return;
+          byName.set(name, {
+            name,
+            range: String(item?.range || "").trim(),
+          });
+        });
+
+        return expectedNames.map((name, index) => ({
+          id: index + 1,
+          name,
+          range: byName.get(name)?.range || "",
+        }));
+      }
+
+      function sanitizeSubcategoriesForSave(items) {
+        return (Array.isArray(items) ? items : [])
+          .map((item) => ({
+            name: String(item?.name || "").trim(),
+            range: String(item?.range || "").trim(),
+          }))
+          .filter((item) => item.name);
+      }
+
+      function validateSubcategoryRanges(items) {
+        for (const item of items) {
+          const range = String(item?.range || "").trim();
+          if (!range) continue;
+          const match = /^(\d+)\s*-\s*(\d+)$/.exec(range);
+          if (!match) {
+            return `Invalid range for ${item.name}: use format 1-20`;
+          }
+          if (parseInt(match[1], 10) > parseInt(match[2], 10)) {
+            return `Invalid range for ${item.name}: start must be <= end`;
+          }
+        }
+        return "";
+      }
+
+      function initSubcategories() {
+        const tags = parseTags(activeRow);
+        const expectedNames = getSubcategoryPreset(activeRow);
+        let parsed = [];
+        try {
+          const raw = tags.subcategories;
+          parsed = Array.isArray(raw) ? raw
+            : (raw && raw.trim() !== "[]") ? JSON.parse(raw) : [];
+        } catch (e) {
+          console.warn("Failed to parse subcategories:", e);
+          parsed = [];
+        }
+        subcategories = normalizeSubcategories(parsed, expectedNames);
+        renderSubcategories();
+        checkSubcategoryVisibility();
+      }
+
+      function updateSubcategory(id, field, value) {
+        const subcat = subcategories.find(sc => sc.id === id);
+        if (subcat) {
+          subcat[field] = value;
+          refreshPromptText();
+        }
+      }
+
+      function renderSubcategories() {
+        const container = document.getElementById("subcategoryList");
+        if (!container) return;
+        if (!subcategories.length) {
+          container.innerHTML = "";
+          return;
+        }
+        container.innerHTML = subcategories.map(sc => `
+          <div class="subcategory-row" style="display:grid;grid-template-columns:minmax(180px,260px) minmax(180px,1fr);gap:10px;align-items:center;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);">
+            <div style="font-size:13px;font-weight:700;color:var(--text);">${sc.name.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+            <input type="text"
+                   placeholder="Question range (e.g. 1-20)"
+                   value="${sc.range.replace(/"/g, '&quot;')}"
+                   oninput="updateSubcategory(${sc.id}, 'range', this.value)"
+                   style="padding:8px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;">
+          </div>
+        `).join('');
+      }
+
+      function checkSubcategoryVisibility() {
+        const section = document.getElementById("subcategorySection");
+        const help = document.getElementById("subcategoryHelp");
+        if (!section) return;
+        const shouldShow = isMappedExam(activeRow);
+        section.style.display = shouldShow ? "block" : "none";
+        if (help) {
+          const module = String(cell(activeRow, "Module") || "").trim();
+          help.textContent = shouldShow
+            ? `Enter the exact QCM range for each part of ${module}, for example: 1-20, 21-40.`
+            : "";
+        }
+        if (!shouldShow) return;
+        renderSubcategories();
+      }
+      // ─────────────────────────────────────────────────────────────────────────
 
       // Prompt generation
       function refreshPromptText() {
@@ -1240,6 +1619,14 @@
         const examDateVal = document.getElementById("tags_examDate")?.value || "";
         const langVal    = document.getElementById("tags_lang")?.value || "Francais";
         const annotations = parseAnnotations(document.getElementById("tags_annotations")?.value || "");
+        const subcategoriesToSave = sanitizeSubcategoriesForSave(subcategories);
+        const subcategoryError = validateSubcategoryRanges(subcategoriesToSave);
+
+        if (subcategoryError) {
+          notify(subcategoryError, "error");
+          btn.textContent = "Save"; btn.disabled = false;
+          return;
+        }
 
         if (examDateVal) setCell(activeRow, "ExamDate", examDateVal);
 
@@ -1251,33 +1638,44 @@
           hasCT:   hasCTVal,
           hasCas:  hasCasVal,
           hasComb: hasCombVal,
+          subcategories: subcategoriesToSave,
         });
         delete mergedTags.missingQsts;
         setCell(activeRow, "Tags", JSON.stringify(mergedTags));
 
-        // Upload PDF if a new file was selected
-        if (pendingFile) {
+        const uploadPdfKind = async (file, columnName, kind) => {
           btn.textContent = "Uploading PDF...";
+          const existingUrl = cell(activeRow, columnName);
+          const versionSuffix = existingUrl ? "_V1" : "";
           const ctSuffix = hasCTVal ? "_CT" : "";
           const _pr = (cell(activeRow, "Period") + cell(activeRow, "Rotation")).replace(/\s+/g, "");
           const baseName = [cell(activeRow, "Wilaya"), cell(activeRow, "Year"), _pr || null, cell(activeRow, "Module")]
             .filter(Boolean).join("_").replace(/\s+/g, "_");
-          const fname = `${baseName}${ctSuffix}_${nQstVal}Q_${annotations.missingPos.length}miss_V1.pdf`;
+          const fname = kind === "affichage"
+            ? `${baseName}${ctSuffix}_Affichage${versionSuffix}.pdf`
+            : `${baseName}${ctSuffix}_${nQstVal}Q_${annotations.missingPos.length}miss${versionSuffix}.pdf`;
+          const fd = new FormData();
+          fd.append("file", file, fname);
+          fd.append("filename", fname);
+          const r = await fetch(`${API}/api/upload`, { method: "POST", body: fd });
+          const d = await r.json();
+          if (d.error) throw new Error(d.error);
+          setCell(activeRow, columnName, d.url);
+        };
 
-          try {
-            const fd = new FormData();
-            fd.append("file", pendingFile, fname);
-            fd.append("filename", fname);
-            const r = await fetch(`${API}/api/upload`, { method: "POST", body: fd });
-            const d = await r.json();
-            if (d.error) throw new Error(d.error);
-            setCell(activeRow, "OrigPDF", d.url);
-            pendingFile = null;
-          } catch (e) {
-            notify("PDF upload failed: " + e.message, "error");
-            btn.textContent = "Save"; btn.disabled = false;
-            return;
+        try {
+          if (pendingOrigPdfFile) {
+            await uploadPdfKind(pendingOrigPdfFile, "OrigPDF", "orig");
+            pendingOrigPdfFile = null;
           }
+          if (pendingAffichagePdfFile) {
+            await uploadPdfKind(pendingAffichagePdfFile, "AffichagePDF", "affichage");
+            pendingAffichagePdfFile = null;
+          }
+        } catch (e) {
+          notify("PDF upload failed: " + e.message, "error");
+          btn.textContent = "Save"; btn.disabled = false;
+          return;
         }
 
         try {
@@ -1291,7 +1689,7 @@
         btn.textContent = "Save"; btn.disabled = false;
       }
 
-      // Step 3 save (TSV -> CSV -> Drive)
+      // Step 3 save (TSV -> TSV -> Drive)
       async function saveStep4() {
         if (!activeRow) return;
         const btn = document.getElementById("saveStep4Btn");
@@ -1324,15 +1722,16 @@
       }
 
       // PDF file handlers
-      function handlePdfSelect(input) { if (input.files[0]) setPdfFile(input.files[0]); }
-      function handlePdfDrop(e) {
+      function handlePdfSelect(input, kind = "orig") { if (input.files[0]) setPdfFile(input.files[0], kind); }
+      function handlePdfDrop(e, kind = "orig") {
         e.preventDefault();
-        document.getElementById("uploadZone").classList.remove("dragover");
-        if (e.dataTransfer.files[0]) setPdfFile(e.dataTransfer.files[0]);
+        document.getElementById(`uploadZone_${kind}`)?.classList.remove("dragover");
+        if (e.dataTransfer.files[0]) setPdfFile(e.dataTransfer.files[0], kind);
       }
-      function setPdfFile(f) {
-        pendingFile = f;
-        const el = document.getElementById("pdfFileName");
+      function setPdfFile(f, kind = "orig") {
+        if (kind === "affichage") pendingAffichagePdfFile = f;
+        else pendingOrigPdfFile = f;
+        const el = document.getElementById(`pdfFileName_${kind}`);
         if (el) { el.textContent = f.name + " (" + Math.round(f.size / 1024) + " KB)"; el.style.display = "block"; }
       }
 
@@ -1373,11 +1772,18 @@
       }
 
       function buildStep3(examId, state, csvUrl) {
+        const openSheetsUrl = driveOpenInSheetsUrl(csvUrl);
         const downloadHtml = csvUrl
-          ? `<a class="download-link" href="${driveDirectDownloadUrl(csvUrl)}" download>
-               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-               Download existing CSV
-             </a>`
+          ? `<div style="display:flex;gap:8px;flex-wrap:wrap;">
+               <a class="download-link" href="${driveDirectDownloadUrl(csvUrl)}" download>
+                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                 Download existing Excel
+               </a>
+               ${openSheetsUrl ? `<a class="download-link" href="${openSheetsUrl}" target="_blank" rel="noopener noreferrer">
+                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3h7v7"/><path d="M10 14L21 3"/><path d="M21 14v7h-7"/><path d="M3 10V3h7"/><path d="M3 21l7-7"/></svg>
+                 Open in Google Sheets
+               </a>` : ``}
+             </div>`
           : "";
 
         const body = `
@@ -1394,7 +1800,7 @@
             <div id="incertainStatusBanner" class="validation-status-banner" style="display:none;margin-top:4px;"></div>
             <div class="field-hint">Paste one combined final block only. The app ignores the summary and extracts the TSV automatically.</div>
           </div>`;
-        const footer = `<button class="btn btn-sm btn-primary" id="saveStep3Btn" onclick="saveStep3()" disabled style="opacity:.5;cursor:not-allowed;">Save &amp; Upload CSV</button>`;
+        const footer = `<button class="btn btn-sm btn-primary" id="saveStep3Btn" onclick="saveStep3()" disabled style="opacity:.5;cursor:not-allowed;">Save &amp; Upload Excel</button>`;
         return stepCardWrap(2, examId, state, "Upload verified QCM data", "Paste one final AI audit block: validation summary + TSV together", body, footer);
       }
 
@@ -1504,28 +1910,27 @@
           missCount > 0 ? `${missCount}miss` : null,
           "V1"
         ].filter(Boolean);
-        const fname = `${fnameParts.join("_")}.csv`;
+        const fname = `${fnameParts.join("_")}.xlsx`;
 
         try {
-          const csvContent = "\uFEFF" + pipeTableToCsv(combined);
-          const csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+          const workbookBlob = tsvLinesToWorkbookBlob(tableLines);
           const fd = new FormData();
-          fd.append("file", csvBlob, fname);
+          fd.append("file", workbookBlob, fname);
           fd.append("filename", fname);
           const r = await fetch(`${API}/api/upload`, { method: "POST", body: fd });
           const d = await r.json();
           if (d.error) throw new Error(d.error);
           setCell(activeRow, "Quiz_Tbl", d.url);
           await writeSheet();
-          notify("CSV uploaded to Drive OK", "success");
+          notify("Excel uploaded to Drive OK", "success");
           const cp = document.getElementById("combinedPasteInput");
           if (cp) cp.value = "";
           updateStep3ButtonState();
           renderExam(activeRow);
         } catch (e) {
-          notify("CSV upload failed: " + e.message, "error");
+          notify("Excel upload failed: " + e.message, "error");
         }
-        btn.textContent = "Save & Upload CSV";
+        btn.textContent = "Save & Upload Excel";
         btn.disabled = false;
       }
 
@@ -1621,6 +2026,7 @@
             member: cell(activeRow, "Membre") || googleUser?.email || "",
             status: cell(activeRow, "Status"),
             pdfUrl: cell(activeRow, "OrigPDF"),
+            affichagePdfUrl: cell(activeRow, "AffichagePDF"),
             csvUrl: cell(activeRow, "Quiz_Tbl"),
             quizLink: cell(activeRow, "Quiz_Link"),
             tags,

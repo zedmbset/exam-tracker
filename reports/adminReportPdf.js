@@ -68,7 +68,9 @@ function drawAdminAccessSection(doc, d, left) {
   y = drawSectionTitle(doc, left, y, "Sources et acces");
   return drawLinksBlock(doc, left, y, 470, "Fichiers relies a cet examen", [
     { label: "PDF original", url: d.pdfUrl },
-    { label: "CSV verifie", url: d.csvUrl },
+    { label: "PDF affichage", url: d.affichagePdfUrl },
+    { label: "Excel verifie", url: d.csvUrl },
+    { label: "Google Sheets", url: d.sheetsUrl },
     { label: "Quiz MBset", url: d.quizLink },
   ]);
 }

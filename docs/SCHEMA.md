@@ -1,142 +1,178 @@
-# Exam Tracker — Database Schema
+﻿# Exam Tracker - Database Schema
 
-This file is the authoritative technical reference for the Google Sheet database used by the Exam Tracker app. Use it when writing code, designing features, or prompting AI models.
+This file is the authoritative technical reference for the Google Sheet database used by the Exam Tracker app.
 
-Each exam is one row in the `Exams_Tracking` tab. There are 15 columns (A–O), grouped into 5 tagged categories.
+Each exam is one row in the `Exams_Tracking` tab. The current app expects 19 columns (A-S).
 
----
+## Main Runtime Columns
 
-## Column Groups
+| Col | Index | Name | Purpose |
+|-----|-------|------|---------|
+| A | 0 | ID_Exams | Unique exam row identifier used in `?id=` links |
+| B | 1 | Wilaya | Faculty / wilaya |
+| C | 2 | Year | Exam year |
+| D | 3 | Level | Student level |
+| E | 4 | Rotation | Rotation code |
+| F | 5 | Period | Period code |
+| G | 6 | Module | Module name |
+| H | 7 | Start | Work start date |
+| I | 8 | End | Work end date |
+| J | 9 | ExamDate | Real exam date |
+| K | 10 | Status | Workflow status |
+| L | 11 | OrigPDF | Original exam PDF Drive URL |
+| M | 12 | AffichagePDF | Affichage PDF Drive URL |
+| N | 13 | Quiz_Tbl | Final Excel table Drive URL |
+| O | 14 | Membre | Assigned member email |
+| P | 15 | Tags | JSON metadata |
+| Q | 16 | Quiz_Link | MBset quiz URL |
+| R | 17 | Admin_Report | Generated Admin PDF URL |
+| S | 18 | Public_Report | Generated Public PDF URL |
 
-| Group | Tag | Purpose |
-|-------|-----|---------|
-| Exam Identity | `[identity]` | Fixed metadata that identifies the exam — set by admin, never edited by members |
-| System / Admin | `[system]` | Operational fields managed by admins or automation |
-| Member Task | `[member-task]` | Fields filled in by the assigned member during digitization |
-| Files & Links | `[links]` | URLs pointing to files on Google Drive or external tools |
-| Import | `[import]` | MBset import tracking |
+## Tags JSON Shape
 
----
-
-## Full Column Reference
-
-### [identity] — Exam Identity
-
-Fields that uniquely describe which exam this row refers to. Set by admin during row creation. Members should not edit these.
-
-| Col | Index | Tag | Name | Type | Valid values / format | Who fills | Description |
-|-----|-------|-----|------|------|-----------------------|-----------|-------------|
-| B | 1 | `[identity]` | Wilaya | text | `Const`, `STF`, `Msila` | System / admin | The team (city/wilaya) responsible for digitizing this exam |
-| C | 2 | `[identity]` | Year | text | `2024`, `2025` | System / admin | Academic year the exam was administered |
-| D | 3 | `[identity]` | Level | text | `1ère année`, `2ème`, `Résidanat` | System / admin | Medical school year or programme level |
-| E | 4 | `[identity]` | Rotation | text | `R1`, `R2`, `S2`, `Rtrpg`, `—` | System / admin | Academic rotation or semester within the year |
-| F | 5 | `[identity]` | Period | text | free text | System / admin | Academic period within the rotation |
-| G | 6 | `[identity]` | Module | text | `Cardio`, `Pneumo`, `Gastro` | System / admin | Medical module / subject name |
-| J | 9 | `[identity]` | ExamDate | date | `YYYY-MM-DD` | Member | Date the exam was originally administered to students |
-
----
-
-### [system] — System / Admin
-
-Operational fields managed by admins, supervisors, or automation. Not expected to be edited by regular members.
-
-| Col | Index | Tag | Name | Type | Valid values / format | Who fills | Description |
-|-----|-------|-----|------|------|-----------------------|-----------|-------------|
-| A | 0 | `[system]` | ID_Exams | text | Unique ID string | System / admin | Unique row identifier. Used as the `?id=` URL parameter on the exam detail page |
-| H | 7 | `[system]` | Start | date | `YYYY-MM-DD` | System / admin | Date the digitization work was assigned or started |
-| I | 8 | `[system]` | End | date | `YYYY-MM-DD` | System / admin | Deadline or completion date for this exam |
-| K | 10 | `[system]` | Status | select | `✅ Completed`, `In Progress`, `Pending`, `Not Started` | Member | Overall processing status of the exam |
-
----
-
-### [member-task] — Member Task
-
-Fields the assigned member fills in during the digitization process. These are the primary editable fields on `exam.html`.
-
-| Col | Index | Tag | Name | Type | Valid values / format | Who fills | Description |
-|-----|-------|-----|------|------|-----------------------|-----------|-------------|
-| N | 13 | `[member-task]` | Membre | email | `name@gmail.com` | Auto (Google sign-in) | Gmail of the member working on this exam. Auto-populated from Google OAuth on sign-in |
-| O | 14 | `[member-task]` | Tags | JSON string | See Tags JSON schema below | Member | Structured metadata JSON. Stores nQst, missingQsts, missingPos, schemaQsts, hasCT |
-
-#### Tags JSON Schema (col N)
+Stored in column `P` (`Tags`).
 
 ```json
 {
   "nQst": 30,
-  "missingQsts": 2,
+  "lang": "Francais",
   "missingPos": [5, 12],
   "schemaQsts": [3, 7, 10],
-  "hasCT": true
+  "hasCT": true,
+  "hasCas": false,
+  "hasComb": false,
+  "subcategories": [
+    {
+      "name": "Anatomie",
+      "range": "1-20"
+    },
+    {
+      "name": "Biochimie",
+      "range": "21-40"
+    }
+  ]
 }
 ```
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `nQst` | integer | Total number of questions in the exam. Used in AI prompt and completeness check. |
-| `missingQsts` | integer | Count of questions with missing content. |
-| `missingPos` | integer[] | Positions of missing questions, e.g. `[5, 12, 23]`. |
-| `schemaQsts` | integer[] | Positions of questions that include a schema or table, e.g. `[3, 7, 10, 11, 12]`. |
-| `hasCT` | boolean | Whether the original PDF includes a Corrigé Type. Embedded in upload filenames. |
+| `nQst` | integer | Total number of questions |
+| `lang` | string | Exam language |
+| `missingPos` | integer[] | Missing or unreadable question numbers |
+| `schemaQsts` | integer[] | Questions containing schema/image/table content |
+| `hasCT` | boolean | Whether original PDF includes a Corrige Type |
+| `hasCas` | boolean | Whether exam contains clinical cases |
+| `hasComb` | boolean | Whether exam contains association/combination questions |
+| `subcategories` | object[] | Array of subcategory mappings (Unit 1-5 or Résidanat only) |
 
----
+### Subcategory Mapping
 
-### [links] — Files & Links
+Subcategories are only used for mapped exams:
+- Unit 1, Unit 2, Unit 3, Unit 4, Unit 5
+- Résidanat
 
-URL fields pointing to files on Google Drive or external tools. Each link is set by the member after completing the corresponding step.
+Each subcategory object contains:
+- `name`: string - Subcategory name (e.g., "Anatomie", "Biochimie")
+- `range`: string - Question range (e.g., "1-20", "21-40")
 
-| Col | Index | Tag | Name | Type | Valid values / format | Who fills | Description |
-|-----|-------|-----|------|------|-----------------------|-----------|-------------|
-| L | 11 | `[links]` | OrigPDF | url | Google Drive `https://drive.google.com/…` | Auto (upload) or Member | Link to the original exam PDF on Drive. Set automatically by the PDF upload zone, or pasted manually. |
-| M | 12 | `[links]` | Quiz_Tbl | url | Google Drive `https://drive.google.com/…` | Auto (upload) or Member | Link to the Excel/CSV QCM table on Drive. Set automatically by the file upload zone, or pasted manually. |
+For normal exams (e.g., Dermatologie), the `subcategories` array is empty or not present.
 
----
+## Final TSV Schema
 
-## Definition of "Complete"
+The final TSV is generated by the prompts from the app context and has a dynamic structure.
 
-A row is considered **complete** when all 4 of the following conditions are met:
+### Canonical Column Order
 
-| Condition | Source | Check |
-|-----------|--------|-------|
-| Status | col J (Status) | non-empty |
-| Drive link | col O (Drive) or col K (OrgnlExam) | non-empty |
-| Quiz link | col P (QuizLink) | non-empty |
-| N° of questions | Tags JSON `nQst` key (col N) | non-zero |
-
-The dashboard `index.html` counts rows matching this definition for the "Completed" stat card. The `getMissing(row)` function in both `index.html` and `exam.html` implements this check using `parseTags(row)` for the Tags-sourced fields.
-
----
-
-## Column Relationships
+The prompts use this canonical order for generating TSV columns:
 
 ```
-OrgnlExam (K) ──→ Original exam PDF on Google Drive
-                   └─ Set by: PDF upload zone in exam.html → /api/upload → Drive API
-
-DBTbl (L) ──────→ Member's Excel QCM table on Google Drive
-                   └─ Set by: Excel upload zone in exam.html → /api/upload → Drive API
-
-Drive (O) ──────→ Primary digitized content link on Google Drive
-                   └─ Set by: Member manually, or via upload
-
-QuizLink (P) ───→ MBset quiz URL
-                   └─ Set by: Member after creating the MBset quiz
-
-Mbset (S) ──────→ MBset set ID
-                   └─ Relates to: QuizLink (P) and MBsetStatus (R)
+Cas | Num | Text | A | B | C | D | E | F | G | Correct | Exp | Hint | categoryName | tagSuggere | subcategoryName | Year | Tag
 ```
 
----
+### Column Descriptions
 
-## Referencing Groups in Tasks and Designs
+| Column | Source | Description |
+|---------|----------|-------------|
+| `Cas` | PDF | Clinical case text when applicable |
+| `Num` | Derived | Question number (1, 2, 3...) |
+| `Text` | PDF | Question stem |
+| `A`...`G` | PDF | Propositions (F, G only if used) |
+| `Correct` | PDF/CT | Correct answer (from Corrige Type if present) |
+| `Exp` | Derived | Explanation template based on Correct |
+| `Hint` | PDF | Association/combination helper (only for association questions) |
+| `categoryName` | App context | Always the module name from context |
+| `tagSuggere` | Reserved | Empty column reserved for future use |
+| `subcategoryName` | Derived | Subcategory name for mapped exams only |
+| `Year` | App context | Always the exam year from context |
+| `Tag` | Derived | JSON array of 4 tags |
 
-When writing a task or design brief, reference a group by its tag to mean all columns in that group:
+### Dynamic Column Pruning
 
-| Tag | Columns |
-|-----|---------|
-| `[identity]` | Wilaya (B), Year (C), Level (D), Rotation (E), Module (F), ExamDate (I) |
-| `[system]` | ID_Exams (A), Start (G), End (H), Status (J) |
-| `[member-task]` | Membre (M), Tags/JSON (N) |
-| `[links]` | OrgnlExam (K), DBTbl (L), Drive (O), QuizLink (P) |
+After generating all rows for an exam:
+1. Inspect all rows for that exam
+2. Remove any column whose cells are empty for ALL rows
+3. Preserve canonical order among remaining columns
+4. Pruning is per exam, never per row
 
-**Example usage in a task description:**
-> "Display all `[identity]` fields as read-only badges at the top of the exam page. Only show `[member-task]` fields in the editable form."
+Examples:
+- If no row uses `F`, remove `F`
+- If no row uses `Hint`, remove `Hint`
+- If no row uses `subcategoryName`, remove `subcategoryName`
+- If all `Correct` are empty, `Exp` will also be empty, so both may disappear
+- `tagSuggere` is always empty and will be removed
+
+### Tag Construction
+
+The `Tag` column contains a JSON array with exactly 4 elements in this order:
+
+1. Exam type and wilaya: `"Externat <Wilaya>"` or `"Résidanat <Wilaya>"`
+2. Period/year or subcategory/year:
+   - For Externat: `"<Period> <Year>"` (e.g., "P1 2026")
+   - For Résidanat: `"<subcategoryName> <Year>"` (e.g., "Biologie 2023")
+3. Question number: `"No. <Num>"` (e.g., "No. 2")
+4. Correction type: `"Corrigé type"` (if CT exists) or `"Corrigé proposé"` (if no CT)
+
+Example for Externat:
+```json
+["Externat Alger", "P1 2026", "No. 2", "Corrigé type"]
+```
+
+Example for Résidanat:
+```json
+["Résidanat Alger", "Biologie 2023", "No. 5", "Corrigé proposé"]
+```
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `nQst` | integer | Total number of questions |
+| `lang` | string | Exam language |
+| `missingPos` | integer[] | Missing or unreadable question numbers |
+| `schemaQsts` | integer[] | Questions containing schema/image/table content |
+| `hasCT` | boolean | Whether the original PDF includes a Corrige Type |
+| `hasCas` | boolean | Whether the exam contains clinical cases |
+| `hasComb` | boolean | Whether the exam contains association/combination questions |
+
+## Completion Rules
+
+A row is treated as complete in the main workflow when these required items exist:
+- `Status`
+- `OrigPDF`
+- `Quiz_Tbl`
+- `Tags.nQst`
+
+`AffichagePDF` is optional and does not block completion.
+
+## Link Ownership
+
+- `OrigPDF`: original exam PDF uploaded in Step 1
+- `AffichagePDF`: optional affichage PDF uploaded in Step 1
+- `Quiz_Tbl`: final verified Excel file uploaded in Step 3
+- `Quiz_Link`: MBset quiz link pasted in Step 4
+- `Admin_Report`: generated admin report PDF
+- `Public_Report`: generated public report PDF
+
+## Notes For Implementers
+
+- If you add a new file/link field, update both `public/exam.html` and this schema file.
+- Report payloads are shaped in `public/exam.html` and normalized in `reports/reportPdfShared.js`.
+- `AffichagePDF` should be treated as an optional document link, not as a required completion field.

@@ -140,6 +140,7 @@ Rule:
   membre: string,
   status: string,
   pdfUrl: string,
+  affichagePdfUrl: string,
   csvUrl: string,
   quizLink: string,
   lang: string,
@@ -148,10 +149,101 @@ Rule:
   hasCas: boolean,
   hasComb: boolean,
   missingPos: string[],
-  schemaQsts: string[]
+  schemaQsts: string[],
+  subcategoryMapEnabled: boolean,
+  subcategories: object[]  // for Unit/Residanat exams
 }
 ```
 
+### Subcategories Structure
+
+The `subcategories` array is only used for mapped exams (Unit 1-5 or Residanat).
+
+Each subcategory object:
+```js
+{
+  name: string,   // Subcategory name (e.g., "Anatomie", "Biochimie")
+  range: string   // Question range (e.g., "1-20", "21-40")
+}
+```
+
+Example for Unit 2:
+```js
+{
+  subcategories: [
+    { name: "Anatomie", range: "1-20" },
+    { name: "Biochimie", range: "21-40" }
+  ]
+}
+```
+
+For normal exams (e.g., Dermatologie), `subcategoryMapEnabled` is `false` and the `subcategories` array is empty or not present.
+
+### Exam Type Determination
+
+The exam type is determined from the same values used by the live app:
+- If `level === "7"` or `module === "Residanat"`: Exam type = `Residanat`
+- Otherwise: Exam type = `Externat`
+
+This affects:
+- Tag construction (see TSV schema below)
+- Whether subcategory UI is shown in Step 1
+
+## TSV Column Derivation
+
+The final TSV columns are derived from app context and PDF content:
+
+| Column | Source | How It's Derived |
+|---------|--------|-------------------|
+| `Cas` | PDF | Copied from clinical case text in PDF |
+| `Num` | PDF | Question number extracted from PDF |
+| `Text` | PDF | Question stem extracted from PDF |
+| `A`...`G` | PDF | Propositions extracted from PDF |
+| `Correct` | PDF/CT | From Corrige Type if present, otherwise empty |
+| `Exp` | Derived | Template based on `Correct` value |
+| `Hint` | PDF | Association helper from PDF if applicable |
+| `categoryName` | App context | Always `module` value |
+| `tagSuggere` | Reserved | Always empty (reserved for future use) |
+| `subcategoryName` | Derived | From `subcategories` mapping based on `Num` |
+| `Year` | App context | Always `year` value |
+| `Tag` | Derived | JSON array built from context and row values |
+
+### Tag Construction Rules
+
+The `Tag` column is a JSON array with exactly 4 elements:
+
+**For Externat exams:**
+```json
+["Externat <Wilaya>", "<Period> <Year>", "No. <Num>", "Corrige type/propose"]
+```
+
+**For Residanat exams:**
+```json
+["Residanat <Wilaya>", "<subcategoryName> <Year>", "No. <Num>", "Corrige type/propose"]
+```
+
+Where:
+- `<Wilaya>` comes from `wilaya` field
+- `<Period>` comes from `period` field
+- `<Year>` comes from `year` field
+- `<Num>` comes from the question number
+- `<subcategoryName>` comes from `subcategories` mapping (for Residanat only)
+- Last element is `"Corrige type"` if `hasCT` is true, otherwise `"Corrige propose"`
+
+### Column Pruning Rules
+
+After generating all rows for an exam:
+1. Inspect all rows for that exam
+2. Remove any column whose cells are empty for ALL rows
+3. Preserve canonical order among remaining columns
+4. Pruning is per exam, never per row
+
+Commonly pruned columns:
+- `tagSuggere` (always empty)
+- `F`, `G` (if no association questions)
+- `Hint` (if no association questions)
+- `subcategoryName` (if not a mapped exam)
+- `Exp` (if all `Correct` values are empty)
 ## Field Meanings
 
 - `module`: exam module name. Example: `Dermatologie`
@@ -164,6 +256,7 @@ Rule:
 - `membre`: member/admin responsible for the row
 - `status`: workflow status in the sheet
 - `pdfUrl`: Google Drive URL of the original exam PDF
+- `affichagePdfUrl`: Google Drive URL of the affichage PDF when uploaded
 - `csvUrl`: Google Drive URL of the final CSV
 - `quizLink`: MBset quiz URL when available
 - `lang`: exam language, usually `Francais`
@@ -208,6 +301,7 @@ Example current exam context:
   membre: "zeddrivepro@gmail.com",
   status: "Completed",
   pdfUrl: "https://drive.google.com/...",
+  affichagePdfUrl: "https://drive.google.com/...",
   csvUrl: "https://drive.google.com/...",
   quizLink: "https://app.mbset.com/quiz/start/...",
   lang: "Francais",
@@ -289,3 +383,4 @@ Keep these names stable unless you also update all callers:
 5. Generate Public PDF and open the Drive URL.
 6. Check accented text, layout alignment, and links.
 7. Check that no file path or function name was broken.
+

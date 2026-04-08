@@ -48,6 +48,17 @@ function buildBaseReportFilename(data) {
   ].filter(Boolean).join("_");
 }
 
+function extractDriveFileId(url) {
+  if (!url) return "";
+  const match = String(url).match(/\/d\/([^\/?#]+)/) || String(url).match(/[?&]id=([^&]+)/);
+  return match ? match[1] : "";
+}
+
+function buildGoogleSheetsUrl(url) {
+  const fileId = extractDriveFileId(url);
+  return fileId ? `https://docs.google.com/spreadsheets/d/${fileId}/edit` : "";
+}
+
 function statusLabel(ok, naLabel = "Non applicable") {
   if (ok === null) return naLabel;
   return ok ? "Compatible" : "Probleme";
@@ -291,7 +302,9 @@ function buildReportContext(input) {
     member: safeString(input.member),
     status: safeString(input.status),
     pdfUrl: input.pdfUrl || "",
+    affichagePdfUrl: input.affichagePdfUrl || "",
     csvUrl: input.csvUrl || "",
+    sheetsUrl: buildGoogleSheetsUrl(input.csvUrl || ""),
     quizLink: input.quizLink || "",
     totalQuestions,
     availableQuestions,
@@ -313,6 +326,8 @@ module.exports = {
   normalizeFilePart,
   buildRef,
   buildBaseReportFilename,
+  extractDriveFileId,
+  buildGoogleSheetsUrl,
   statusLabel,
   drawBadge,
   drawSectionTitle,

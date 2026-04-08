@@ -97,6 +97,7 @@ Both report builders receive a normalized exam payload containing values like:
 - `examDate`
 - `status`
 - `pdfUrl`
+- `affichagePdfUrl`
 - `csvUrl`
 - `quizLink`
 - `tags.hasCT`
@@ -113,6 +114,13 @@ If you add a new report field:
 1. update `buildReportPayload()` in `public/exam.html`
 2. update `buildReportContext()` in `reports/reportPdfShared.js`
 3. update the relevant PDF file
+
+Current Admin-only document links include:
+- original PDF
+- affichage PDF
+- Excel source
+- Google Sheets link
+- MBset quiz link when available
 
 ## Quick Test Checklist
 
