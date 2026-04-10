@@ -122,7 +122,6 @@
         display: flex; align-items: flex-start; gap: 12px;
         box-shadow: 0 2px 8px rgba(154,90,8,0.08);
       }
-          <div class="missing-alert-icon">Warning</div>
       .missing-alert-text { font-size: 13px; color: var(--amber-text); }
       .missing-alert-text strong { font-weight: 600; }
       .missing-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
@@ -652,11 +651,27 @@
       }
 
       // Helpers
+      function normalizeHeaderName(value) {
+        return String(value || "").toLowerCase().replace(/[\s_]/g, "");
+      }
+
       function colIdx(name) {
-        const i = headers.indexOf(name);
-        if (i >= 0) return i;
-        for (const [k, v] of Object.entries(COLS)) { if (headers[v] && k === name) return v; }
-        return headers.findIndex(h => h && h.toLowerCase().replace(/[\s_]/g, "") === name.toLowerCase().replace(/[\s_]/g, ""));
+        const exact = headers.indexOf(name);
+        if (exact >= 0) return exact;
+
+        const normalizedName = normalizeHeaderName(name);
+        const normalizedMatch = headers.findIndex(h => normalizeHeaderName(h) === normalizedName);
+        if (normalizedMatch >= 0) return normalizedMatch;
+
+        const fallbackIdx = COLS[name];
+        if (typeof fallbackIdx === "number") {
+          const headerAtFallback = headers[fallbackIdx];
+          if (!headerAtFallback || normalizeHeaderName(headerAtFallback) === normalizedName) {
+            return fallbackIdx;
+          }
+        }
+
+        return -1;
       }
       function cell(row, n) { const i = colIdx(n); return i >= 0 ? row.cells[i] || "" : ""; }
       function setCell(row, n, v) { const i = colIdx(n); if (i >= 0) { while (row.cells.length <= i) row.cells.push(""); row.cells[i] = v; } }
@@ -665,7 +680,6 @@
         let tags = {};
         const raw = cell(row, "Tags");
         if (raw) { try { tags = JSON.parse(raw); } catch(e) {} }
-        if (!tags.subcategories) tags.subcategories = [];
         return tags;
       }
       function setTags(row, tags) {
@@ -930,20 +944,115 @@
         ]);
       }
 
+      function jsonToWorkbookBlob(questions) {
+        const COLS_ORDER = ["cas","num","text","a","b","c","d","e","f","g","correct","exp","hint","categoryName","tagSuggere","subcategoryName","year","tag"];
+        const usedKeys = COLS_ORDER.filter(k => questions.some(q => q[k] != null && q[k] !== ""));
+        const header = usedKeys.map(k => /[A-Z]/.test(k) ? k : k.charAt(0).toUpperCase() + k.slice(1));
+        const rows = [header, ...questions.map(q => usedKeys.map(k => String(q[k] ?? "")))];
+
+        const maxCols = rows[0].length;
+        const lastRef = `${columnNumberToName(maxCols)}${rows.length}`;
+        const sheetRows = rows.map((row, rowIndex) => {
+          const cells = row.map((value, colIndex) => {
+            const ref = `${columnNumberToName(colIndex + 1)}${rowIndex + 1}`;
+            return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+          }).join("");
+          return `<row r="${rowIndex + 1}">${cells}</row>`;
+        }).join("");
+
+        const sheetXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+          `<dimension ref="A1:${lastRef}"/>` +
+          `<sheetViews><sheetView workbookViewId="0"/></sheetViews>` +
+          `<sheetFormatPr defaultRowHeight="15"/>` +
+          `<sheetData>${sheetRows}</sheetData>` +
+          `</worksheet>`;
+
+        const workbookXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+          `<sheets><sheet name="QCM" sheetId="1" r:id="rId1"/></sheets>` +
+          `</workbook>`;
+
+        const workbookRelsXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+          `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>` +
+          `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+          `</Relationships>`;
+
+        const relsXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+          `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
+          `</Relationships>`;
+
+        const stylesXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+          `<fonts count="1"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts>` +
+          `<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>` +
+          `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
+          `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
+          `<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>` +
+          `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
+          `</styleSheet>`;
+
+        const contentTypesXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+          `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+          `<Default Extension="xml" ContentType="application/xml"/>` +
+          `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+          `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+          `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+          `</Types>`;
+
+        return createStoredZip([
+          { name: "[Content_Types].xml", content: contentTypesXml },
+          { name: "_rels/.rels", content: relsXml },
+          { name: "xl/workbook.xml", content: workbookXml },
+          { name: "xl/_rels/workbook.xml.rels", content: workbookRelsXml },
+          { name: "xl/worksheets/sheet1.xml", content: sheetXml },
+          { name: "xl/styles.xml", content: stylesXml },
+        ]);
+      }
+
+      // Extract JSON array from AI output (looks for ```json ... ``` block)
+      function extractVerifiedJson(text) {
+        const match = text.match(/```json\s*([\s\S]*?)```/i);
+        if (!match) return null;
+        try {
+          const parsed = JSON.parse(match[1].trim());
+          if (Array.isArray(parsed)) return parsed;
+        } catch (e) {}
+        return null;
+      }
+
+      // FIX 2: Added missing function declaration for isTableSepRow
       function isTableSepRow(line) {
         return /^[\|\s\-:]+$/.test(line.trim());
+      }
+
+      function isTsvHeaderRow(t) {
+        const cols = t.split("\t").map(c => c.trim().toLowerCase());
+        const hasNum  = cols.includes("num");
+        const hasText = cols.includes("text");
+        const hasTag  = cols.includes("tag");
+        return (hasNum || hasText) && hasTag;
       }
       function extractPipeRows(text, { skipHeader = false } = {}) {
         return text.split("\n").filter(l => {
           const t = l.trim();
           if (!t) return false;
           if (t.includes("\t")) {
-            if (skipHeader && t.toLowerCase().startsWith("tag\t")) return false;
+            if (skipHeader && isTsvHeaderRow(t)) return false;
             return true;
           }
           if (!t.includes("|")) return false;
           if (isTableSepRow(t)) return false;
-          if (skipHeader && /\bTag\b/.test(t) && /\bCas\b/.test(t)) return false;
+          if (skipHeader && /\bTag\b/.test(t) && /\bNum\b/.test(t)) return false;
           return true;
         });
       }
@@ -1042,12 +1151,10 @@
         const period   = cell(row, "Period");
         const wilaya   = cell(row, "Wilaya");
 
-        // Title: "Module PeriodRotation" e.g. "Dermatologie P1R3"
         const pr = (period + rotation).replace(/\s+/g, "");
         document.getElementById("topbarTitle").textContent = [module, pr].filter(Boolean).join(" ") || "Exam details";
         document.getElementById("topbarTitle").style.color = "";
 
-        // Tags: Level آ· Wilaya آ· Year (solid colored)
         const tagsHtml = [
           level  ? `<span class="badge badge-solid-blue"   style="font-size:11px;">${level}</span>`   : "",
           wilaya ? `<span class="badge badge-solid-violet" style="font-size:11px;">${wilaya}</span>`  : "",
@@ -1111,7 +1218,6 @@
         const quizLink = cell(row, "Quiz_Link");
         const examDateVal = toDateInputValue(cell(row, "ExamDate") || cell(row, "Exam Date"));
 
-        // Build all steps
         const steps = [
           buildStep1(row, examId, state, pdfUrl, affichagePdfUrl, tags, examDateVal),
           buildStep2(examId, state),
@@ -1121,9 +1227,6 @@
 
         document.getElementById("stepsContainer").innerHTML = steps.join("");
 
-        initSubcategories();
-
-        // Re-init prompt after render (reads live values)
         refreshPromptText();
       }
 
@@ -1251,14 +1354,6 @@
                   <span style="font-size:13px;color:var(--text);">${tags.hasComb ? "Yes - has association / combination questions" : "No association questions"}</span>
                 </label>
               </div>
-              <!-- Subcategories for Unit/Résidanat exams -->
-              <div id="subcategorySection" class="form-row full" style="display:none;margin-top:16px;">
-                <label style="font-weight:700;color:var(--text3);">Parts of the exam (Unit / Résidanat only)</label>
-                <div class="field-hint" id="subcategoryHelp" style="margin-bottom:10px;">
-                  Enter the exact QCM range for each part, for example: 1-20, 21-40.
-                </div>
-                <div id="subcategoryList" style="display:flex;flex-direction:column;gap:8px;"></div>
-              </div>
             </div>
           </div>`;
 
@@ -1268,69 +1363,120 @@
       }
 
       function buildStep2(examId, state) {
+        const svgCopy = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
         const body = `
-          <!-- Phase 1 : Digitize -->
+          <!-- Phase 1 : Digitize prompt -->
           <div class="dc-phase">
             <div class="dc-phase-header">
               <span class="dc-phase-badge" style="background:linear-gradient(135deg,var(--accent),var(--accent2));">1</span>
               <div>
-                <div class="dc-phase-title">Digitize - copy this prompt into an AI with the PDF</div>
-                <div class="dc-phase-sub">Use ChatGPT or Claude. Attach the original exam PDF.</div>
+                <div class="dc-phase-title">Digitize — copy this prompt into TWO AIs simultaneously</div>
+                <div class="dc-phase-sub">Send the same prompt + PDF to two independent AI models (e.g. Claude and GPT-4o). Each will produce its own JSON.</div>
               </div>
               <button class="copy-btn" id="copyPromptBtn" onclick="copyPrompt()" style="margin-left:auto;flex-shrink:0;">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                Copy prompt
+                ${svgCopy} Copy prompt
               </button>
             </div>
             <div class="prompt-text" id="promptText" style="margin-top:10px;"></div>
           </div>
 
-          <div class="dc-divider">
-            <span>The AI gives you a table - paste it below</span>
-          </div>
+          <div class="dc-divider"><span>Each AI gives you a JSON — paste both below</span></div>
 
-          <!-- Phase 2 : Paste & verify -->
+          <!-- Phase 2a : JSON 1 -->
           <div class="dc-phase">
             <div class="dc-phase-header">
-              <span class="dc-phase-badge" style="background:linear-gradient(135deg,#f59e0b,#d97706);">2</span>
+              <span class="dc-phase-badge" style="background:linear-gradient(135deg,#f59e0b,#d97706);">2a</span>
               <div>
-                <div class="dc-phase-title">Paste the AI output (TSV table)</div>
-                <div class="dc-phase-sub">Copy the TSV table the AI produced and paste it here. You can also paste it directly into Google Sheets to verify.</div>
+                <div class="dc-phase-title">JSON from Model 1</div>
+                <div class="dc-phase-sub">Paste the full JSON output from the first AI (object with "questions" and "audit" keys).</div>
               </div>
             </div>
-            <textarea class="tsv-textarea dc-tsv" id="dcTsvInput" style="margin-top:10px;min-height:120px;"
-              placeholder="Paste the full TSV / Markdown table output from the AI here..."
-              oninput="dcUpdateCount()"></textarea>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;gap:12px;">
-              <span id="dcRowCount" style="font-size:11px;color:var(--text3);"></span>
+            <textarea class="tsv-textarea dc-tsv" id="dcJson1Input" style="margin-top:10px;min-height:110px;"
+              placeholder="Paste JSON from Model 1 here..."
+              oninput="dcUpdateCount1()"></textarea>
+            <span id="dcRowCount1" style="font-size:11px;color:var(--text3);display:block;margin-top:4px;"></span>
+          </div>
+
+          <!-- Phase 2b : JSON 2 -->
+          <div class="dc-phase" style="margin-top:10px;">
+            <div class="dc-phase-header">
+              <span class="dc-phase-badge" style="background:linear-gradient(135deg,#0ea5e9,#0284c7);">2b</span>
+              <div>
+                <div class="dc-phase-title">JSON from Model 2</div>
+                <div class="dc-phase-sub">Paste the full JSON output from the second AI.</div>
+              </div>
+            </div>
+            <textarea class="tsv-textarea dc-tsv" id="dcJson2Input" style="margin-top:10px;min-height:110px;"
+              placeholder="Paste JSON from Model 2 here..."
+              oninput="dcUpdateCount2()"></textarea>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:12px;">
+              <span id="dcRowCount2" style="font-size:11px;color:var(--text3);"></span>
               <button class="btn btn-primary btn-sm" onclick="dcGenerateCheckPrompt()">
-                Generate double-check prompt ->
+                Generate comparison prompt →
               </button>
             </div>
           </div>
 
-          <!-- Phase 3 : Double-check result (hidden until generated) -->
+          <!-- Phase 3 : Comparison prompt (hidden until generated) -->
           <div id="dcPhase3" style="display:none;">
-            <div class="dc-divider">
-              <span>Paste this verification prompt into a second AI (with the PDF)</span>
-            </div>
+            <div class="dc-divider"><span>Paste this comparison prompt into a THIRD neutral AI (no PDF needed)</span></div>
             <div class="dc-phase">
               <div class="dc-phase-header">
                 <span class="dc-phase-badge" style="background:linear-gradient(135deg,#10b981,#059669);">3</span>
                 <div>
-                  <div class="dc-phase-title">Verify - copy this into a SECOND AI model</div>
-                  <div class="dc-phase-sub">Attach the original PDF again. The AI will audit the table and produce a fix report.</div>
+                  <div class="dc-phase-title">Comparison prompt — copy into a third AI model</div>
+                  <div class="dc-phase-sub">No PDF attachment needed. The AI compares both JSONs and produces a divergence report.</div>
                 </div>
                 <button class="copy-btn" id="copyDcBtn" onclick="dcCopyCheckPrompt()" style="margin-left:auto;flex-shrink:0;">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                  Copy verification prompt
+                  ${svgCopy} Copy comparison prompt
                 </button>
               </div>
               <div class="prompt-text" id="dcCheckPromptText" style="margin-top:10px;"></div>
             </div>
+
+            <!-- Phase 4 : Paste review report -->
+            <div class="dc-divider" style="margin-top:14px;">
+              <span>Fill in [Here] placeholders in the report, then paste it below</span>
+            </div>
+            <div class="dc-phase">
+              <div class="dc-phase-header">
+                <span class="dc-phase-badge" style="background:linear-gradient(135deg,#6c47d9,#4f46e5);">4</span>
+                <div>
+                  <div class="dc-phase-title">Paste completed divergence report</div>
+                  <div class="dc-phase-sub">After resolving every [Here] by checking the PDF, paste the completed report here to generate the final JSON prompt.</div>
+                </div>
+              </div>
+              <textarea class="tsv-textarea dc-tsv" id="dcReviewInput" style="margin-top:10px;min-height:100px;"
+                placeholder="Paste the completed divergence report here (all [Here] filled in)..."></textarea>
+              <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+                <button class="btn btn-primary btn-sm" onclick="dcGenerateStep2Prompt()">
+                  Generate final JSON prompt →
+                </button>
+              </div>
+            </div>
+
+            <!-- Phase 5 : Step 2 prompt (hidden until generated) -->
+            <div id="dcPhase5" style="display:none;">
+              <div class="dc-divider" style="margin-top:14px;">
+                <span>Paste this final prompt into the third AI (no PDF needed)</span>
+              </div>
+              <div class="dc-phase">
+                <div class="dc-phase-header">
+                  <span class="dc-phase-badge" style="background:linear-gradient(135deg,#e11d48,#b91c1c);">5</span>
+                  <div>
+                    <div class="dc-phase-title">Final JSON prompt — copy into the same third AI</div>
+                    <div class="dc-phase-sub">The AI applies all approved decisions and outputs the clean final JSON array.</div>
+                  </div>
+                  <button class="copy-btn" id="copyDcStep2Btn" onclick="dcCopyStep2Prompt()" style="margin-left:auto;flex-shrink:0;">
+                    ${svgCopy} Copy final TSV prompt
+                  </button>
+                </div>
+                <div class="prompt-text" id="dcStep2PromptText" style="margin-top:10px;"></div>
+              </div>
+            </div>
           </div>`;
 
-        return stepCardWrap(1, examId, state, "AI Digitization & Double Check", "Digitize with AI, then auto-verify with a second AI pass", body, "");
+        return stepCardWrap(1, examId, state, "AI Digitization & Double Check", "Send to two AIs, compare JSONs with a third, resolve divergences", body, "");
       }
 
       function buildStep4(examId, state, quizLink) {
@@ -1345,12 +1491,10 @@
       }
 
       // Context Extractor
-      // Centralized function to extract clean data for prompt generation
       function getExamContext() {
         if (!activeRow) return {};
         const tags = parseTags(activeRow);
 
-        // Parse subcategories from Tags.subcategories if available
         let subcategories = [];
         try {
           const subcatStr = tags.subcategories || "[]";
@@ -1358,7 +1502,6 @@
             subcategories = JSON.parse(subcatStr);
           }
         } catch (e) {
-          console.warn("Failed to parse subcategories:", e);
           subcategories = [];
         }
 
@@ -1383,143 +1526,10 @@
           hasComb: document.getElementById("tags_hasComb")?.checked || tags.hasComb || false,
           missingPos: document.getElementById("tags_annotations") ? parseAnnotations(document.getElementById("tags_annotations").value || "").missingPos : (tags.missingPos || []),
           schemaQsts: document.getElementById("tags_annotations") ? parseAnnotations(document.getElementById("tags_annotations").value || "").schemaQsts : (tags.schemaQsts || []),
-          subcategoryMapEnabled: isMappedExam(activeRow),
-          subcategories: subcategories
+          subcategories: subcategories,
+          isTwoColumn: document.getElementById("tags_isTwoColumn")?.checked || tags.isTwoColumn || false
         };
       }
-
-      // ── Subcategory management ────────────────────────────────────────────────
-      const SUBCATEGORY_PRESETS = {
-        "2|Unit 1": ["Anatomie", "Biophysique", "Histologie", "Physiologie"],
-        "2|Unit 2": ["Anatomie", "Biochimie", "Histologie", "Physiologie"],
-        "2|Unit 3": ["Anatomie", "Biochimie", "Histologie", "Physiologie"],
-        "2|Unit 4": ["Anatomie", "Biochimie", "Histologie", "Physiologie"],
-        "2|Unit 5": ["Anatomie", "Biophysique", "Histologie", "Physiologie"],
-        "3|Unit 1": ["Biochimie", "Physiopathologie", "Psychologie médicale", "Radiologie", "Sémiologie"],
-        "3|Unit 2": ["Biochimie", "Physiopathologie", "Radiologie", "Sémiologie"],
-        "3|Unit 3": ["Biochimie", "Physiopathologie", "Radiologie", "Sémiologie"],
-        "3|Unit 4": ["Biochimie", "Physiopathologie", "Radiologie", "Sémiologie"],
-        "7|Résidanat": ["Biologie", "Médicale", "Chirurgie"],
-      };
-
-      let subcategories = [];
-
-      function getSubcategoryPreset(row) {
-        if (!row) return [];
-        const level = String(cell(row, "Level") || "").trim();
-        const module = String(cell(row, "Module") || "").trim();
-        return SUBCATEGORY_PRESETS[`${level}|${module}`] || [];
-      }
-
-      function isMappedExam(row) {
-        return getSubcategoryPreset(row).length > 0;
-      }
-
-      function normalizeSubcategories(rawSubcategories, expectedNames) {
-        const source = Array.isArray(rawSubcategories) ? rawSubcategories : [];
-        if (!expectedNames.length) return [];
-
-        const byName = new Map();
-        source.forEach((item) => {
-          const name = String(item?.name || "").trim();
-          if (!name) return;
-          byName.set(name, {
-            name,
-            range: String(item?.range || "").trim(),
-          });
-        });
-
-        return expectedNames.map((name, index) => ({
-          id: index + 1,
-          name,
-          range: byName.get(name)?.range || "",
-        }));
-      }
-
-      function sanitizeSubcategoriesForSave(items) {
-        return (Array.isArray(items) ? items : [])
-          .map((item) => ({
-            name: String(item?.name || "").trim(),
-            range: String(item?.range || "").trim(),
-          }))
-          .filter((item) => item.name);
-      }
-
-      function validateSubcategoryRanges(items) {
-        for (const item of items) {
-          const range = String(item?.range || "").trim();
-          if (!range) continue;
-          const match = /^(\d+)\s*-\s*(\d+)$/.exec(range);
-          if (!match) {
-            return `Invalid range for ${item.name}: use format 1-20`;
-          }
-          if (parseInt(match[1], 10) > parseInt(match[2], 10)) {
-            return `Invalid range for ${item.name}: start must be <= end`;
-          }
-        }
-        return "";
-      }
-
-      function initSubcategories() {
-        const tags = parseTags(activeRow);
-        const expectedNames = getSubcategoryPreset(activeRow);
-        let parsed = [];
-        try {
-          const raw = tags.subcategories;
-          parsed = Array.isArray(raw) ? raw
-            : (raw && raw.trim() !== "[]") ? JSON.parse(raw) : [];
-        } catch (e) {
-          console.warn("Failed to parse subcategories:", e);
-          parsed = [];
-        }
-        subcategories = normalizeSubcategories(parsed, expectedNames);
-        renderSubcategories();
-        checkSubcategoryVisibility();
-      }
-
-      function updateSubcategory(id, field, value) {
-        const subcat = subcategories.find(sc => sc.id === id);
-        if (subcat) {
-          subcat[field] = value;
-          refreshPromptText();
-        }
-      }
-
-      function renderSubcategories() {
-        const container = document.getElementById("subcategoryList");
-        if (!container) return;
-        if (!subcategories.length) {
-          container.innerHTML = "";
-          return;
-        }
-        container.innerHTML = subcategories.map(sc => `
-          <div class="subcategory-row" style="display:grid;grid-template-columns:minmax(180px,260px) minmax(180px,1fr);gap:10px;align-items:center;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);">
-            <div style="font-size:13px;font-weight:700;color:var(--text);">${sc.name.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
-            <input type="text"
-                   placeholder="Question range (e.g. 1-20)"
-                   value="${sc.range.replace(/"/g, '&quot;')}"
-                   oninput="updateSubcategory(${sc.id}, 'range', this.value)"
-                   style="padding:8px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;">
-          </div>
-        `).join('');
-      }
-
-      function checkSubcategoryVisibility() {
-        const section = document.getElementById("subcategorySection");
-        const help = document.getElementById("subcategoryHelp");
-        if (!section) return;
-        const shouldShow = isMappedExam(activeRow);
-        section.style.display = shouldShow ? "block" : "none";
-        if (help) {
-          const module = String(cell(activeRow, "Module") || "").trim();
-          help.textContent = shouldShow
-            ? `Enter the exact QCM range for each part of ${module}, for example: 1-20, 21-40.`
-            : "";
-        }
-        if (!shouldShow) return;
-        renderSubcategories();
-      }
-      // ─────────────────────────────────────────────────────────────────────────
 
       // Prompt generation
       function refreshPromptText() {
@@ -1532,64 +1542,117 @@
         }
       }
 
-      // AI Double-Check helpers
-      function dcUpdateCount() {
-        if (!activeRow) return;
-        const raw = (document.getElementById("dcTsvInput")?.value || "").trim();
-        const el  = document.getElementById("dcRowCount");
-        if (!el) return;
-        if (!raw) { el.innerHTML = ""; return; }
-
-        const dataRows = extractPipeRows(raw, { skipHeader: true });
-        const nQst = parseInt(document.getElementById("tags_nQst")?.value || "") || parseTags(activeRow).nQst || 0;
-        const missing = (parseTags(activeRow).missingPos || []).length;
-        const expected = nQst - missing;
-        const count = dataRows.length;
-
-        let cls = "dc-count-ok", label = `${count} rows`;
-        if (nQst > 0) {
-          if (count === expected)      { cls = "dc-count-ok";    label = `${count} / ${expected} rows OK`; }
-          else if (count < expected)   { cls = "dc-count-error"; label = `${count} / ${expected} rows - ${expected - count} missing`; }
-          else                          { cls = "dc-count-warn";  label = `${count} / ${expected} rows - ${count - expected} extra`; }
-        }
-        el.innerHTML = `<span class="dc-count-badge ${cls}">${label}</span>`;
+      // JSON count helpers
+      function dcParseJsonCount(raw) {
+        if (!raw) return null;
+        try {
+          const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+          const parsed  = JSON.parse(cleaned);
+          if (parsed && Array.isArray(parsed.questions)) return parsed.questions.length;
+        } catch (e) {}
+        return null;
       }
 
+      function dcCountBadge(count, examId) {
+        if (count === null) return "";
+        const tags     = parseTags(activeRow);
+        const nQst     = parseInt(document.getElementById("tags_nQst")?.value || "") || tags.nQst || 0;
+        const missing  = (tags.missingPos || []).length;
+        const expected = nQst - missing;
+        if (!nQst) return `<span class="dc-count-badge dc-count-ok">${count} questions</span>`;
+        if (count === expected) return `<span class="dc-count-badge dc-count-ok">${count} / ${expected} ✓</span>`;
+        if (count < expected)  return `<span class="dc-count-badge dc-count-error">${count} / ${expected} — ${expected - count} missing</span>`;
+        return `<span class="dc-count-badge dc-count-warn">${count} / ${expected} — ${count - expected} extra</span>`;
+      }
+
+      function dcUpdateCount1() {
+        const raw = (document.getElementById("dcJson1Input")?.value || "").trim();
+        const el  = document.getElementById("dcRowCount1");
+        if (el) el.innerHTML = dcCountBadge(dcParseJsonCount(raw));
+      }
+
+      function dcUpdateCount2() {
+        const raw = (document.getElementById("dcJson2Input")?.value || "").trim();
+        const el  = document.getElementById("dcRowCount2");
+        if (el) el.innerHTML = dcCountBadge(dcParseJsonCount(raw));
+      }
+
+      // Generate comparison prompt (Step 1)
       function dcGenerateCheckPrompt() {
-        const tsvData = (document.getElementById("dcTsvInput")?.value || "").trim();
-        if (!tsvData) { notify("Paste the AI output first (Phase 2)", "error"); return; }
+        const json1 = (document.getElementById("dcJson1Input")?.value || "").trim();
+        const json2 = (document.getElementById("dcJson2Input")?.value || "").trim();
+        if (!json1) { notify("Paste JSON from Model 1 first (Phase 2a)", "error"); return; }
+        if (!json2) { notify("Paste JSON from Model 2 first (Phase 2b)", "error"); return; }
 
         const context = getExamContext();
-        const prompt = typeof generateDoubleCheckPromptFromContext === "function"
-          ? generateDoubleCheckPromptFromContext(context, tsvData)
-          : generateDoubleCheckPrompt(tsvData);
-        const el = document.getElementById("dcCheckPromptText");
+        const prompt  = typeof generateDoubleCheckPrompt === "function"
+          ? generateDoubleCheckPrompt(context, json1, json2)
+          : "";
+
+        const el     = document.getElementById("dcCheckPromptText");
         const phase3 = document.getElementById("dcPhase3");
         if (el) el.textContent = prompt;
         if (phase3) {
           phase3.style.display = "block";
           phase3.scrollIntoView({ behavior: "smooth", block: "start" });
         }
-        notify("Double-check prompt ready - copy it (Phase 3)", "success");
+        notify("Comparison prompt ready — copy it (Phase 3)", "success");
       }
 
+      // Generate final TSV prompt (Step 2)
+      function dcGenerateStep2Prompt() {
+        const json1        = (document.getElementById("dcJson1Input")?.value  || "").trim();
+        const json2        = (document.getElementById("dcJson2Input")?.value  || "").trim();
+        const reviewReport = (document.getElementById("dcReviewInput")?.value || "").trim();
+        if (!json1)        { notify("JSON from Model 1 missing — paste it in Phase 2a", "error"); return; }
+        if (!json2)        { notify("JSON from Model 2 missing — paste it in Phase 2b", "error"); return; }
+        if (!reviewReport) { notify("Paste the completed divergence report first (Phase 4)", "error"); return; }
+
+        const context = getExamContext();
+        const prompt  = typeof generateDoubleCheckStep2Prompt === "function"
+          ? generateDoubleCheckStep2Prompt(context, json1, json2, reviewReport)
+          : "";
+
+        const el     = document.getElementById("dcStep2PromptText");
+        const phase5 = document.getElementById("dcPhase5");
+        if (el) el.textContent = prompt;
+        if (phase5) {
+          phase5.style.display = "block";
+          phase5.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        notify("Final TSV prompt ready — copy it (Phase 5)", "success");
+      }
+
+      // Copy helpers
       function dcCopyCheckPrompt() {
         const text = document.getElementById("dcCheckPromptText")?.textContent || "";
-        if (!text) { notify("Generate the prompt first", "error"); return; }
+        if (!text) { notify("Generate the comparison prompt first", "error"); return; }
         navigator.clipboard.writeText(text).then(() => {
           const btn = document.getElementById("copyDcBtn");
-          if (btn) { btn.classList.add("copied"); btn.textContent = "Copie"; }
+          if (btn) { btn.classList.add("copied"); btn.textContent = "Copied"; }
           setTimeout(() => {
             if (btn) {
               btn.classList.remove("copied");
-              btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy verification prompt`;
+              btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy comparison prompt`;
             }
           }, 2500);
         }).catch(() => notify("Copy failed - select text manually.", "error"));
       }
-      
-      // Note: For the double check prompt, you would do the same:
-      // window.generateDoubleCheckPrompt(context)
+
+      function dcCopyStep2Prompt() {
+        const text = document.getElementById("dcStep2PromptText")?.textContent || "";
+        if (!text) { notify("Generate the final JSON prompt first", "error"); return; }
+        navigator.clipboard.writeText(text).then(() => {
+          const btn = document.getElementById("copyDcStep2Btn");
+          if (btn) { btn.classList.add("copied"); btn.textContent = "Copied"; }
+          setTimeout(() => {
+            if (btn) {
+              btn.classList.remove("copied");
+              btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy final JSON prompt`;
+            }
+          }, 2500);
+        }).catch(() => notify("Copy failed — select the text manually.", "error"));
+      }
 
       function copyPrompt() {
         const context = getExamContext();
@@ -1611,7 +1674,6 @@
 
         if (googleUser?.email) setCell(activeRow, "Membre", googleUser.email);
 
-        // Collect all metadata
         const hasCTVal   = document.getElementById("tags_hasCT")?.checked   || false;
         const hasCasVal  = document.getElementById("tags_hasCas")?.checked  || false;
         const hasCombVal = document.getElementById("tags_hasComb")?.checked || false;
@@ -1619,14 +1681,6 @@
         const examDateVal = document.getElementById("tags_examDate")?.value || "";
         const langVal    = document.getElementById("tags_lang")?.value || "Francais";
         const annotations = parseAnnotations(document.getElementById("tags_annotations")?.value || "");
-        const subcategoriesToSave = sanitizeSubcategoriesForSave(subcategories);
-        const subcategoryError = validateSubcategoryRanges(subcategoriesToSave);
-
-        if (subcategoryError) {
-          notify(subcategoryError, "error");
-          btn.textContent = "Save"; btn.disabled = false;
-          return;
-        }
 
         if (examDateVal) setCell(activeRow, "ExamDate", examDateVal);
 
@@ -1638,7 +1692,6 @@
           hasCT:   hasCTVal,
           hasCas:  hasCasVal,
           hasComb: hasCombVal,
-          subcategories: subcategoriesToSave,
         });
         delete mergedTags.missingQsts;
         setCell(activeRow, "Tags", JSON.stringify(mergedTags));
@@ -1689,11 +1742,17 @@
         btn.textContent = "Save"; btn.disabled = false;
       }
 
-      // Step 3 save (TSV -> TSV -> Drive)
+      // Step 4 save
       async function saveStep4() {
         if (!activeRow) return;
         const btn = document.getElementById("saveStep4Btn");
         btn.textContent = "Saving..."; btn.disabled = true;
+
+        if (colIdx("Quiz_Link") < 0) {
+          notify('The "Quiz_Link" column was not found in the sheet header, so the link was not saved.', "error");
+          btn.textContent = "Save link"; btn.disabled = false;
+          return;
+        }
 
         const quizLink = (document.getElementById("field_Quiz_Link")?.value || "").trim();
         setCell(activeRow, "Quiz_Link", quizLink);
@@ -1790,15 +1849,15 @@
           ${downloadHtml ? `<div style="margin-bottom:12px;">${downloadHtml}</div>` : ''}
           <div class="form-row">
             <label>
-              Paste the final AI audit block
-              <span style="font-size:11px;font-weight:400;color:var(--red-text);margin-left:6px;">Must contain VALIDATION PASSED and the final TSV in the same block</span>
+              Paste the final AI output
+              <span style="font-size:11px;font-weight:400;color:var(--red-text);margin-left:6px;">Must contain VALIDATION PASSED and a JSON array in a \`\`\`json block</span>
             </label>
             <textarea class="tsv-textarea" id="combinedPasteInput"
-              placeholder='Paste one final AI block here: VALIDATION PASSED summary first, then the final TSV in the same block.'
+              placeholder='Paste the final AI output here: VALIDATION PASSED summary first, then the JSON array in a \`\`\`json block.'
               oninput="updateStep3ButtonState()"></textarea>
             <div id="validationStatusBanner" class="validation-status-banner" style="display:none;"></div>
             <div id="incertainStatusBanner" class="validation-status-banner" style="display:none;margin-top:4px;"></div>
-            <div class="field-hint">Paste one combined final block only. The app ignores the summary and extracts the TSV automatically.</div>
+            <div class="field-hint">Paste the complete final AI output. The app extracts the JSON array and converts it to Excel automatically.</div>
           </div>`;
         const footer = `<button class="btn btn-sm btn-primary" id="saveStep3Btn" onclick="saveStep3()" disabled style="opacity:.5;cursor:not-allowed;">Save &amp; Upload Excel</button>`;
         return stepCardWrap(2, examId, state, "Upload verified QCM data", "Paste one final AI audit block: validation summary + TSV together", body, footer);
@@ -1823,40 +1882,45 @@
           return;
         }
 
-        const tableLines = extractVerifiedTableRows(combined);
-        const validationOk = hasValidationPassedSignal(combined) && tableLines.length > 0;
+        const validationOk = hasValidationPassedSignal(combined);
+        const questions = extractVerifiedJson(combined);
+        const jsonOk = questions !== null && questions.length > 0;
 
         if (vBanner) {
           vBanner.style.display = "flex";
-          if (validationOk) {
+          if (validationOk && jsonOk) {
             vBanner.className = "validation-status-banner validation-ok";
-            vBanner.innerHTML = `${CHECK_SVG} Final audit block detected: VALIDATION PASSED + TSV`;
+            vBanner.innerHTML = `${CHECK_SVG} VALIDATION PASSED detected + JSON array found (${questions.length} questions)`;
+          } else if (!validationOk) {
+            vBanner.className = "validation-status-banner validation-fail";
+            vBanner.innerHTML = `${WARN_SVG} No VALIDATION PASSED signal found in the pasted output`;
           } else {
             vBanner.className = "validation-status-banner validation-fail";
-            vBanner.innerHTML = `${WARN_SVG} Need one combined final block with VALIDATION PASSED and a detectable TSV table`;
+            vBanner.innerHTML = `${WARN_SVG} No valid JSON array found — make sure the output contains a \`\`\`json block`;
           }
         }
 
         let incertainOk = true;
         if (iBanner) {
-          const tableText = tableLines.join("\n");
-          const matches = tableText.match(/\[INCERTAIN:[^\]]*\]/gi) || [];
-          iBanner.style.display = "flex";
-          if (!tableLines.length) {
-            iBanner.className = "validation-status-banner validation-fail";
-            iBanner.innerHTML = `${WARN_SVG} No TSV rows detected in the pasted final block`;
-            incertainOk = false;
-          } else if (matches.length > 0) {
-            iBanner.className = "validation-status-banner validation-fail";
-            iBanner.innerHTML = `${WARN_SVG} ${matches.length} unresolved [INCERTAIN] marker${matches.length > 1 ? "s" : ""} remain in the final TSV`;
-            incertainOk = false;
+          if (jsonOk) {
+            const jsonText = JSON.stringify(questions);
+            const markers = jsonText.match(/\[(?:Here|SWAP|REVIEW)[^\]]*\]/gi) || [];
+            iBanner.style.display = "flex";
+            if (markers.length > 0) {
+              iBanner.className = "validation-status-banner validation-fail";
+              iBanner.innerHTML = `${WARN_SVG} ${markers.length} unresolved marker${markers.length > 1 ? "s" : ""} remain in the JSON`;
+              incertainOk = false;
+            } else {
+              iBanner.className = "validation-status-banner validation-ok";
+              iBanner.innerHTML = `${CHECK_SVG} JSON valid — ${questions.length} question${questions.length > 1 ? "s" : ""}, no unresolved markers`;
+            }
           } else {
-            iBanner.className = "validation-status-banner validation-ok";
-            iBanner.innerHTML = `${CHECK_SVG} TSV detected (${tableLines.length} line${tableLines.length > 1 ? "s" : ""}) and no unresolved [INCERTAIN] markers`;
+            iBanner.style.display = "none";
+            incertainOk = false;
           }
         }
 
-        const ready = validationOk && incertainOk;
+        const ready = validationOk && jsonOk && incertainOk;
         btn.disabled = !ready;
         btn.style.opacity = ready ? "1" : ".5";
         btn.style.cursor = ready ? "pointer" : "not-allowed";
@@ -1866,17 +1930,20 @@
         if (!activeRow) return;
 
         const combined = (document.getElementById("combinedPasteInput")?.value || "").trim();
-        if (!combined) { notify("Paste the final AI audit block first", "error"); return; }
+        if (!combined) { notify("Paste the final AI output first", "error"); return; }
         if (!hasValidationPassedSignal(combined)) {
-          notify("No VALIDATION PASSED signal found in the final block", "error"); return;
+          notify("No VALIDATION PASSED signal found in the output", "error"); return;
         }
 
-        const tableLines = extractVerifiedTableRows(combined);
-        if (!tableLines.length) { notify("No TSV table found in the pasted final block", "error"); return; }
+        const questions = extractVerifiedJson(combined);
+        if (!questions || !questions.length) {
+          notify("No valid JSON array found — make sure the output contains a ```json block", "error"); return;
+        }
 
-        const incertainMatches = tableLines.join("\n").match(/\[INCERTAIN:[^\]]*\]/gi) || [];
-        if (incertainMatches.length > 0) {
-          notify(`${incertainMatches.length} passage(s) [INCERTAIN] non resolus - corrige-les avant l'import`, "error"); return;
+        const jsonText = JSON.stringify(questions);
+        const residualMarkers = jsonText.match(/\[(?:Here|SWAP|REVIEW)[^\]]*\]/gi) || [];
+        if (residualMarkers.length > 0) {
+          notify(`${residualMarkers.length} unresolved marker(s) in JSON — fix them before importing`, "error"); return;
         }
 
         const btn = document.getElementById("saveStep3Btn");
@@ -1888,22 +1955,18 @@
         const hasCTVal = document.getElementById("tags_hasCT")?.checked || parseTags(activeRow).hasCT || false;
         const nQstVal = parseInt(document.getElementById("tags_nQst")?.value || "") || parseTags(activeRow).nQst || 0;
         const annotations = parseAnnotations(document.getElementById("tags_annotations")?.value || "");
-        const normalizeFilenamePart = (value) => String(value || "")
-          .trim()
-          .replace(/\s+/g, "_");
-        const wilaya = normalizeFilenamePart(cell(activeRow, "Wilaya"));
-        const level = normalizeFilenamePart(cell(activeRow, "Level"));
-        const module = normalizeFilenamePart(cell(activeRow, "Module"));
-        const year = String(cell(activeRow, "Year") || "").trim();
+        const normalizeFilenamePart = (value) => String(value || "").trim().replace(/\s+/g, "_");
+        const wilaya   = normalizeFilenamePart(cell(activeRow, "Wilaya"));
+        const level    = normalizeFilenamePart(cell(activeRow, "Level"));
+        const module   = normalizeFilenamePart(cell(activeRow, "Module"));
+        const year     = String(cell(activeRow, "Year") || "").trim();
         const yearShort = year ? year.slice(-2) : "";
-        const period = String(cell(activeRow, "Period") || "").replace(/\s+/g, "");
+        const period   = String(cell(activeRow, "Period") || "").replace(/\s+/g, "");
         const rotation = String(cell(activeRow, "Rotation") || "").replace(/\s+/g, "");
-        const pr = `${period}${rotation}`;
+        const pr       = `${period}${rotation}`;
         const missCount = annotations.missingPos.length;
         const fnameParts = [
-          wilaya || null,
-          level || null,
-          module || null,
+          wilaya || null, level || null, module || null,
           `${yearShort}${pr}` || null,
           nQstVal ? `${nQstVal}Q` : null,
           hasCTVal ? "CT" : null,
@@ -1913,7 +1976,7 @@
         const fname = `${fnameParts.join("_")}.xlsx`;
 
         try {
-          const workbookBlob = tsvLinesToWorkbookBlob(tableLines);
+          const workbookBlob = jsonToWorkbookBlob(questions);
           const fd = new FormData();
           fd.append("file", workbookBlob, fname);
           fd.append("filename", fname);
@@ -1922,7 +1985,7 @@
           if (d.error) throw new Error(d.error);
           setCell(activeRow, "Quiz_Tbl", d.url);
           await writeSheet();
-          notify("Excel uploaded to Drive OK", "success");
+          notify(`Excel uploaded to Drive OK (${questions.length} questions)`, "success");
           const cp = document.getElementById("combinedPasteInput");
           if (cp) cp.value = "";
           updateStep3ButtonState();
@@ -1934,7 +1997,7 @@
         btn.disabled = false;
       }
 
-      // Final canonical report-generation overrides.
+      // Report card
       function renderReportCard(row) {
         const card = document.getElementById("reportPromptCard");
         if (!card) return;
@@ -2022,7 +2085,7 @@
             level: cell(activeRow, "Level"),
             rotation: cell(activeRow, "Rotation"),
             period: cell(activeRow, "Period"),
-          examDate: cell(activeRow, "ExamDate") || cell(activeRow, "Exam Date") || "-",
+            examDate: cell(activeRow, "ExamDate") || cell(activeRow, "Exam Date") || "-",
             member: cell(activeRow, "Membre") || googleUser?.email || "",
             status: cell(activeRow, "Status"),
             pdfUrl: cell(activeRow, "OrigPDF"),

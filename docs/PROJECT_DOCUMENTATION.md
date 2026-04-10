@@ -1,6 +1,6 @@
 # 📚 exam-tracker-backend — PROJECT DOCUMENTATION
 
-**Generated:** 2026-04-04 at 13:55:51
+**Generated:** 2026-04-08 at 21:38:41
 
 **Version:** 1.0.0
 
@@ -195,11 +195,11 @@ Stable exported function names — **never rename without updating all callers:*
 
 ## 📊 PROJECT STATISTICS
 
-- **Total Files Scanned:** 29
+- **Total Files Scanned:** 35
 - **Total Classes:** 1
-- **Total Functions:** 135
-- **Total Lines of Code:** 11 655
-- **Comment Lines:** 401
+- **Total Functions:** 149
+- **Total Lines of Code:** 14 594
+- **Comment Lines:** 552
 - **API Routes:** 18
 - **External Dependencies:** 8
 
@@ -222,28 +222,38 @@ exam-tracker/
 │   │       ├── 📄 railway.toml
 │   │       ├── 📄 replit.md
 │   │       └── 📄 server.js
-│   └── 📁 codex-backup-2026-04-01-update-from-Exam-Tracker-VF
-│       ├── 📁 public
-│       │   ├── 📄 exam.html
-│       │   └── 📄 index.html
-│       ├── 📄 replit.md
-│       └── 📄 server.js
-├── 📄 SCHEMA.md
-├── 📄 adminReportPdf.js
-├── 📄 package.json
-├── 📄 project_doc_generator.js
-├── 📁 public
+│   ├── 📁 codex-backup-2026-04-01-update-from-Exam-Tracker-VF
+│   │   ├── 📁 public
+│   │   │   ├── 📄 exam.html
+│   │   │   └── 📄 index.html
+│   │   ├── 📄 replit.md
+│   │   └── 📄 server.js
+│   └── 📁 essai Anatomie Daami
+│       ├── 📄 content.json
+│       └── 📄 index.html
+├── 📁 docs
 │   ├── 📄 EXAM_DATA.md
+│   ├── 📄 EXAM_HTML_PATCH.md
+│   ├── 📄 PROJECT_DOCUMENTATION.md
 │   ├── 📄 PROMPT_EDITING_RULES.md
-│   ├── 📄 _tmp_exam_inline_check.js
-│   ├── 📄 digitizePrompt.js
-│   ├── 📄 doubleCheckPrompt.js
+│   ├── 📄 REPORT_PDF_ARCHITECTURE.md
+│   ├── 📄 SCHEMA.md
+│   ├── 📄 SUBCATEGORY_UI_GUIDE.md
+│   ├── 📄 project_doc_generator.js
+│   ├── 📄 project_summary.json
+│   └── 📄 replit.md
+├── 📄 package.json
+├── 📁 public
 │   ├── 📄 exam.html
-│   └── 📄 index.html
-├── 📄 publicReportPdf.js
+│   ├── 📄 index.html
+│   └── 📁 prompts
+│       ├── 📄 digitizePrompt.js
+│       └── 📄 doubleCheckPrompt.js
 ├── 📄 railway.toml
-├── 📄 replit.md
-├── 📄 reportPdfShared.js
+├── 📁 reports
+│   ├── 📄 adminReportPdf.js
+│   ├── 📄 publicReportPdf.js
+│   └── 📄 reportPdfShared.js
 └── 📄 server.js
 ```
 
@@ -272,29 +282,6 @@ exam-tracker/
 
 ### 📁 `/ (root)/`
 
-#### 📄 `adminReportPdf.js`
-
-| Property | Value |
-|----------|-------|
-| **Path** | `adminReportPdf.js` |
-| **Type** | JS |
-| **Lines** | 101 total · 81 code · 2 comments |
-
-**Functions:**
-
-| Function | Async |
-|----------|-------|
-| `drawAdminHeader(doc, d, left, contentWidth)` | — |
-| `drawAdminIdentitySection(doc, d, left)` | — |
-| `drawAdminQualitySection(doc, d, left)` | — |
-| `drawAdminAccessSection(doc, d, left)` | — |
-| `drawAdminFooter(doc, d, left, right)` | — |
-| `buildAdminReportBuffer(input)` | — |
-
-**Exports:** `buildAdminReportBuffer`
-
-**Local imports:** `./reportPdfShared`
-
 #### 📄 `package.json`
 
 | Property | Value |
@@ -305,65 +292,6 @@ exam-tracker/
 
 **Scripts:** `start`
 
-#### 📄 `project_doc_generator.js`
-
-| Property | Value |
-|----------|-------|
-| **Path** | `project_doc_generator.js` |
-| **Type** | JS |
-| **Lines** | 824 total · 668 code · 82 comments |
-
-**Functions:**
-
-| Function | Async |
-|----------|-------|
-| `now()` | — |
-| `relPath(absPath)` | — |
-| `walkProject(dir, collected = [])` | — |
-| `readFile(filePath)` | — |
-| `extractJsFunctions(source)` | — |
-| `extractJsClasses(source)` | — |
-| `extractJsDependencies(source)` | — |
-| `extractExports(source)` | — |
-| `extractRoutes(source)` | — |
-| `countLines(source)` | — |
-| `extractFileDocstring(source)` | — |
-| `analyzeHtml(source)` | — |
-| `analyzePackageJson(source)` | — |
-| `scanProject()` | — |
-| `buildDepGraph(modules)` | — |
-| `buildTree(modules)` | — |
-| `generateMarkdown(data)` | — |
-| `exportJson(data, outputPath)` | — |
-| `run()` | — |
-| `getArg(...)` | — |
-| `hasFlag(...)` | — |
-
-**Exports:** `foo`
-
-#### 📄 `publicReportPdf.js`
-
-| Property | Value |
-|----------|-------|
-| **Path** | `publicReportPdf.js` |
-| **Type** | JS |
-| **Lines** | 81 total · 65 code · 2 comments |
-
-**Functions:**
-
-| Function | Async |
-|----------|-------|
-| `drawPublicHeader(doc, d, left, contentWidth)` | — |
-| `drawPublicOverviewSection(doc, d, left)` | — |
-| `drawPublicStatsSection(doc, d, left)` | — |
-| `drawPublicAccessSection(doc, d, left)` | — |
-| `drawPublicFooter(doc, d, left, right)` | — |
-| `buildPublicReportBuffer(input)` | — |
-
-**Exports:** `buildPublicReportBuffer`
-
-**Local imports:** `./reportPdfShared`
-
 #### 📄 `railway.toml`
 
 | Property | Value |
@@ -372,62 +300,13 @@ exam-tracker/
 | **Type** | TOML |
 | **Lines** | 8 total · 6 code · 0 comments |
 
-#### 📄 `replit.md`
-
-| Property | Value |
-|----------|-------|
-| **Path** | `replit.md` |
-| **Type** | MD |
-| **Lines** | 164 total · 123 code · 0 comments |
-
-#### 📄 `reportPdfShared.js`
-
-| Property | Value |
-|----------|-------|
-| **Path** | `reportPdfShared.js` |
-| **Type** | JS |
-| **Lines** | 324 total · 288 code · 6 comments |
-
-**Classes:**
-
-| Class | Extends |
-|-------|---------|
-| `SimplePdf` | — |
-
-**Functions:**
-
-| Function | Async |
-|----------|-------|
-| `safeString(value, fallback = "-")` | — |
-| `normalizeFilePart(value)` | — |
-| `buildRef(period, rotation)` | — |
-| `buildBaseReportFilename(data)` | — |
-| `statusLabel(ok, naLabel = "Non applicable")` | — |
-| `encodePdfTextHex(str)` | — |
-| `drawBadge(doc, x, y, text, bgColor, textColor = PDF_COLORS.white)` | — |
-| `drawSectionTitle(doc, x, y, title)` | — |
-| `drawInfoCard(doc, x, yTop, width, title, rows, accent = PDF_COLORS.teal)` | — |
-| `drawLinksBlock(doc, x, yTop, width, title, links)` | — |
-| `drawStatCard(doc, x, yTop, width, label, value, helper, color = PDF_COLORS.teal)` | — |
-| `buildReportContext(input)` | — |
-
-**Exports:** `PDF_PAGE`  ·  `PDF_COLORS`  ·  `SimplePdf`  ·  `safeString`  ·  `normalizeFilePart`  ·  `buildRef`  ·  `buildBaseReportFilename`  ·  `statusLabel`  ·  `drawBadge`  ·  `drawSectionTitle`  ·  `drawInfoCard`  ·  `drawLinksBlock`  ·  `drawStatCard`  ·  `buildReportContext`
-
-#### 📄 `SCHEMA.md`
-
-| Property | Value |
-|----------|-------|
-| **Path** | `SCHEMA.md` |
-| **Type** | MD |
-| **Lines** | 143 total · 99 code · 1 comments |
-
 #### 📄 `server.js`
 
 | Property | Value |
 |----------|-------|
 | **Path** | `server.js` |
 | **Type** | JS |
-| **Lines** | 238 total · 193 code · 8 comments |
+| **Lines** | 239 total · 194 code · 8 comments |
 
 **Functions:**
 
@@ -450,7 +329,7 @@ exam-tracker/
 | `GET` | `/api/drive-download` |
 | `GET` | `/api/config` |
 
-**Local imports:** `./reportPdfShared`  ·  `./adminReportPdf`  ·  `./publicReportPdf`
+**Local imports:** `./reports/reportPdfShared`  ·  `./reports/adminReportPdf`  ·  `./reports/publicReportPdf`
 
 ### 📁 `00- Archive/`
 
@@ -675,30 +554,149 @@ exam-tracker/
 | `setSyncStatus(state,label)` | — |
 | `notify(msg,type)` | — |
 
-### 📁 `public/`
+### 📁 `00- Archive/essai Anatomie Daami/`
 
-#### 📄 `digitizePrompt.js`
-
-| Property | Value |
-|----------|-------|
-| **Path** | `public/digitizePrompt.js` |
-| **Type** | JS |
-| **Lines** | 107 total · 95 code · 0 comments |
-
-#### 📄 `doubleCheckPrompt.js`
+#### 📄 `content.json`
 
 | Property | Value |
 |----------|-------|
-| **Path** | `public/doubleCheckPrompt.js` |
+| **Path** | `00- Archive/essai Anatomie Daami/content.json` |
+| **Type** | JSON |
+| **Lines** | 283 total · 272 code · 0 comments |
+
+#### 📄 `index.html`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `00- Archive/essai Anatomie Daami/index.html` |
+| **Type** | HTML |
+| **Lines** | 403 total · 338 code · 23 comments |
+
+**Page title:** Anatomie des Os de la Face
+**Inline `<script>` blocks:** 1  ·  **`<style>` blocks:** 1
+
+**JavaScript functions defined inside this page:**
+
+| Function | Async |
+|----------|-------|
+| `emoji(title)` | — |
+| `renderItems(arr)` | — |
+| `renderBlock(b)` | — |
+| `renderMedTable(b)` | — |
+| `renderCompareTable(b)` | — |
+| `buildPage(data)` | — |
+
+### 📁 `docs/`
+
+#### 📄 `EXAM_DATA.md`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `docs/EXAM_DATA.md` |
+| **Type** | MD |
+| **Lines** | 387 total · 316 code · 2 comments |
+
+#### 📄 `EXAM_HTML_PATCH.md`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `docs/EXAM_HTML_PATCH.md` |
+| **Type** | MD |
+| **Lines** | 287 total · 199 code · 24 comments |
+
+#### 📄 `PROJECT_DOCUMENTATION.md`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `docs/PROJECT_DOCUMENTATION.md` |
+| **Type** | MD |
+| **Lines** | 984 total · 692 code · 63 comments |
+
+#### 📄 `project_doc_generator.js`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `docs/project_doc_generator.js` |
 | **Type** | JS |
-| **Lines** | 113 total · 99 code · 0 comments |
+| **Lines** | 824 total · 668 code · 82 comments |
 
 **Functions:**
 
 | Function | Async |
 |----------|-------|
-| `generateDoubleCheckPromptFromContext(data, tsvData)` | — |
-| `generateDoubleCheckPrompt(arg1, arg2)` | — |
+| `now()` | — |
+| `relPath(absPath)` | — |
+| `walkProject(dir, collected = [])` | — |
+| `readFile(filePath)` | — |
+| `extractJsFunctions(source)` | — |
+| `extractJsClasses(source)` | — |
+| `extractJsDependencies(source)` | — |
+| `extractExports(source)` | — |
+| `extractRoutes(source)` | — |
+| `countLines(source)` | — |
+| `extractFileDocstring(source)` | — |
+| `analyzeHtml(source)` | — |
+| `analyzePackageJson(source)` | — |
+| `scanProject()` | — |
+| `buildDepGraph(modules)` | — |
+| `buildTree(modules)` | — |
+| `generateMarkdown(data)` | — |
+| `exportJson(data, outputPath)` | — |
+| `run()` | — |
+| `getArg(...)` | — |
+| `hasFlag(...)` | — |
+
+**Exports:** `foo`
+
+#### 📄 `project_summary.json`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `docs/project_summary.json` |
+| **Type** | JSON |
+| **Lines** | 148 total · 148 code · 0 comments |
+
+#### 📄 `PROMPT_EDITING_RULES.md`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `docs/PROMPT_EDITING_RULES.md` |
+| **Type** | MD |
+| **Lines** | 247 total · 201 code · 0 comments |
+
+#### 📄 `replit.md`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `docs/replit.md` |
+| **Type** | MD |
+| **Lines** | 164 total · 123 code · 0 comments |
+
+#### 📄 `REPORT_PDF_ARCHITECTURE.md`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `docs/REPORT_PDF_ARCHITECTURE.md` |
+| **Type** | MD |
+| **Lines** | 133 total · 110 code · 0 comments |
+
+#### 📄 `SCHEMA.md`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `docs/SCHEMA.md` |
+| **Type** | MD |
+| **Lines** | 179 total · 143 code · 0 comments |
+
+#### 📄 `SUBCATEGORY_UI_GUIDE.md`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `docs/SUBCATEGORY_UI_GUIDE.md` |
+| **Type** | MD |
+| **Lines** | 246 total · 186 code · 14 comments |
+
+### 📁 `public/`
 
 #### 📄 `exam.html`
 
@@ -706,18 +704,10 @@ exam-tracker/
 |----------|-------|
 | **Path** | `public/exam.html` |
 | **Type** | HTML |
-| **Lines** | 1692 total · 1504 code · 52 comments |
+| **Lines** | 2097 total · 1868 code · 54 comments |
 
 **Page title:** Exam Details
 **Inline `<script>` blocks:** 4  ·  **`<style>` blocks:** 1
-
-#### 📄 `EXAM_DATA.md`
-
-| Property | Value |
-|----------|-------|
-| **Path** | `public/EXAM_DATA.md` |
-| **Type** | MD |
-| **Lines** | 292 total · 242 code · 0 comments |
 
 #### 📄 `index.html`
 
@@ -763,21 +753,119 @@ exam-tracker/
 | `setSyncStatus(state,label)` | — |
 | `notify(msg,type)` | — |
 
-#### 📄 `PROMPT_EDITING_RULES.md`
+### 📁 `public/prompts/`
+
+#### 📄 `digitizePrompt.js`
 
 | Property | Value |
 |----------|-------|
-| **Path** | `public/PROMPT_EDITING_RULES.md` |
-| **Type** | MD |
-| **Lines** | 92 total · 71 code · 0 comments |
-
-#### 📄 `_tmp_exam_inline_check.js`
-
-| Property | Value |
-|----------|-------|
-| **Path** | `public/_tmp_exam_inline_check.js` |
+| **Path** | `public/prompts/digitizePrompt.js` |
 | **Type** | JS |
-| **Lines** | 1128 total · 998 code · 27 comments |
+| **Lines** | 304 total · 265 code · 2 comments |
+
+#### 📄 `doubleCheckPrompt.js`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `public/prompts/doubleCheckPrompt.js` |
+| **Type** | JS |
+| **Lines** | 711 total · 588 code · 42 comments |
+
+**Functions:**
+
+| Function | Async |
+|----------|-------|
+| `injectTaxonomy()` | — |
+| `buildDoubleCheckStep1Prompt(data, tsvData)` | — |
+| `buildDoubleCheckStep2Prompt(data, tsvData, reviewReport)` | — |
+| `generateDoubleCheckStep1Prompt(data, tsvData)` | — |
+| `generateDoubleCheckStep2Prompt(data, tsvData, reviewReport)` | — |
+| `buildDoubleCheckPrompt(data, tsvData)` | — |
+| `generateDoubleCheckPromptFromContext(data, tsvData)` | — |
+| `generateDoubleCheckPrompt(arg1, arg2)` | — |
+
+### 📁 `reports/`
+
+#### 📄 `adminReportPdf.js`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `reports/adminReportPdf.js` |
+| **Type** | JS |
+| **Lines** | 103 total · 83 code · 2 comments |
+
+**Functions:**
+
+| Function | Async |
+|----------|-------|
+| `drawAdminHeader(doc, d, left, contentWidth)` | — |
+| `drawAdminIdentitySection(doc, d, left)` | — |
+| `drawAdminQualitySection(doc, d, left)` | — |
+| `drawAdminAccessSection(doc, d, left)` | — |
+| `drawAdminFooter(doc, d, left, right)` | — |
+| `buildAdminReportBuffer(input)` | — |
+
+**Exports:** `buildAdminReportBuffer`
+
+**Local imports:** `./reportPdfShared`
+
+#### 📄 `publicReportPdf.js`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `reports/publicReportPdf.js` |
+| **Type** | JS |
+| **Lines** | 160 total · 129 code · 9 comments |
+
+**Functions:**
+
+| Function | Async |
+|----------|-------|
+| `drawPublicHeader(doc, d, left, contentWidth)` | — |
+| `drawBeigeBlocks(doc, d, left, contentWidth, topY)` | — |
+| `drawDetailsSection(doc, d, left, right, contentWidth, topY)` | — |
+| `drawPublicAccessSection(doc, d, left, right, contentWidth, topY)` | — |
+| `drawPublicFooter(doc, d, left, right)` | — |
+| `buildPublicReportBuffer(input)` | — |
+
+**Exports:** `buildPublicReportBuffer`
+
+**Local imports:** `./reportPdfShared`
+
+#### 📄 `reportPdfShared.js`
+
+| Property | Value |
+|----------|-------|
+| **Path** | `reports/reportPdfShared.js` |
+| **Type** | JS |
+| **Lines** | 339 total · 301 code · 6 comments |
+
+**Classes:**
+
+| Class | Extends |
+|-------|---------|
+| `SimplePdf` | — |
+
+**Functions:**
+
+| Function | Async |
+|----------|-------|
+| `safeString(value, fallback = "-")` | — |
+| `normalizeFilePart(value)` | — |
+| `buildRef(period, rotation)` | — |
+| `buildBaseReportFilename(data)` | — |
+| `extractDriveFileId(url)` | — |
+| `buildGoogleSheetsUrl(url)` | — |
+| `statusLabel(ok, naLabel = "Non applicable")` | — |
+| `encodePdfTextHex(str)` | — |
+| `drawBadge(doc, x, y, text, bgColor, textColor = PDF_COLORS.white)` | — |
+| `drawSectionTitle(doc, x, y, title)` | — |
+| `drawInfoCard(doc, x, yTop, width, title, rows, accent = PDF_COLORS.teal)` | — |
+| `drawLinksBlock(doc, x, yTop, width, title, links)` | — |
+| `drawStatCard(doc, x, yTop, width, label, value, helper, color = PDF_COLORS.teal)` | — |
+| `buildReportContext(input)` | — |
+
+**Exports:** `PDF_PAGE`  ·  `PDF_COLORS`  ·  `SimplePdf`  ·  `safeString`  ·  `normalizeFilePart`  ·  `buildRef`  ·  `buildBaseReportFilename`  ·  `extractDriveFileId`  ·  `buildGoogleSheetsUrl`  ·  `statusLabel`  ·  `drawBadge`  ·  `drawSectionTitle`  ·  `drawInfoCard`  ·  `drawLinksBlock`  ·  `drawStatCard`  ·  `buildReportContext`
 
 ---
 
@@ -810,16 +898,16 @@ exam-tracker/
 
 Local module dependencies within the project:
 
-**`adminReportPdf.js`** depends on:
+**`reports/adminReportPdf.js`** depends on:
 - `./reportPdfShared`
 
-**`publicReportPdf.js`** depends on:
+**`reports/publicReportPdf.js`** depends on:
 - `./reportPdfShared`
 
 **`server.js`** depends on:
-- `./reportPdfShared`
-- `./adminReportPdf`
-- `./publicReportPdf`
+- `./reports/reportPdfShared`
+- `./reports/adminReportPdf`
+- `./reports/publicReportPdf`
 
 ---
 
@@ -951,11 +1039,11 @@ for (const file of fs.readdirSync(BACKUP)) {
 
 ### Recent Changes
 
-**1.0.0** (2026-04-04)
-- Dynamic documentation generator added (`project_doc_generator.js`)
+**1.0.0** (2026-04-08)
+- Dynamic documentation generator added (`docs/project_doc_generator.js`)
 - Auto-generated Admin and Public PDF reports
-- Split prompt architecture (`digitizePrompt.js`, `doubleCheckPrompt.js`)
-- Shared PDF engine (`reportPdfShared.js`)
+- Split prompt architecture (`public/prompts/digitizePrompt.js`, `public/prompts/doubleCheckPrompt.js`)
+- Shared PDF engine (`reports/reportPdfShared.js`)
 - Railway deployment configuration
 
 ---
@@ -976,8 +1064,8 @@ for (const file of fs.readdirSync(BACKUP)) {
 
 ---
 
-*Documentation generated on 2026-04-04 at 13:55:51*
+*Documentation generated on 2026-04-08 at 21:38:41*
 
 *Generator Version: 2.0*
 
-*Total documentation size: 11 655 lines analyzed*
+*Total documentation size: 14 594 lines analyzed*

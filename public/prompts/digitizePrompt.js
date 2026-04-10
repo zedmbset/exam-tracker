@@ -1,295 +1,333 @@
-﻿function generateDigitizePrompt(data) {
-  const moduleName = data.module || "[Preciser l'unite]";
-  const year = String(data.year || "").trim();
-  const yearShort = year ? year.slice(-2) : "XX";
-  const period = String(data.period || "").replace(/\s+/g, "") || "P1";
-  const imagePrefix = `${moduleName}_${yearShort}${period}`;
+﻿// ─────────────────────────────────────────────────────────────────────────────
+//  digitizePrompt.js  —  Modele 1 : extraction + audit JSON
+//  Export : generateDigitizePrompt
+//  Changement majeur : sortie JSON enrichi (questions + audit) au lieu de TSV brut.
+//  Le bloc "audit" fournit au second modele tous les marqueurs d'incertitude et
+//  les nettoyages effectues, chacun avec un score de risque chiffre.
+// ─────────────────────────────────────────────────────────────────────────────
 
-  // Determine exam type from the sheet values used by the app
-  const levelValue = String(data.level || "").trim();
+function generateDigitizePrompt(data) {
+  const moduleName  = data.module  || "[Preciser l'unite]";
+  const year        = String(data.year   || "").trim();
+  const yearShort   = year ? year.slice(-2) : "XX";
+  const period      = String(data.period || "").replace(/\s+/g, "");
+  const imagePrefix = `${moduleName}_${yearShort}${period || String(data.rotation || "").trim()}`;
+
+  const levelValue  = String(data.level  || "").trim();
   const moduleValue = String(data.module || "").trim().toLowerCase();
   const isResidanat = levelValue === "7" || moduleValue === "résidanat";
-  const examType = isResidanat ? "Résidanat" : "Externat";
+  const examType    = isResidanat ? "Résidanat" : "Externat";
 
-  // Build subcategory mapping if provided
   const subcategoryNote = data.subcategories && data.subcategories.length > 0
     ? `- Sous-categories et leurs plages de questions :\n${data.subcategories.map(sc => `    * ${sc.name}: questions ${sc.range}`).join('\n')}`
     : "- Aucune sous-categorie definie.";
 
-  const missingNote =
-    Array.isArray(data.missingPos) && data.missingPos.length > 0
-      ? `- Questions declarees manquantes : ${data.missingPos.join(", ")}.`
-      : "- Aucune question declaree manquante.";
+  const missingNote = Array.isArray(data.missingPos) && data.missingPos.length > 0
+    ? `- Questions declarees manquantes : ${data.missingPos.join(", ")}.`
+    : "- Aucune question declaree manquante.";
 
-  const schemaNote =
-    Array.isArray(data.schemaQsts) && data.schemaQsts.length > 0
-      ? `- Questions avec schema/image declarees : ${data.schemaQsts.join(", ")}.`
-      : "- Aucune question avec schema/image declaree.";
+  const schemaNote = Array.isArray(data.schemaQsts) && data.schemaQsts.length > 0
+    ? `- Questions avec schema/image declarees : ${data.schemaQsts.join(", ")}.`
+    : "- Aucune question avec schema/image declaree.";
 
   const twoColumnWarning = data.isTwoColumn
     ? `- CET EXAMEN EST EN DEUX COLONNES. Lis colonne gauche en entier de haut en bas, puis colonne droite en entier de haut en bas. Ne melange jamais les lignes des deux colonnes. Ne saute pas d'une colonne a l'autre en cours de lecture.`
     : `- Format de page : colonne unique, lecture de haut en bas.`;
 
-  return `Tu es un assistant specialise en extraction d'examens medicaux vers un tableau TSV structure.
-Ta mission est de lire l'examen source avec une rigueur absolue et de produire un tableau directement exploitable, fidele au document original, prepare pour une verification secondaire stricte.
+  const tagTemplate = isResidanat
+    ? `["${examType} ${data.wilaya || '[Wilaya]'}", "<subcategoryName> ${year}", "No. <num>", "${data.hasCT ? 'Corrigé type' : 'Corrigé proposé'}"]`
+    : `["${examType} ${data.wilaya || '[Wilaya]'}", "${period ? period + ' ' : ''}${year}", "No. <num>", "${data.hasCT ? 'Corrigé type' : 'Corrigé proposé'}"]`;
 
-═══════════════════════════════════════════
+  return `Tu es un assistant specialise en extraction d'examens medicaux.
+Ta mission est double :
+  1. Extraire fidelement tout le contenu de l'examen source avec une rigueur absolue.
+  2. Produire un objet JSON enrichi, directement exploitable par le second modele auditeur.
+
+La sortie JSON contient DEUX blocs de premier niveau :
+  "questions" → tableau structure de toutes les questions (equivalent enrichi du TSV precedent).
+  "audit"     → rapport complet des incertitudes et nettoyages effectues, avec scores de risque.
+
+Ce JSON est le seul livrable. Il remplace entierement le TSV brut precedent.
+
+══════════════════════════════════════════════════════
 CONTEXTE DE L'EXAMEN
-═══════════════════════════════════════════
-- Langue : ${data.lang || "Francais"}
-- Unite : ${moduleName}
-- Annee : ${year}
-- Niveau : ${data.level || "[Preciser le niveau]"}
-- Periode : ${period}
-- Rotation : ${data.rotation || "[Preciser la rotation]"}
-- Type d'examen : ${examType}
-- Nombre total de QCMs declares : ${data.nQst || "[Preciser le nombre]"}
+══════════════════════════════════════════════════════
+- Langue            : ${data.lang || "Francais"}
+- Unite             : ${moduleName}
+- Annee             : ${year}
+- Niveau            : ${data.level || "[Preciser le niveau]"}
+${period ? `- Periode           : ${period}` : ""}
+${data.rotation ? `- Rotation          : ${data.rotation}` : ""}
+- Type d'examen     : ${examType}
+- Nombre total QCMs : ${data.nQst || "[Preciser le nombre]"}
 - Corrige Type (CT) : ${data.hasCT ? "OUI — present dans ce PDF" : "NON — absent"}
-- Cas Cliniques : ${data.hasCas ? "OUI" : "NON"}
-- Questions d'association : ${data.hasComb ? "OUI" : "NON"}
+- Cas Cliniques     : ${data.hasCas ? "OUI" : "NON"}
+- Questions assoc.  : ${data.hasComb ? "OUI" : "NON"}
 ${subcategoryNote}
 ${missingNote}
 ${schemaNote}
 ${twoColumnWarning}
 
-═══════════════════════════════════════════
-REGLES DE SORTIE — ABSOLUES
-═══════════════════════════════════════════
-- Tu dois produire UNIQUEMENT un tableau TSV, rien d'autre.
-- Le tableau doit etre encadre dans un seul bloc \`\`\`tsv ... \`\`\`.
-- La premiere ligne du bloc est obligatoirement la ligne d'en-tete.
-- Aucun texte, titre, commentaire, resume, explication, ni avertissement avant l'en-tete ou apres la derniere ligne du TSV.
-- Un seul bloc de code. Pas de deuxieme bloc.
-- Ordre canonique des colonnes : Cas | Num | Text | A | B | C | D | E | F | G | Correct | Exp | Hint | categoryName | tagSuggere | subcategoryName | Year | Tag
-- IMPORTANT : Apres avoir genere toutes les lignes, retire toute colonne qui est vide pour TOUTES les lignes de cet examen.
-- Preserve l'ordre canonique parmi les colonnes restantes.
-
-═══════════════════════════════════════════
-FIDELITE AU DOCUMENT — REGLES DE PRIORITE
-═══════════════════════════════════════════
+══════════════════════════════════════════════════════
+REGLES DE FIDELITE AU DOCUMENT
+══════════════════════════════════════════════════════
 La fidelite au contenu medical prime toujours sur la normalisation cosmetique.
-Tu es autorise a corriger uniquement :
-  - la casse initiale d'une phrase ou d'une proposition (minuscule -> majuscule en debut)
+
+Tu es autorise a corriger UNIQUEMENT :
+  - la casse initiale d'une phrase ou d'une proposition (minuscule → majuscule en debut)
   - les espaces doubles ou manquants autour de la ponctuation
-  - les coupures de mot dues a un mauvais rendu PDF (ex : "hyper- tension" -> "hypertension")
+  - les coupures de mot dues a un mauvais rendu PDF (ex : "hyper- tension" → "hypertension")
+  - les erreurs de lecture OCR evidentes qui ne modifient pas le sens medical
+    (ex : "vore" → "voie", "classes on" → "classes en", "comne" → "comme", "l'infarctus" mal coupé → reconstitué)
+    Critere d'application : la correction doit etre linguistiquement certaine ET medicalement neutre.
+    En cas de doute sur le sens medical → ne corrige pas, documente dans audit.uncertainties.
 
 Tu n'es PAS autorise a :
-  - reformuler, simplifier, ou reordonner le texte d'une question ou d'une proposition
-  - corriger une faute d'orthographe medicale si tu n'es pas certain a 100 % qu'il s'agit d'une coquille (utilise [INCERTAIN] a la place)
+  - reformuler, simplifier ou reordonner le texte d'une question ou d'une proposition
+  - corriger une faute d'orthographe medicale si tu n'es pas certain a 100 % qu'il s'agit d'une coquille
   - changer le sens d'une phrase meme si elle te semble maladroite
   - reordonner les options A, B, C, D, E selon une logique medicale
   - deduire ou deviner la reponse correcte depuis tes connaissances medicales
 
-═══════════════════════════════════════════
-PRIORITE VISUELLE ET ORDRE DES PROPOSITIONS
-═══════════════════════════════════════════
 L'ordre visuel imprime dans le PDF est la seule reference valide. Toujours.
 
-INTERDICTIONS ABSOLUES :
+NETTOYAGE DU BRUIT VISUEL :
+Ignore et supprime tout texte qui ne fait pas partie de la question ou des propositions.
+Cela inclut sans s'y limiter :
+  - les numeros de page (ex : "— 3 —", "Page 4/8")
+  - les noms d'auteurs, codes d'examen ou references en en-tete/pied de page
+  - les marqueurs de lecture automatique (petits carres noirs, codes QR, codes-barres)
+  - les annotations manuscrites d'etudiants (coches, croix, notes de brouillon)
+  - les noms de fichier ou chemins qui apparaissent en marge
+Chaque suppression de bruit doit etre documentee dans audit.cleanings avec le type NOISE_REMOVED.
+
+INTERDICTIONS ABSOLUES SUR LES PROPOSITIONS :
 - Ne jamais deplacer le texte d'une proposition vers une autre colonne.
-  Ex : le texte imprime en position A reste en colonne A, meme s'il te semble medicalement plus adapte a la position C.
-- Ne jamais reordonner les options A, B, C, D, E selon ta logique medicale ou selon un ordre "plus propre".
-- Ne jamais reassigner une proposition parce que son contenu ressemble a une proposition d'une autre question.
-- Si l'ordre visuel des options te semble suspect (ex : imprime dans l'ordre D, A, C, B, E), utilise [SWAP: ordre visuel suspect D-A-C-B-E] dans la colonne Correct et preserve l'ordre visuel imprime tel quel.
-- Si une option semble manquante dans le PDF, laisse la cellule correspondante vide et applique [INCERTAIN: option absente ?] dans cette cellule.
+- Ne jamais reordonner les options selon ta logique medicale.
+- Ne jamais reassigner une proposition parce que son contenu ressemble a une autre question.
+- Si l'ordre visuel semble suspect : utilise [SWAP: ordre visuel suspect X-Y-Z] dans "correct"
+  et preserve l'ordre visuel imprime tel quel.
 
-RAPPEL : le second modele sera charge de valider ou corriger tout ordre suspect. Ton role est de reproduire fidelement, pas de corriger.
+VIGILANCE SYMBOLES, CHIFFRES ET NOTATIONS :
+- Copie chaque symbole exactement : α, β, γ, μ, ±, ≥, ≤, →, ↑, ↓.
+  Ne jamais remplacer un symbole grec par une lettre latine (α ≠ a, β ≠ b).
+- Copie chaque chiffre exactement. Ne jamais arrondir ni corriger.
+- Copie chaque unite exactement : mg/dL, mmol/L, UI/L, bpm, mmHg.
+- Si un chiffre, symbole ou unite est partiellement illisible → place ta reconstruction dans le champ et declare-la dans audit.uncertainties.
+- Ne jamais corriger un chiffre qui te semble biologiquement improbable.
 
-═══════════════════════════════════════════
-VIGILANCE SYMBOLES, CHIFFRES ET NOTATIONS
-═══════════════════════════════════════════
-Les erreurs de transcription sur les symboles et les chiffres sont les plus dangereuses car elles ne declenchent aucune alarme visuelle.
-
-REGLES STRICTES :
-- Copie chaque symbole exactement tel qu'il est imprime : α, β, γ, μ, ±, ≥, ≤, →, ↑, ↓, etc.
-  Ne jamais remplacer un symbole grec par une lettre latine (ex : α ≠ a, β ≠ b).
-- Copie chaque chiffre exactement : 84 mg/dL reste 84 mg/dL. Ne jamais arrondir, ne jamais corriger.
-- Copie chaque notation exactement : "A et B" reste "A et B". Ne jamais substituer "I et II" ou "1 et 2".
-- Copie chaque unite exactement : mg/dL, mmol/L, UI/L, bpm, mmHg — ne jamais normaliser ou convertir.
-- Si un symbole, un chiffre ou une unite est partiellement illisible, utilise [INCERTAIN: valeur_reconstruite] avec ta meilleure reconstruction medicalement plausible.
-- Si le rendu PDF produit un caractere corrompu (ex : "?" ou "â" a la place d'un symbole), utilise [INCERTAIN: symbole_reconstruit] plutot que de laisser le bruit brut.
-
-INTERDICTIONS ABSOLUES :
-- Ne jamais substituer un symbole par un autre meme "equivalent" (ex : μg ≠ mcg sauf si le PDF ecrit mcg).
-- Ne jamais corriger un chiffre qui te semble "biologiquement improbable" : c'est peut-etre intentionnel pour tester le candidat.
-- Ne jamais normaliser une notation de combinaison (ex : ne pas remettre en ordre alphabetique les combinaisons de reponses).
-
-═══════════════════════════════════════════
-MARQUEURS D'INCERTITUDE — [INCERTAIN] ET [SWAP]
-═══════════════════════════════════════════
-Ces deux marqueurs sont les seuls mecanismes d'alerte autorises. Tout doute doit etre exprime via l'un d'eux, jamais en prose, jamais dans un rapport separe.
-
-[INCERTAIN: texte_reconstruit]
-- Utilise ce marqueur quand un mot, un symbole, un chiffre, une formule ou une expression est difficile a lire avec certitude.
-- Ecris ta meilleure reconstruction medicalement plausible a l'interieur du marqueur.
-- La reconstruction doit etre un texte utilisable, pas du bruit OCR brut.
-- Exemple correct   : [INCERTAIN: hybride] (et non [INCERTAIN: hybbride])
-- Exemple correct   : [INCERTAIN: 120 mg/dL] si le chiffre est partiellement illisible
-- Si un passage entier est trop corrompu pour produire une reconstruction plausible, et que la question reste partiellement lisible, applique [INCERTAIN] sur les parties reconstituables et laisse les parties certaines propres.
-- Si une question est entierement illisible et irrecuperable, saute-la sans cree de ligne de remplacement.
+══════════════════════════════════════════════════════
+MARQUEURS D'INCERTITUDE
+══════════════════════════════════════════════════════
+INCERTITUDES DE LECTURE (SANS MARQUEUR TEXTUEL)
+  → Pour tout mot, symbole, chiffre, formule ou expression difficile a lire avec certitude.
+  → NE METS PLUS de balise [INCERTAIN: ...] dans le texte.
+  → Ecris ta meilleure reconstruction medicalement plausible DIRECTEMENT dans le champ JSON (ex: "120 mg/dL", "hypertension").
+  → Documente OBLIGATOIREMENT cette incertitude dans le bloc "audit.uncertainties" avec un riskScore.
+  → Si une question est entierement illisible et irrecuperable : saute-la sans creer d'objet.
 
 [SWAP: raison_breve]
-- Utilise ce marqueur dans la colonne Correct uniquement.
-- Signale une suspicion que l'ordre visuel des options imprimees dans le PDF pourrait ne pas correspondre a l'ordre A, B, C, D, E standard.
-- Exemple : si les options semblent imprimees dans l'ordre D, A, C, B, E visuellement, ecris [SWAP: ordre visuel suspect D-A-C-B-E] dans Correct.
-- N'essaie jamais de "corriger" l'ordre toi-meme. Preserve l'ordre visuel imprime et signale le doute.
-- Ce marqueur ne remplace pas [INCERTAIN] : les deux peuvent coexister sur une meme ligne.
+  → Ordre visuel des options suspecte dans le PDF.
+  → Place dans le champ "correct" (ou "hint" si correct absent, ou fin de "text" sinon).
+  → Preserve l'ordre visuel imprime et signale le doute.
+  → Exemple : [SWAP: ordre visuel suspect D-A-C-B-E]
 
-INTERDICTIONS ABSOLUES SUR LES MARQUEURS
-- Pas de liste des [INCERTAIN] en dehors du TSV.
-- Pas de commentaire du type "j'ai note X incertitudes".
-- Pas de prose explicative sur tes doutes.
-- Le second modele traitera tous les marqueurs.
+Le marqueur [SWAP] et tes textes reconstruits (incertitudes) doivent alimenter le bloc "audit.uncertainties".
+Chaque doute de lecture que tu as eu DOIT avoir une entree correspondante dans "audit.uncertainties".
 
-═══════════════════════════════════════════
-REGLES PAR COLONNE
-═══════════════════════════════════════════
+INTERDICTIONS SUR LES MARQUEURS ET INCERTITUDES :
+- Plus de balise [INCERTAIN] dans les valeurs textuelles.
+- Pas de liste des incertitudes en dehors du bloc audit JSON.
+- Pas de commentaire prose sur tes doutes.
+- Pas de [SWAP] en dehors de "correct", "hint" ou fin de "text".
 
-1. CAS
-   - Renseigne uniquement si plusieurs questions consecutives partagent un meme cas clinique.
-   - Copie le texte integral du cas clinique pour la premiere question concernee.
-   - Pour les questions suivantes du meme cas, repete le meme texte de cas.
-   - Si le cas est court et continu, garde-le sur une seule ligne.
-   - Utilise \\n uniquement si le cas contient plusieurs phrases ou plusieurs blocs cliniques distincts.
-   - Si une question n'appartient a aucun cas, laisse cette cellule vide.
+══════════════════════════════════════════════════════
+FORMAT DE SORTIE — OBJET JSON UNIQUE
+══════════════════════════════════════════════════════
+Produis UNIQUEMENT un bloc \`\`\`json ... \`\`\` contenant l'objet decrit ci-dessous.
+Aucun texte, titre, commentaire ni rapport en dehors du bloc JSON.
+Un seul bloc. Pas de deuxieme bloc.
 
-2. NUM
-   - Contient uniquement le numero de la question : 1, 2, 3, etc.
-   - Correspond au numero original de la question dans le PDF.
-   - Ne jamais renumeroter ou modifier ces numeros.
+──────────────────────────────────────────────────────
+STRUCTURE DE "questions"  (tableau d'objets)
+──────────────────────────────────────────────────────
+Chaque objet represente une question. Inclus uniquement les champs non-null
+SAUF pour les champs obligatoires (num, text, categoryName, year, tag).
+Omets un champ si sa valeur est null ET qu'il n'est pas obligatoire.
 
-3. TEXT
-   - Copie uniquement le texte de la question, sans son numero ni ses propositions.
-   - Garde le texte sur une seule ligne quand il est simple et continu.
-   - Utilise \\n seulement si la question contient plusieurs sous-parties reelles ou plusieurs phrases longues structurellement distinctes.
-   - N'utilise jamais \\n a la fin du texte ni pour simuler un saut de paragraphe cosmetique.
-   - Applique [INCERTAIN: ...] pour tout passage douteux, directement a l'endroit concerne dans la phrase.
-
-4. CORRECT
-${data.hasCT
-  ? `   - Ce PDF contient un Corrige Type (CT). Utilise UNIQUEMENT les reponses du CT pour remplir cette colonne.
-   - Copie les lettres exactement telles qu'elles apparaissent dans le CT, dans le meme ordre.
-   - Si plusieurs reponses sont correctes, ecris les lettres sans separateur : ex. ACD
-   - Si la reponse du CT pour une question est absente, illisible ou incomplete, laisse la cellule vide.
-   - Si le CT semble associer une reponse a la mauvaise question (decalage), signale-le avec [INCERTAIN: decalage CT suspect] et laisse Correct vide.
-
-   INTERDICTIONS ABSOLUES POUR CORRECT :
-   - Ne jamais utiliser tes connaissances medicales pour deviner ou valider une reponse.
-   - Ne jamais deplacer une reponse CT d'une question vers une autre, meme si cela semble logique.
-   - Ne jamais "reparer" le CT en te basant sur la logique medicale des options.
-   - Ne jamais reecrire les lettres du CT parce que l'ordre des options te semble incorrect.
-   - Ne jamais corriger le CT parce qu'une option semble medicalement improbable comme bonne reponse.
-   - Si le placement d'une reponse CT est douteux, utilise [INCERTAIN: ...] et laisse le second modele decider.`
-  : `   - Aucun Corrige Type disponible. Laisse cette colonne entierement vide pour chaque question.
-   - Ne jamais remplir Correct depuis tes connaissances medicales.`
+Schema d'un objet question :
+{
+  "cas"             : "texte integral du cas clinique partage, ou omis si absent",
+  "num"             : <entier — numero original du PDF>,
+  "text"            : "texte pur de la question sans numero ni propositions",
+  "a"               : "texte proposition A sans son prefixe lettre",
+  "b"               : "texte proposition B sans son prefixe lettre",
+  "c"               : "texte proposition C sans son prefixe lettre",
+  "d"               : "texte proposition D sans son prefixe lettre",
+  "e"               : "texte proposition E sans son prefixe lettre",
+  "f"               : "texte proposition F — uniquement questions d'association",
+  "g"               : "texte proposition G — uniquement questions d'association",
+  "correct"         : "lettres CT sans separateur ex: 'ACD', ou [SWAP:...] si suspect, ou omis si absent",
+  "exp"             : "Based on official course support (official pdf course) the right answer is \\"<correct>\\" please generate explanation based on those right answers (propositions) — ou omis si correct absent",
+  "hint"            : "combinaisons d'association traduites en lettres A-G — ou omis",
+  "categoryName"    : "${moduleName}",
+  "subcategoryName" : "nom de la sous-categorie si examen mappe, sinon omis",
+  "year"            : "${year}",
+  "tag"             : ${tagTemplate}
 }
 
-4. A, B, C, D, E, F, G
-   - Copie le texte complet de chaque proposition sans son prefixe lettre.
-   - Respecte l'ordre visuel imprime dans le PDF. Ne reordonne jamais les options.
-   - Garde chaque proposition sur une seule ligne sauf si elle contient plusieurs phrases ou deux segments structurellement distincts.
-   - Applique [INCERTAIN: ...] pour tout passage douteux directement dans la cellule concernee.
-   - Si une proposition contient un symbole, une formule chimique, une unite, ou une notation mathematique, copie-la exactement. En cas de doute sur le symbole, utilise [INCERTAIN: symbole_reconstruit].
-   - Les colonnes F et G ne sont utilisees que pour les questions d'association. Si aucune question n'utilise ces colonnes, elles seront supprimees automatiquement.
+Regles specifiques par champ :
+- "num"      : numero original du PDF. Ne jamais renumeroter.
+- "text"     : texte pur. Supprime tout prefixe de question ("1.", "Q1.", "1)", etc.).
+               Si se termine par ":" avant les propositions : conserve ce ":".
+- "correct"  : ${data.hasCT
+    ? `CT uniquement — jamais de deduction medicale personnelle.
+               Copie les lettres exactement telles qu'elles apparaissent dans le CT, meme ordre.
+               Plusieurs reponses : lettres sans separateur ex: "ACD".
+               Si CT absent/illisible pour cette question : omets le champ.
+               Si decalage CT suspect : [INCERTAIN: decalage CT suspect] et omets la valeur.`
+    : `Omis pour toutes les questions — jamais remplir depuis tes connaissances medicales.`}
+- "exp"      : derive de "correct". Omis si "correct" est absent.
+               Template intentionnellement en anglais — ne pas traduire.
+               Remplace <correct> par la valeur exacte du champ "correct".
+- "hint"     : uniquement pour questions d'association. Traduis combinaisons source → lettres A-G.
+               Exemple : si PDF dit "1 et 3" et 1→A, 3→C → ecris "A et C".
+- "tag"      : tableau de 4 elements. Remplace <num> par la valeur du champ "num".
+               ${isResidanat
+                 ? 'Pour Résidanat : remplace <subcategoryName> par la valeur reelle de "subcategoryName".'
+                 : 'Pour Externat : utilise periode et annee fournies dans le contexte.'}
+- "f", "g"   : omis si aucune question d'association dans l'examen.
+- "hint"     : omis si aucune question d'association dans l'examen.
+- "subcategoryName" : omis si examen non mappe (pas de subcategories definies).
 
-5. EXP
-   - Cette colonne est derivee automatiquement de la colonne Correct.
-   - Si Correct contient une reponse (ex: "BD"), Exp doit contenir exactement : "Based on official course support (official pdf course) the right answer is "BD" please generate explanation based on those right answers (propositions)"
-   - Si Correct est vide, Exp doit egalement etre vide.
-   - Ne jamais remplir Exp manuellement ou depuis tes connaissances medicales.
-   - Cette colonne sera supprimee automatiquement si toutes les lignes ont Correct vide.
-
-6. HINT
-   - Utilise uniquement pour les questions d'association.
-   - Traduis chaque combinaison de marqueurs source vers les lettres majuscules correspondantes (A, B, C, D, E, F, G).
-   - Exemple : si le PDF dit "1 et 3" et que 1->A, 3->C, ecris "A et C" dans Hint.
-   - Pour les questions normales (non association), laisse cette cellule vide.
-   - Cette colonne sera supprimee automatiquement si aucune question n'est une question d'association.
-
-7. CATEGORYNAME
-   - Contient toujours le nom du module : ${moduleName}
-   - Cette valeur est derivee du contexte de l'examen, ne la modifie pas.
-
-8. TAGSUGGERE
-   - Laisse cette colonne vide pour toutes les questions.
-   - Cette colonne sera supprimee automatiquement car elle est reservee pour un usage futur.
-
-9. SUBCATEGORYNAME
-   - Contient le nom de la sous-categorie si la question fait partie d'un examen mappe (Unit 1-5 ou Résidanat).
-   - Determine la sous-categorie en utilisant la plage de questions fournie dans le contexte.
-   - Exemple : si la question No. 15 et que la sous-categorie "Anatomie" couvre les questions 1-20, alors subcategoryName = "Anatomie".
-   - Si aucune sous-categorie ne correspond au numero de la question, laisse cette cellule vide.
-   - Pour les examens normaux (non mappe), laisse cette cellule vide et elle sera supprimee automatiquement.
-
-10. YEAR
-   - Contient toujours l'annee de l'examen : ${year}
-   - Cette valeur est derivee du contexte de l'examen, ne la modifie pas.
-
-11. TAG
-   - Tableau JSON contenant exactement 4 tags dans cet ordre :
-     1. "${examType} ${data.wilaya || '[Wilaya]'}"
-     2. ${isResidanat 
-       ? '"<subcategoryName> <Year>" (ex: "Biologie 2023")' 
-       : '"<Period> <Year>" (ex: "P1 2026")'}
-     3. "No. <Num>" (ex: "No. 2")
-     4. ${data.hasCT ? '"Corrigé type"' : '"Corrigé proposé"'}
-   - Format exact : ${isResidanat
-     ? `["${examType} ${data.wilaya || '[Wilaya]'}", "<subcategoryName> ${year}", "No. X", "${data.hasCT ? 'Corrigé type' : 'Corrigé proposé'}"]`
-     : `["${examType} ${data.wilaya || '[Wilaya]'}", "${period} ${year}", "No. X", "${data.hasCT ? 'Corrigé type' : 'Corrigé proposé'}"]`}
-   - Remplace X par le numero de la question (colonne Num).
-   - ${isResidanat 
-     ? 'Pour Résidanat, remplace <subcategoryName> par la valeur de subcategoryName de cette question.'
-     : "Pour Externat, utilise la periode et l'annee fournies dans le contexte."}
-
-═══════════════════════════════════════════
-REGLES DE LECTURE SPATIALE ET LAYOUT
-═══════════════════════════════════════════
 ${data.isTwoColumn ? `
 EXAMEN DEUX COLONNES — REGLES STRICTES
-- Lis integralement la colonne gauche du haut vers le bas avant de commencer la colonne droite.
+- Lis integralement la colonne gauche du haut vers le bas AVANT de commencer la colonne droite.
 - Ne melange jamais une ligne de la colonne gauche avec une ligne de la colonne droite.
-- Si une question semble continuer d'une colonne vers l'autre (rare), applique [INCERTAIN: continuite inter-colonnes ?] dans Text.
-- L'ordre numerique des questions doit etre coherent avec la lecture visuelle colonne-par-colonne. Si ce n'est pas le cas, signale l'anomalie avec [INCERTAIN: ordre inter-colonnes suspect].
-- Verifie que chaque question de la colonne droite ne fait pas partie d'un cas clinique initie dans la colonne gauche avant de laisser Cas vide.
+- Si une question semble continuer d'une colonne vers l'autre : [INCERTAIN: continuite inter-colonnes ?] dans "text".
+- Si l'ordre numerique est incohérent avec la lecture visuelle : [INCERTAIN: ordre inter-colonnes suspect] dans "text".
+- Verifie que chaque question de la colonne droite ne fait pas partie d'un cas clinique initie dans la colonne gauche.
 ` : `
 EXAMEN COLONNE UNIQUE
 - Lecture strictement de haut en bas.
-- Si une question semble physiquement coupee par un saut de page, reconstitue-la en une seule ligne TSV.
+- Si une question est physiquement coupee par un saut de page : reconstitue-la en un seul objet.
 `}
-- Ne fusionne jamais deux questions distinctes dans une seule ligne TSV.
-- Ne coupe jamais une question en plusieurs lignes TSV.
-- Si le numero d'une question semble sauter (ex : No. 12 puis No. 14), c'est probablement une question manquante declaree. Verifie les questions declarees manquantes dans le contexte et ne cree pas de ligne de remplacement.
+- Ne fusionne jamais deux questions distinctes dans un seul objet.
+- Ne coupe jamais une question en plusieurs objets.
+- Si le numero saute : verifie les questions declarees manquantes. Ne cree pas d'objet de remplacement.
 
-═══════════════════════════════════════════
-AUTO-VERIFICATION AVANT SORTIE
-═══════════════════════════════════════════
-Avant d'ecrire le bloc TSV, effectue mentalement ces verifications :
-1. Nombre de lignes (hors en-tete) = nombre de questions declarees - questions manquantes declarees.
-   Si different, verifie si tu as oublie une question ou fusionne deux questions.
-2. Aucune cellule Correct ne contient une deduction medicale personnelle.
-3. Chaque [INCERTAIN] contient une reconstruction plausible, pas du bruit brut.
-4. Aucun [SWAP] n'est present en dehors de la colonne Correct.
-5. Aucun texte libre n'est present en dehors du bloc TSV.
-6. Les colonnes derivees sont correctement remplies :
-   - Num contient le numero de la question
-   - categoryName contient le module : ${moduleName}
-   - Year contient l'annee : ${year}
-   - Exp est vide si Correct est vide, sinon contient le template avec la reponse
-   - subcategoryName est rempli uniquement pour les examens mappe (Unit 1-5 ou Résidanat)
-   - Tag contient exactement 4 elements dans le bon ordre
-7. Les colonnes conditionnelles sont correctement gerees :
-   - F et G sont presentes uniquement si utilisees par des questions d'association
-   - Hint est present uniquement si des questions d'association existent
-   - tagSuggere est vide et sera supprime
-8. Aucune proposition n'a ete deplacee d'une colonne vers une autre.
-9. Aucun symbole, chiffre ou notation n'a ete substitue ou normalise silencieusement.
-${data.isTwoColumn ? "10. L'ordre des questions respecte la lecture colonne-gauche-puis-colonne-droite." : ""}
-11. Apres avoir genere toutes les lignes, retire toute colonne vide pour toutes les lignes.
+──────────────────────────────────────────────────────
+STRUCTURE DE "audit"  (rapport complet pour le second modele)
+──────────────────────────────────────────────────────
+L'objet "audit" est obligatoire meme si tout est propre (les tableaux seront alors vides).
 
-═══════════════════════════════════════════
-SORTIE FINALE OBLIGATOIRE
-═══════════════════════════════════════════
-- Un seul bloc \`\`\`tsv ... \`\`\`
-- Tableau TSV uniquement, aucun rapport, aucune liste, aucun commentaire
-- Le second modele traitera tous les marqueurs [INCERTAIN] et [SWAP].`;
+{
+  "summary": {
+    "totalQuestions"    : <entier>,
+    "uncertainCount"    : <entier — nombre d'incertitudes loggees>,
+    "swapCount"         : <entier — nombre de marqueurs [SWAP] poses>,
+    "cleaningCount"     : <entier — nombre de nettoyages effectues>,
+    "criticalRiskCount" : <entier>,
+    "highRiskCount"     : <entier>,
+    "mediumRiskCount"   : <entier>,
+    "lowRiskCount"      : <entier>
+  },
+  "uncertainties" : [ /* voir schema ci-dessous */ ],
+  "cleanings"     : [ /* voir schema ci-dessous */ ]
 }
+
+━━━━ "uncertainties" — un objet par incertitude de lecture ou [SWAP] pose ━━━━
+
+{
+  "qNum"         : <entier — numero de la question>,
+  "field"        : "<nom du champ JSON concerne : text | a | b | c | d | e | f | g | correct | hint>",
+  "type"         : "INCERTAIN" ou "SWAP",
+  "description"  : "description courte de ce qui est incertain ou suspect",
+  "reconstructed": "contenu exact reconstruit dans le champ JSON",
+  "riskScore"    : <entier 1-100>,
+  "riskLevel"    : "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
+  "riskReason"   : "explication courte du score : pourquoi ce niveau de risque ?"
+}
+
+Grille de riskScore pour "uncertainties" :
+  CRITICAL (75-100) : chiffre medical critique (dosage, seuil, valeur biologique, unite),
+                      reponse CT illisible ou decalage CT suspect, cas clinique corrompu,
+                      proposition entierement illisible ou irreconstituable.
+  HIGH     (50-74)  : symbole medical ambigu (α/β/μ/→/↑/↓), chiffre partiellement lisible,
+                      texte de question partiellement reconstruit sur >3 mots,
+                      [SWAP] d'ordre d'options suspect.
+  MEDIUM   (25-49)  : mot medical incertain (coquille possible), coupure de mot reconstruite
+                      sur un terme medical complexe, ponctuation ou expression ambigue.
+  LOW      (1-24)   : element non medical incertain, correction cosmetique mineure.
+
+━━━━ "cleanings" — un objet par modification autorisee effectuee ━━━━
+
+{
+  "qNum"        : <entier ou null si correction globale>,
+  "field"       : "<nom du champ JSON modifie>",
+  "cleaningType": "CASE_FIX" | "SPACE_FIX" | "HYPHEN_FIX" | "PREFIX_REMOVED" | "SYMBOL_ENCODING_FIX" | "OTHER_AUTHORIZED",
+  "before"      : "texte original tel qu'extrait du PDF avant correction",
+  "after"       : "texte apres correction",
+  "ruleApplied" : "citation exacte et courte de la regle du prompt qui autorise ce nettoyage",
+  "riskScore"   : <entier 1-100>,
+  "riskLevel"   : "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
+  "riskReason"  : "explication si riskLevel > LOW : pourquoi cette correction pourrait etre contestee"
+}
+
+Grille de riskScore pour "cleanings" :
+  CRITICAL (75-100) : correction qui modifie un chiffre, un symbole, une unite medicale,
+                      ou qui change potentiellement le sens d'une phrase.
+  HIGH     (50-74)  : HYPHEN_FIX ou OCR_FIX sur un terme medical complexe (risque d'erreur de reconstruction),
+                      SYMBOL_ENCODING_FIX sur un caractere ambigu.
+  MEDIUM   (25-49)  : CASE_FIX sur un terme potentiellement technique (sigle, acronyme, nom propre),
+                      OCR_FIX sur un mot dont la correction medicale reste incertaine.
+  LOW      (1-24)   : SPACE_FIX ou CASE_FIX sur du texte clairement non ambigu,
+                      PREFIX_REMOVED (prefixe de question supprime — sans ambiguite),
+                      NOISE_REMOVED (bruit visuel supprime — aucun impact sur le contenu medical),
+                      OCR_FIX sur un mot generique sans valeur medicale.
+
+Types de cleaningType autorises :
+  CASE_FIX            → casse initiale corrigee (minuscule → majuscule en debut de phrase/proposition)
+  SPACE_FIX           → espace double ou manquant autour de la ponctuation corrige
+  HYPHEN_FIX          → coupure de mot due au rendu PDF reconstituee (ex: "hyper- tension" → "hypertension")
+  OCR_FIX             → erreur de lecture OCR evidente corrigee sans modification du sens medical (ex: "vore" → "voie")
+  NOISE_REMOVED       → texte parasite supprime (numero de page, en-tete, marqueur OCR, annotation etudiant)
+  PREFIX_REMOVED      → prefixe de question supprime ("1.", "Q1.", "1)", "1-", etc.)
+  SYMBOL_ENCODING_FIX → caractere corrompu PDF remplace par le symbole correct
+  OTHER_AUTHORIZED    → autre correction explicitement autorisee par une regle du prompt
+
+IMPORTANT : Ne documente PAS les remplissages de champs derives (categoryName, year, tag, exp,
+subcategoryName). Ces valeurs sont des derivations du contexte, pas des nettoyages du PDF.
+Ne documente PAS les absences normales de champs optionnels.
+
+══════════════════════════════════════════════════════
+AUTO-VERIFICATION AVANT SORTIE
+══════════════════════════════════════════════════════
+Avant d'ecrire le JSON, verifie mentalement :
+1. Nombre d'objets dans "questions" = ${data.nQst || "?"} declares - questions manquantes declarees.
+   Si different : verifie si tu as oublie une question ou fusionne deux questions.
+2. Aucun champ "correct" ne contient une deduction medicale personnelle.
+3. Chaque incertitude loggee contient une reconstruction plausible, pas du bruit OCR brut.
+4. Chaque [SWAP] est dans "correct" (ou "hint" / fin de "text" si correct absent).
+5. Chaque objet dans "audit.cleanings" reference une regle exacte du prompt dans "ruleApplied".
+6. Chaque marqueur [SWAP] ou doute de lecture a une entree correspondante dans "audit.uncertainties".
+7. Les riskScore sont coherents avec la grille ci-dessus.
+8. "audit.summary" reflette exactement les comptages reels.
+9. Aucune proposition n'a ete deplacee d'un champ vers un autre.
+10. Aucun symbole, chiffre ou unite n'a ete substitue ou normalise silencieusement.
+11. Chaque champ "tag" contient exactement 4 elements dans le bon ordre.
+12. Chaque champ "exp" contient le template anglais exact avec la valeur "correct" interpolee.
+${data.isTwoColumn ? "13. L'ordre des questions respecte la lecture colonne-gauche-puis-colonne-droite." : ""}
+
+══════════════════════════════════════════════════════
+SORTIE FINALE OBLIGATOIRE
+══════════════════════════════════════════════════════
+- Un seul bloc \`\`\`json ... \`\`\`
+- L'objet JSON contient exactement deux cles de premier niveau : "questions" et "audit"
+- Aucun texte, titre, commentaire ni rapport en dehors du bloc JSON
+- Le second modele lira ce JSON avec le PDF pour produire son rapport de verification`;
+}
+
+// ─── Export ───────────────────────────────────────────────────────────────────
+if (typeof module !== "undefined") module.exports = { generateDigitizePrompt };
+if (typeof window !== "undefined") window.generateDigitizePrompt = generateDigitizePrompt;

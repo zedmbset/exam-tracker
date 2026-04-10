@@ -1,356 +1,747 @@
 ﻿// ─────────────────────────────────────────────────────────────────────────────
-// STEP 1 — Review report prompt
-// Call this first. The model returns a structured issue report, no TSV.
+//  doubleCheckPrompt.js  —  Comparaison deux JSON + TSV final
+//
+//  NOUVELLE APPROCHE :
+//    - Le meme prompt de digitisation est envoye a DEUX modeles independants.
+//    - Chaque modele produit son propre JSON (json1 et json2).
+//    - Un TROISIEME modele recoit les deux JSON et compare les divergences
+//      question par question, sans avoir besoin du PDF.
+//    - Le rapport liste les divergences avec JSON1, JSON2, JSONF et Member Validation.
+//    - Step 2 : le troisieme modele applique les decisions du membre et produit le TSV final.
+//
+//  Exports :
+//    generateDoubleCheckPrompt(data, json1, json2)                      → rapport (Step 1)
+//    generateDoubleCheckStep2Prompt(data, json1, json2, reviewReport)   → TSV final (Step 2)
 // ─────────────────────────────────────────────────────────────────────────────
-function buildDoubleCheckStep1Prompt(data, tsvData) {
-  const lang         = data.lang        || "Francais";
-  const moduleName   = data.module      || "-";
-  const wilaya       = data.wilaya      || "-";
-  const year         = data.year        || "-";
-  const level        = data.level       || "-";
-  const period       = data.period      || "-";
-  const rotation     = data.rotation    || "-";
-  const nQst         = data.nQst        || "?";
-  const missingPos   = Array.isArray(data.missingPos)  ? data.missingPos  : [];
-  const schemaQsts   = Array.isArray(data.schemaQsts)  ? data.schemaQsts  : [];
-  const subcategories = Array.isArray(data.subcategories) ? data.subcategories : [];
-  const expectedRows = typeof nQst === "number" ? nQst - missingPos.length : "?";
-  const missingSummary = missingPos.length > 0  ? missingPos.join(", ")  : "aucune";
-  const schemaSummary  = schemaQsts.length > 0  ? schemaQsts.join(", ")  : "aucune";
-  const subcategoryNote = subcategories.length > 0
-    ? subcategories.map(sc => `${sc.name}: questions ${sc.range}`).join(", ")
-    : "aucune";
-  const levelValue = String(level || "").trim();
-  const moduleValue = String(moduleName || "").trim().toLowerCase();
-  const isResidanat = levelValue === "7" || moduleValue === "résidanat";
-  const examType = isResidanat ? "Résidanat" : "Externat";
-  const twoColNote     = data.isTwoColumn
-    ? "OUI — verifier l'ordre inter-colonnes explicitement"
-    : "NON";
 
-  return `Tu es le second modele auditeur pour un projet de numerisation d'examens medicaux algeriens.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAXONOMY — Source unique de verite pour tous les types de divergences.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TAXONOMY = {
+
+  // ── SECTION A : DIVERGENCES TEXTUELLES ────────────────────────────────────
+  A: [
+    {
+      code: "SPELL",
+      mode: "INLINE",
+      description: "Mot mal orthographie ou coquille — divergence entre JSON1 et JSON2.",
+      qualifies: [
+        "JSON1 dit 'protozoaite', JSON2 dit 'protozoaire' → JSONF = protozoaire",
+        "JSON1 dit 'Fluconasole', JSON2 dit 'Fluconazole' → JSONF = Fluconazole",
+      ],
+      never: [
+        "Ne signaler que si les deux JSON divergent sur ce mot.",
+        "Ne jamais corriger si les deux JSON ont la meme valeur, meme incorrecte.",
+      ],
+      howToReport:
+        "REGLE DE MISE EN EVIDENCE OBLIGATOIRE : entourer le mot divergent de crochets [] dans JSON1, JSON2 ET JSONF.\n" +
+        "JSON1  : '...Les antigenes sont [reconnues] seulement par les [HCR]'\n" +
+        "JSON2  : '...Les antigenes sont [reconnus] seulement par les [BCR]'\n" +
+        "JSONF  : '...Les antigenes sont [reconnus] seulement par les [BCR]'\n" +
+        "Objectif : le membre repere immediatement le mot corrige sans relire toute la phrase.",
+    },
+    {
+      code: "DIGIT",
+      mode: "INLINE_OR_BLOQUANT",
+      description: "Chiffre ou nombre different entre JSON1 et JSON2.",
+      qualifies: [
+        "JSON1 dit '50%', JSON2 dit '30%'",
+        "JSON1 dit '1.2 millions', JSON2 dit '2,4 millions'",
+      ],
+      never: [
+        "Ne jamais trancher par logique medicale — le membre verifie dans le PDF.",
+      ],
+      modeRule: "INLINE si un des deux est evidemment une coquille OCR. BLOQUANT si les deux sont plausibles.",
+    },
+    {
+      code: "SYMBOL",
+      mode: "INLINE",
+      description: "Caractere grec, symbole ou encodage different entre JSON1 et JSON2.",
+      qualifies: [
+        "JSON1 dit 'b', JSON2 dit 'β' → JSONF = β",
+        "JSON1 dit 'mm3', JSON2 dit 'mm³' → JSONF = mm³",
+      ],
+      never: [
+        "Ne jamais modifier si les deux JSON ont le meme symbole.",
+      ],
+    },
+    {
+      code: "UNIT",
+      mode: "INLINE",
+      description: "Unite de mesure differente entre JSON1 et JSON2.",
+      qualifies: [
+        "JSON1 dit 'mg/dl', JSON2 dit 'mg/dL' → JSONF = mg/dL",
+      ],
+      never: [],
+    },
+    {
+      code: "ACRONYM",
+      mode: "INLINE",
+      description: "Casse d'un sigle differente entre JSON1 et JSON2.",
+      qualifies: [
+        "JSON1 dit 'Dress', JSON2 dit 'DRESS' → JSONF = DRESS",
+      ],
+      never: [],
+    },
+    {
+      code: "PREFIX_NUM",
+      mode: "INLINE",
+      description: "Numero de question present en prefixe dans le champ 'text' d'un seul des deux JSON.",
+      qualifies: [
+        'JSON1.text = "6. Intertrigo a dermatophytes", JSON2.text = "Intertrigo a dermatophytes"',
+      ],
+      never: [],
+    },
+    {
+      code: "PREFIX_PROP",
+      mode: "INLINE",
+      description: "Prefixe de proposition mal forme dans un seul des deux JSON.",
+      qualifies: [
+        'JSON1.b = "(b) Debute de facon...", JSON2.b = "Debute de facon..."',
+      ],
+      never: [
+        "INTERDICTION ABSOLUE : ne jamais signaler une difference de prefixe entre lettre JSON et prefixe PDF.",
+      ],
+    },
+  ],
+
+  // ── SECTION B : DIVERGENCES STRUCTURELLES ─────────────────────────────────
+  B: [
+    {
+      code: "PROP_DIVERGE",
+      mode: "BLOQUANT",
+      description: "Le texte d'une proposition differe entre JSON1 et JSON2.",
+      qualifies: [
+        "JSON1.b = 'Inhibe la voie du complement', JSON2.b = 'Active la voie du complement'",
+        "JSON1.d = 'Texte A', JSON2.d = 'Texte completement different'",
+      ],
+      never: [
+        "INTERDICTION ABSOLUE : ne jamais trancher par logique medicale.",
+        "Ne pas signaler si les deux JSON sont identiques sur ce champ.",
+      ],
+      howToReport:
+        "Reference : [Num].[champ]  ex: 12.d\n" +
+        "JSON1 : texte complet de la proposition dans JSON1\n" +
+        "JSON2 : texte complet de la proposition dans JSON2\n" +
+        "JSONF : ??? (le membre verifie dans le PDF)\n" +
+        "Member Validation : [Here]",
+    },
+    {
+      code: "PROP_ORDER",
+      mode: "BLOQUANT",
+      description: "Les propositions sont dans un ordre different entre JSON1 et JSON2 — meme contenu, positions echangees.",
+      qualifies: [
+        "JSON1: a=X b=Y c=Z, JSON2: a=Y b=X c=Z — le texte de X et Y est echange",
+      ],
+      never: [
+        "Ne pas confondre avec PROP_DIVERGE (texte different).",
+        "PROP_ORDER = meme texte, mauvaise position dans l'un des deux JSON.",
+      ],
+      howToReport:
+        "Reference : [Num].props\n" +
+        "JSON1 : ordre JSON1 — a='debut...' b='debut...' c='debut...' d='debut...' e='debut...'\n" +
+        "JSON2 : ordre JSON2 — a='debut...' b='debut...' c='debut...' d='debut...' e='debut...'\n" +
+        "JSONF : ??? (le membre verifie l'ordre dans le PDF)\n" +
+        "Member Validation : [Here]",
+    },
+    {
+      code: "PROP_SWAP",
+      mode: "BLOQUANT",
+      description: "Deux propositions ont le meme contenu mais echange de position entre JSON1 et JSON2.",
+      qualifies: [
+        "JSON1: d='Stimulateur IgE' e='Assure IFN-α', JSON2: d='Assure IFN-α' e='Stimulateur IgE' — textes identiques, positions echangees.",
+      ],
+      never: [
+        "Ne pas confondre avec PROP_DIVERGE (texte different).",
+        "Ne pas confondre avec PROP_ORDER (plus de deux propositions concernees ou ordre global different).",
+        "Si plus de deux propositions sont impliquees ou si elles ne sont pas consecutives → utiliser QCM_SHIFT.",
+      ],
+      howToReport:
+        "Reference : [Num].[champ1]-[champ2]  ex: 7.d-e\n" +
+        "JSON1 : [champ1]='texte complet' [champ2]='texte complet'\n" +
+        "JSON2 : [champ1]='texte complet' [champ2]='texte complet'\n" +
+        "JSONF : [champ1]=[valeur correcte attendue] / [champ2]=[valeur correcte attendue] (le membre verifie dans le PDF)\n" +
+        "Member Validation : [Here]",
+    },
+    {
+      code: "QCM_SHIFT",
+      mode: "BLOQUANT",
+      description: "Le QCM entier (text + plusieurs ou toutes les propositions) differe entre JSON1 et JSON2 — decalage structurel majeur.",
+      qualifies: [
+        "JSON1.text contient les options en titre, JSON2.text contient l'enonce correct — le modele a capture la mauvaise zone du PDF.",
+        "JSON1 et JSON2 ont des enonces et des propositions completement differents pour la meme question.",
+        "Plusieurs propositions (3+) ont toutes des divergences de contenu pour la meme question.",
+      ],
+      never: [
+        "Ne pas signaler champ par champ si la question entiere est decalee — utiliser une seule ligne QCM_SHIFT.",
+        "Ne pas trancher par logique medicale.",
+      ],
+      howToReport:
+        "Reference : [Num].QCM\n" +
+        "Type : QCM_SHIFT | [autres codes si applicable, ex: FIELD_MISSING]\n" +
+        "JSON1 : reconstruction complete du QCM depuis JSON1 (text + a + b + c + d + e)\n" +
+        "JSON2 : reconstruction complete du QCM depuis JSON2 (text + a + b + c + d + e)\n" +
+        "JSONF : reconstruction ligne par ligne, ??? sur chaque champ divergent :\n" +
+        "  Text: ???\n" +
+        "  A: ???\n" +
+        "  B: ???\n" +
+        "  C: ???\n" +
+        "  D: ???\n" +
+        "  E: ???\n" +
+        "(le membre remplace chaque ??? par la valeur correcte apres verification dans le PDF)\n" +
+        "Member Validation : [Here]\n" +
+        "Full Phrase : liste toutes les raisons individuelles separees par ' + '",
+    },
+    {
+      code: "PROP_TRUNCATED",
+      mode: "BLOQUANT",
+      description: "Une proposition est presente dans les deux JSON mais tronquee (coupee en cours de phrase) dans l'un d'eux.",
+      qualifies: [
+        "JSON1.b = 'Le lipopolysaccharide (LPS) des bacteries Gram', JSON2.b = 'Le lipopolysaccharide (LPS) des bacteries Gram negatif' — JSON1 est tronque.",
+        "JSON1.a = 'Est declenchee par la fixation d IgM ou IgG sur un', JSON2.a = 'Est declenchee par la fixation d IgM ou IgG sur un antigene'",
+      ],
+      never: [
+        "Ne pas confondre avec PROP_DIVERGE (contenu completement different).",
+        "Ne pas corriger par deduction — le membre verifie le texte complet dans le PDF.",
+      ],
+      howToReport:
+        "Reference : [Num].[champ]  ex: 12.b\n" +
+        "JSON1 : texte tronque depuis JSON1\n" +
+        "JSON2 : texte complet depuis JSON2\n" +
+        "JSONF : ??? (le membre verifie le texte complet dans le PDF)\n" +
+        "Member Validation : [Here]",
+    },
+    {
+      code: "CT_DIVERGE",
+      mode: "BLOQUANT",
+      description: "Valeur du champ 'correct' differente entre JSON1 et JSON2.",
+      qualifies: [
+        "JSON1.correct = 'ACD', JSON2.correct = 'ABC'",
+        "JSON1 a un champ 'correct', JSON2 ne l'a pas",
+      ],
+      never: [
+        "Ne jamais trancher par logique medicale.",
+      ],
+    },
+    {
+      code: "CT_DRIFT",
+      mode: "BLOQUANT",
+      description: "Reponse CT decalee : dans un JSON la reponse d'une question est assignee a une autre.",
+      qualifies: [
+        "JSON1: Q5=ACD Q6=B, JSON2: Q5=B Q6=ACD",
+      ],
+      never: [
+        "Ne corriger sans confirmation du membre.",
+      ],
+    },
+    {
+      code: "CT_SPACING",
+      mode: "INLINE",
+      description: "Espacement interne d'une valeur CT different entre les deux JSON.",
+      qualifies: [
+        "JSON1.correct = 'BC E', JSON2.correct = 'BCE' → JSONF = BCE",
+      ],
+      never: [
+        "Ne jamais introduire un espace dans une valeur CT.",
+      ],
+    },
+    {
+      code: "HINT_DIVERGE",
+      mode: "INLINE_OR_BLOQUANT",
+      description: "Valeur du champ 'hint' differente entre JSON1 et JSON2.",
+      qualifies: [
+        'JSON1.hint = "A et B", JSON2.hint = "I et II"',
+      ],
+      never: [],
+      modeRule: "INLINE si un des deux est evidemment incorrect. BLOQUANT si les deux sont plausibles.",
+    },
+    {
+      code: "SWAP_DIVERGE",
+      mode: "BLOQUANT",
+      description: "Un modele a pose un marqueur [SWAP] sur une question, l'autre non.",
+      qualifies: [
+        "JSON1.correct = '[SWAP: ordre suspect D-A-C-B-E]', JSON2.correct = 'ACD'",
+      ],
+      never: [
+        "Ne pas signaler si les deux JSON ont le meme marqueur [SWAP].",
+      ],
+    },
+    {
+      code: "CAS_DIVERGE",
+      mode: "BLOQUANT",
+      description: "Champ 'cas' present dans un JSON mais absent dans l'autre, ou texte different.",
+      qualifies: [
+        "JSON1 a 'cas' renseigne pour Q12, JSON2 ne l'a pas.",
+      ],
+      never: [],
+    },
+    {
+      code: "ROW_COUNT",
+      mode: "BLOQUANT",
+      description: "Nombre d'objets 'questions' different entre les deux JSON ou different du nombre attendu.",
+      qualifies: [
+        "JSON1 a 20 questions, JSON2 en a 19.",
+      ],
+      never: [
+        "Ne pas signaler si l'ecart est explique par les questions declarees manquantes.",
+      ],
+    },
+    {
+      code: "FIELD_MISSING",
+      mode: "BLOQUANT",
+      description: "Un champ obligatoire present dans un JSON est absent dans l'autre.",
+      qualifies: [
+        "JSON1 a le champ 'e' pour Q7, JSON2 ne l'a pas.",
+        "JSON1 a 'correct' pour Q3, JSON2 n'a pas ce champ.",
+      ],
+      never: [
+        "Ne pas signaler les champs derives (categoryName, year, tag, exp) — derivations du contexte.",
+      ],
+    },
+    {
+      code: "AUDIT_ONLY",
+      mode: "INLINE",
+      description: "Incertitude CRITICAL ou HIGH presente dans audit d'un seul JSON — information pour le membre.",
+      qualifies: [
+        "JSON1.audit.uncertainties a un riskLevel CRITICAL sur Q5.b, JSON2 ne l'a pas logge.",
+      ],
+      never: [
+        "Ne pas signaler les entrees identiques dans les deux audits.",
+        "Ne pas signaler les entrees LOW ou MEDIUM sauf si elles concernent le champ 'correct'.",
+      ],
+    },
+  ],
+
+  silentFix: [
+    "Espacement avant ponctuation double — typographie francaise valide.",
+    "Presence ou absence d'un deux-points final dans un intitule — cosmetique.",
+    "Casse initiale d'une proposition — cosmetique.",
+    "Double espace ou coupure de mot — cosmetique.",
+    "Valeurs de champs derives (categoryName, year, tag, exp, subcategoryName) — jamais a auditer.",
+    "Differences mineures dans le champ 'exp' — champ derive, ignorer.",
+  ],
+};
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPER — Injecte la taxonomie en texte dans le prompt.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function injectTaxonomy() {
+  const lines = [];
+  lines.push("═══════════════════════════════════════════");
+  lines.push("TAXONOMIE DES DIVERGENCES REPORTABLES");
+  lines.push("═══════════════════════════════════════════");
+  lines.push("REGLE FONDAMENTALE : Tu ne peux signaler que des divergences dont le type");
+  lines.push("correspond exactement a un code de cette taxonomie.");
+  lines.push("Si une observation ne correspond a aucun code → SILENT FIX ou ignorer.");
+  lines.push("");
+
+  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  lines.push("SECTION A — DIVERGENCES TEXTUELLES");
+  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  for (const entry of TAXONOMY.A) {
+    lines.push(`[${entry.code}] — mode: ${entry.mode} — ${entry.description}`);
+    lines.push("  Qualifie :");
+    for (const q of entry.qualifies) lines.push(`    • ${q}`);
+    if (entry.modeRule) lines.push(`  Regle de mode : ${entry.modeRule}`);
+    if (entry.howToReport) lines.push(`  Comment reporter : ${entry.howToReport}`);
+    lines.push("  Ne jamais signaler :");
+    for (const n of entry.never) lines.push(`    ✗ ${n}`);
+    lines.push("");
+  }
+
+  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  lines.push("SECTION B — DIVERGENCES STRUCTURELLES");
+  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  for (const entry of TAXONOMY.B) {
+    lines.push(`[${entry.code}] — mode: ${entry.mode} — ${entry.description}`);
+    lines.push("  Qualifie :");
+    for (const q of entry.qualifies) lines.push(`    • ${q}`);
+    if (entry.modeRule) lines.push(`  Regle de mode : ${entry.modeRule}`);
+    if (entry.howToReport) {
+      lines.push("  Comment reporter :");
+      for (const l of entry.howToReport.split("\n")) lines.push(`    ${l}`);
+    }
+    if (entry.never.length > 0) {
+      lines.push("  Ne jamais signaler :");
+      for (const n of entry.never) lines.push(`    ✗ ${n}`);
+    }
+    lines.push("");
+  }
+
+  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  lines.push("SILENT FIX — Ne jamais inclure dans le rapport");
+  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  for (const s of TAXONOMY.silentFix) lines.push(`  ✗ ${s}`);
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 1 — Rapport de comparaison JSON1 vs JSON2
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildDoubleCheckPrompt(data, json1, json2) {
+  const lang           = data.lang        || "Francais";
+  const moduleName     = data.module      || "-";
+  const wilaya         = data.wilaya      || "-";
+  const year           = data.year        || "-";
+  const nQst           = data.nQst        || "?";
+  const missingPos     = Array.isArray(data.missingPos)    ? data.missingPos    : [];
+  const schemaQsts     = Array.isArray(data.schemaQsts)    ? data.schemaQsts    : [];
+  const expectedRows   = typeof nQst === "number" ? nQst - missingPos.length : "?";
+  const missingSummary = missingPos.length > 0 ? missingPos.join(", ") : "aucune";
+  const schemaSummary  = schemaQsts.length > 0 ? schemaQsts.join(", ") : "aucune";
+  const twoColNote     = data.isTwoColumn ? "OUI" : "NON";
+
+  return `Tu es le troisieme modele arbitre pour un projet de numerisation d'examens medicaux algeriens.
+
+⛔⛔⛔ REGLES ABSOLUES — LIRE AVANT TOUT ⛔⛔⛔
+CETTE ETAPE = RAPPORT DE COMPARAISON UNIQUEMENT.
+- INTERDICTION TOTALE de produire un TSV dans cette etape.
+- INTERDICTION TOTALE d'ecrire VALIDATION PASSED ou VALIDATION FAILED.
+- INTERDICTION TOTALE de trancher par logique medicale.
+- Ton unique livrable est le bloc \`\`\`text\`\`\` du rapport de comparaison.
+- Termine ta reponse apres la ligne "INSTRUCTION MEMBRE". Rien d'autre apres.
+⛔⛔⛔ FIN DES REGLES ABSOLUES ⛔⛔⛔
 
 Tu recois :
-1. le PDF original de l'examen
-2. le TSV produit par le premier modele
+1. JSON1 — produit par le premier modele de digitisation (ci-dessous)
+2. JSON2 — produit par le second modele de digitisation independant (ci-dessous)
 
-Ta mission dans cette etape est de produire UNIQUEMENT un rapport de revue structure et compact.
-Tu ne dois produire AUCUN TSV final dans cette etape.
-Tu ne dois pas emettre de verdict VALIDATION PASSED ou VALIDATION FAILED dans cette etape.
+Tu NE recois PAS le PDF. Tu travailles exclusivement depuis les deux JSON.
+Ta mission : identifier toutes les divergences entre JSON1 et JSON2, les classer,
+et produire un rapport structure pour que le membre tranche en consultant le PDF.
 
-═══════════════════════════════════════════
+══════════════════════════════════════════════════════
 CONTEXTE DE L'EXAMEN
-═══════════════════════════════════════════
-- Langue              : ${lang}
-- Module              : ${moduleName}
-- Wilaya              : ${wilaya}
-- Annee               : ${year}
-- Nombre de QCMs declares  : ${nQst}
-- Nombre de lignes attendues : ${expectedRows}
-- Corrige Type present : ${data.hasCT ? "OUI" : "NON"}
-- Cas cliniques presents : ${data.hasCas ? "OUI" : "NON"}
-- Questions d'association : ${data.hasComb ? "OUI" : "NON"}
+══════════════════════════════════════════════════════
+- Langue                         : ${lang}
+- Module                         : ${moduleName}
+- Wilaya                         : ${wilaya}
+- Annee                          : ${year}
+- Nombre de QCMs declares        : ${nQst}
+- Nombre d'objets attendus       : ${expectedRows}
+- Corrige Type present           : ${data.hasCT  ? "OUI" : "NON"}
+- Cas cliniques presents         : ${data.hasCas  ? "OUI" : "NON"}
+- Questions d'association        : ${data.hasComb ? "OUI" : "NON"}
 - Questions declarees manquantes : ${missingSummary}
-- Questions avec schema/image : ${schemaSummary}
-- Examen deux colonnes : ${twoColNote}
+- Questions avec schema/image    : ${schemaSummary}
+- Examen deux colonnes           : ${twoColNote}
 
-TSV A AUDITER
-${tsvData}
+JSON1 — PREMIER MODELE DE DIGITISATION
+${json1}
 
-═══════════════════════════════════════════
-COMPORTEMENT GENERAL — SILENT FIX VS REPORT
-═══════════════════════════════════════════
-Tu as trois modes d'action possibles pour chaque probleme detecte :
+JSON2 — SECOND MODELE DE DIGITISATION
+${json2}
 
-SILENT FIX (ne pas lister dans le rapport)
-- Problemes purement cosmetiques dont tu es certain a 100% :
-  casse initiale, espace double, coupure de mot PDF evidente.
-- Ces corrections seront appliquees silencieusement en etape 2.
-- N'encombre pas le rapport avec eux.
+${injectTaxonomy()}
 
-DECISION INLINE (lister dans le rapport avec ta decision deja remplie)
-- Marqueurs [INCERTAIN] que tu peux resoudre avec certitude en comparant au PDF.
-- Marqueurs [SWAP] que tu peux confirmer ou infirmer avec certitude.
-- Erreurs detectees (symbole, chiffre, proposition) dont la correction est evidente depuis le PDF.
-- Pour ces cas : remplis toi-meme la colonne "Decision membre" avec ta correction. Le membre n'a qu'a valider ou modifier.
+══════════════════════════════════════════════════════
+PROCEDURE DE COMPARAISON
+══════════════════════════════════════════════════════
 
-BLOQUANT (lister dans le rapport, decision membre obligatoire)
-- Tout ce que tu ne peux pas resoudre seul avec certitude depuis le PDF.
-- Toute suspicion de swap confirme, proposition deplacee, decalage CT.
-- Tout [INCERTAIN] pour lequel deux reconstructions sont egalement plausibles.
-- Ces lignes ont la colonne "Decision membre" vide. Le membre DOIT remplir.
+ETAPE 1 — COMPTAGE
+  Compare le nombre d'objets dans JSON1.questions et JSON2.questions.
+  Si different entre eux ou different de ${expectedRows} : signale ROW_COUNT (BLOQUANT).
 
-═══════════════════════════════════════════
-FAMILLES D'ERREURS A SURVEILLER EN PRIORITE
-═══════════════════════════════════════════
-Ces familles d'erreurs sont les plus frequentes et les plus dangereuses. Verifie-les systematiquement.
+ETAPE 2 — COMPARAISON QUESTION PAR QUESTION
+  Pour chaque question (en te basant sur le champ "num") :
+    Compare les champs : text | a | b | c | d | e | f | g | correct | hint | cas
+    → Si identiques ou cosmetiquement equivalents : OK, ne rien signaler.
+    → Si divergents : une ligne dans le tableau avec le code adequat.
 
-1. PROPOSITIONS DEPLACEES OU REMPLACEES
-   - Verifie que le texte de chaque proposition (A, B, C, D, E) correspond exactement au PDF.
-   - Verifie qu'aucune proposition n'a ete deplacee d'une colonne vers une autre.
-   - Verifie qu'aucune proposition n'a ete reformulee, tronquee ou inventee.
-   - Si une proposition du TSV ne correspond pas visuellement a la meme position dans le PDF : BLOQUANT.
+  CHAMPS A IGNORER : categoryName, subcategoryName, year, tag, exp (derives — jamais auditer).
 
-2. DRIFT SYMBOLES ET CHIFFRES
-   - Verifie chaque symbole grec : α, β, γ, μ, etc. — un remplacement par une lettre latine est une erreur silencieuse grave.
-   - Verifie chaque valeur numerique : 84 ≠ 85, 0.5 ≠ 5, 120 ≠ 12.
-   - Verifie chaque unite : mg/dL, mmol/L, UI/L, bpm, mmHg.
-   - Si un chiffre ou symbole du TSV differe du PDF meme d'un caractere : DECISION INLINE ou BLOQUANT selon ta certitude.
+ETAPE 3 — AUDIT
+  Compare JSON1.audit.uncertainties et JSON2.audit.uncertainties.
+  Signale AUDIT_ONLY si un riskLevel CRITICAL ou HIGH est dans un seul des deux JSON.
 
-3. DRIFT DE NOTATION (ASSOCIATIONS ET COMBINAISONS)
-   - Verifie que les combinaisons de reponses dans Hint sont notees exactement comme le PDF les exprime apres mapping.
-   - Ex : "A et B" ne devient pas "I et II", "1 et 2" ne devient pas "A, B".
-   - Si une notation de combinaison a change de forme : DECISION INLINE si tu peux corriger depuis le PDF, sinon BLOQUANT.
+ETAPE 4 — CONCORDANCES
+  Compte les questions 100% identiques entre les deux JSON (tous champs confondus).
 
-4. INTEGRITE DU CORRIGE TYPE (CT)
-${data.hasCT
-  ? `   - Verifie que chaque valeur dans la colonne Correct correspond exactement au CT du PDF.
-   - Verifie qu'aucune reponse CT n'a ete deplacee vers une autre question (decalage).
-   - Verifie qu'aucune reponse CT n'a ete deduite ou corrigee par logique medicale.
-   - Si une reponse CT est absente du TSV alors qu'elle est visible dans le PDF : BLOQUANT.
-   - Si le CT semble decale (ex : reponse de Q5 assignee a Q6) : BLOQUANT.
-   INTERDICTIONS ABSOLUES POUR TOI AUSSI :
-   - Ne jamais proposer de corriger le CT par logique medicale.
-   - Ne jamais deplacer une reponse CT d'une question vers une autre.
-   - Ne jamais reecrire les lettres CT parce que l'ordre des options te semble incorrect.
-   - Si le placement d'une reponse CT est douteux, reporter comme BLOQUANT pour decision membre.`
-  : `   - Aucun CT present. Verifie que la colonne Correct est entierement vide dans le TSV.
-   - Si une cellule Correct est renseignee, signale-la comme BLOQUANT.`
-}
+══════════════════════════════════════════════════════
+REGLES DE COMPARAISON
+══════════════════════════════════════════════════════
 
-5. MARQUEURS [INCERTAIN] RESTANTS
-   - Chaque [INCERTAIN: ...] du TSV doit etre traite.
-   - Compare la suggestion du premier modele au PDF original.
-   - Si tu confirmes ou corriges avec certitude : DECISION INLINE (remplis ta correction).
-   - Si le doute reste entier : remplace par [REVIEW: raison] et classe BLOQUANT.
+REGLE 1 — DIVERGENCE = SEUL CRITERE DE SIGNALEMENT
+  → Ne signale une ligne QUE si JSON1 et JSON2 different sur ce champ.
+  → Si les deux JSON ont la meme valeur, ne rien signaler — meme si elle semble incorrecte.
+  ✗ INTERDIT : corriger par logique medicale.
+  ✗ INTERDIT : signaler une valeur partagee par les deux JSON.
 
-6. MARQUEURS [SWAP] RESTANTS
-   - Chaque [SWAP: ...] du TSV doit etre traite.
-   - Relis l'ordre visuel des options dans le PDF.
-   - Si tu confirmes le swap : BLOQUANT, propose l'ordre correct dans "Correction proposee".
-   - Si tu infirmes le swap : DECISION INLINE, confirme que l'ordre imprime est standard.
+REGLE 2 — JSONF
+  SECTION A (textuelles) :
+    → Si un des deux JSON est evidemment correct (ex: β vs b) → JSONF = valeur correcte, INLINE.
+    → Si les deux sont plausibles → JSONF = "???", BLOQUANT.
+  SECTION B (structurelles) :
+    → JSONF = "???" toujours — le membre tranche apres verification dans le PDF.
 
-7. COMPTAGE ET NUMEROTATION
-   - Verifie que le nombre de lignes TSV (hors en-tete) = ${expectedRows}.
-   - Verifie qu'aucune question n'est dupliquee ou fusionnee.
-   - Verifie que les tags ["No. X"] correspondent aux numeros originaux du PDF.
-   - Verifie que les questions declarees manquantes (${missingSummary}) sont bien absentes du TSV.
+REGLE 3 — CHOISIR LE BON CODE POUR LES DIVERGENCES DE PROPOSITIONS
 
-8. QUESTIONS D'ASSOCIATION
-${data.hasComb
-  ? `   - Verifie le format des marqueurs source (numerique ou alphabetique minuscule).
-   - Verifie que le mapping vers les colonnes majuscules A, B, C, D... est correct et complet.
-   - Verifie que la colonne Hint traduit correctement les combinaisons source vers les majuscules.
-   - Ne confonds jamais les propositions source en minuscules (a, b, c) avec les colonnes (A, B, C, D, E).`
-  : `   - Aucune question d'association declaree. Signale si tu en detectes une dans le TSV.`
-}
+  PROP_DIVERGE   : texte completement different dans le meme champ (contenu incompatible).
+  PROP_TRUNCATED : meme contenu mais l'un des deux est coupe en cours de phrase.
+  PROP_SWAP      : exactement deux propositions avec le meme texte mais positions echangees.
+  PROP_ORDER     : meme texte mais ordre global different (plus de 2 props, ou non consecutives).
+  QCM_SHIFT      : text + 3 propositions ou plus divergent toutes → regrouper en une seule ligne.
 
-9. CAS CLINIQUES
-${data.hasCas
-  ? `   - Verifie que le texte du cas clinique est correctement copie dans la colonne Cas.
-   - Verifie que toutes les questions partageant un cas ont bien la colonne Cas renseignee avec le meme texte.
-   - Verifie qu'aucune question independante n'a un cas invente.`
-  : `   - Aucun cas clinique declare. Signale si la colonne Cas est renseignee pour une question.`
-}
+  ARBRE DE DECISION :
+  1. Le champ .text ET plusieurs propositions divergent toutes ? → QCM_SHIFT (une seule ligne [Num].QCM)
+  2. Exactement deux propositions consecutives echangees (meme texte, champs inverses) ? → PROP_SWAP ([Num].[champ1]-[champ2])
+  3. Meme texte, positions multiples ou non consecutives ? → PROP_ORDER ([Num].props)
+  4. Proposition identique mais tronquee dans un JSON ? → PROP_TRUNCATED ([Num].[champ])
+  5. Texte completement different sur un seul champ ? → PROP_DIVERGE ([Num].[champ])
 
-10. IMAGES ET SCHEMAS
-${schemaQsts.length > 0
-  ? `   - Verifie que les questions ${schemaSummary} ont bien la colonne Image renseignee.
-   - Verifie que le nom du fichier image suit le format attendu.`
-  : `   - Aucune image declaree. Signale si la colonne Image est renseignee pour une question.`
-}
+REGLE 4 — GROUPEMENT QCM_SHIFT : QUAND REGROUPER
+  Si une question a son .text divergent ET au moins 3 propositions divergentes → UNE SEULE LIGNE.
+  Reference = [Num].QCM
+  JSONF = reconstruction ligne par ligne avec ??? sur chaque champ divergent :
+    Text: ???
+    A: [valeur JSON2 si JSON1 tronque/decale, sinon ???]
+    B: ???
+    ...
+  Full Phrase = concatenation de toutes les raisons : "Decalage enonce + propositions decalees + champs manquants"
+  ⚠ NE PAS emettre de lignes separees pour chaque champ quand QCM_SHIFT est utilise.
 
-${data.isTwoColumn ? `
-11. LECTURE DEUX COLONNES
-   - Verifie que l'ordre des questions respecte la lecture colonne-gauche-puis-colonne-droite.
-   - Verifie qu'aucune question de la colonne droite n'a ete interposee entre deux questions de la colonne gauche.
-   - Verifie qu'aucun cas clinique initie dans la colonne gauche n'a ete coupe avant d'etre rattache aux questions de la colonne droite.
-   - Si une anomalie d'ordre inter-colonnes est detectee : BLOQUANT.
-` : ""}
+REGLE 5 — PROP_SWAP : FORMAT OBLIGATOIRE
+  Reference = [Num].[champ1]-[champ2]  ex: 7.d-e
+  JSON1 : [champ1]='texte complet D dans JSON1' / [champ2]='texte complet E dans JSON1'
+  JSON2 : [champ1]='texte complet D dans JSON2' / [champ2]='texte complet E dans JSON2'
+  JSONF : [champ1]=??? / [champ2]=???  (le membre verifie l'ordre dans le PDF)
+  ⚠ NE PAS emettre deux lignes PROP_DIVERGE separees quand PROP_SWAP est detecte.
 
-═══════════════════════════════════════════
-FORMAT DU RAPPORT DE REVUE
-═══════════════════════════════════════════
-Retourne un seul bloc \`\`\`text ... \`\`\` contenant :
+REGLE 6 — PROP_ORDER : FORMAT OBLIGATOIRE DE JSON1 ET JSON2
+  JSON1 : a="8 premiers mots..." b="8 premiers mots..." c="..." d="..." e="..."
+  JSON2 : a="8 premiers mots..." b="8 premiers mots..." c="..." d="..." e="..."
+  Cela permet au membre de voir immediatement quel champ est echange.
+
+REGLE 7 — SPELL : MISE EN EVIDENCE PAR CROCHETS
+  Pour toute divergence de type SPELL, entourer le mot divergent de [] dans JSON1, JSON2 ET JSONF.
+  JSON1  : phrase avec [mot_incorrect] entre crochets
+  JSON2  : phrase avec [mot_correct] entre crochets
+  JSONF  : phrase avec [mot_correct] entre crochets
+  ⚠ Ne mettre entre crochets QUE le(s) mot(s) qui divergent, pas toute la phrase.
+
+══════════════════════════════════════════════════════
+FORMAT DE SORTIE — UN SEUL BLOC \`\`\`text\`\`\`
+══════════════════════════════════════════════════════
 
 Ligne 1 exacte : REVIEW REPORT
 Ligne 2 exacte : ---
 
-Puis le tableau de revue avec ces colonnes exactes separees par des pipes :
-  N° | Reference | Colonne | Trouve dans TSV | Correction proposee | Severite | Decision membre
+Puis le tableau des divergences dans l'ordre des questions.
 
-Details des colonnes :
-- N°                  : numero sequentiel du probleme (1, 2, 3...)
-- Reference           : tag de la question concernee, ex : ["No. 3"] ou ["No. 24"]
-- Colonne             : nom de la colonne concernee (Text, Correct, A, B, C, D, E, Cas, Hint, Image)
-- Trouve dans TSV     : contenu exact de la cellule telle qu'elle apparait dans le TSV (avec marqueur si present)
-- Correction proposee : ta proposition de texte corrige, propre, sans marqueur — ou vide si tu ne peux pas decider
-- Severite            : BLOQUANT ou DECISION INLINE ou SILENT FIX
-- Decision membre     : 
-    * Si SILENT FIX : "AUTO" (le membre ne lira meme pas cette ligne)
-    * Si DECISION INLINE : ta correction deja remplie — le membre valide ou modifie
-    * Si BLOQUANT : laisser vide — le membre DOIT remplir
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TABLEAU DES DIVERGENCES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Reference<TAB>Type<TAB>JSON1<TAB>JSON2<TAB>JSONF<TAB>Member Validation<TAB>Full Phrase
 
-REGLES DE CONCISION DU RAPPORT :
-- N'inclus pas les SILENT FIX dans le tableau sauf si tu veux attirer l'attention du membre.
-- Une ligne par probleme. Pas de prose. Pas d'explication longue.
-- La colonne "Correction proposee" doit etre courte : le texte corrige uniquement, pas de justification.
+COLONNES :
+- Reference        : [Num].[champ]  ex: 7.b  12.correct  7.d-e (PROP_SWAP)  19.QCM (QCM_SHIFT)  25.props (PROP_ORDER)  global (ROW_COUNT)
+- Type             : code exact de la taxonomie — peut contenir plusieurs codes separes par " | " si la ligne est groupee (ex: QCM_SHIFT | FIELD_MISSING)
+                     Codes disponibles : SPELL | DIGIT | SYMBOL | UNIT | ACRONYM | PREFIX_NUM | PREFIX_PROP
+                                         PROP_DIVERGE | PROP_TRUNCATED | PROP_SWAP | PROP_ORDER | QCM_SHIFT
+                                         CT_DIVERGE | CT_DRIFT | CT_SPACING | HINT_DIVERGE | SWAP_DIVERGE
+                                         CAS_DIVERGE | ROW_COUNT | FIELD_MISSING | AUDIT_ONLY
+- JSON1            : valeur dans JSON1 pour ce champ. Pour QCM_SHIFT : reconstruction complete (Text / A / B / C / D / E). Pour SPELL : mot divergent entre [crochets].
+- JSON2            : valeur dans JSON2 pour ce champ. Pour QCM_SHIFT : reconstruction complete. Pour SPELL : mot divergent entre [crochets].
+- JSONF            : valeur correcte si INLINE et evidente | "???" si BLOQUANT ou ambiguite.
+                     Pour QCM_SHIFT : reconstruction ligne par ligne avec ??? sur chaque champ divergent.
+                     Pour SPELL : phrase complete avec le mot corrige entre [crochets].
+                     Pour PROP_SWAP : [champ1]=??? / [champ2]=???
+- Member Validation: "Validate" si INLINE et JSONF evident | "[Here]" si BLOQUANT ou JSONF="???"
+- Full Phrase      : contexte — phrase complete depuis le JSON le plus complet, ou description de l'ecart. Pour QCM_SHIFT : liste toutes les raisons separees par " + ".
 
-Si aucun probleme n'est detecte, ecris une seule ligne apres "---" :
-  Aucun probleme detecte. Pret pour etape 2.
+REGLE CRITIQUE JSONF POUR PROP_DIVERGE / PROP_TRUNCATED / PROP_SWAP / PROP_ORDER / QCM_SHIFT / CT_DIVERGE / CT_DRIFT :
+→ JSONF = "???" (ou reconstruction avec ???) TOUJOURS — le membre seul tranche apres verification dans le PDF.
+→ Member Validation = "[Here]" TOUJOURS pour ces types.
 
-Termine le rapport par ces lignes exactes :
-  ---
-  TOTAL BLOQUANTS : [nombre]
-  TOTAL DECISIONS INLINE : [nombre]
-  INSTRUCTION MEMBRE : Verifiez et completez la colonne "Decision membre" pour chaque ligne BLOQUANT. Validez ou modifiez les DECISION INLINE. Renvoyez ce rapport complet pour l'etape 2.
+Termine par :
+---
+TOTAL DIVERGENCES       : [nombre total]
+QUESTIONS CONCORDANTES  : [nombre de questions identiques sur tous les champs]
+QUESTIONS DIVERGENTES   : [nombre de questions avec au moins une divergence]
+BLOQUANTS               : [nombre de lignes avec Member Validation = "[Here]"]
+INSTRUCTION MEMBRE : Les lignes INLINE sont pre-validees ("Validate"). Pour chaque ligne BLOQUANT (Member Validation = "[Here]"), verifiez dans le PDF puis : (1) remplacez "???" dans JSONF par la valeur correcte, (2) remplacez "[Here]" dans Member Validation par "Validate". Renvoyez le rapport complet pour l'etape 2.
 
-INTERDICTIONS DANS CETTE ETAPE
-- Aucun TSV dans cette reponse.
-- Aucun verdict VALIDATION PASSED ou VALIDATION FAILED.
-- Aucun texte libre en dehors du bloc.
-- Aucune prose explicative avant ou apres le bloc.`;
+⛔ INTERDICTIONS ABSOLUES
+- JAMAIS de TSV. JAMAIS de VALIDATION PASSED/FAILED.
+- JAMAIS de correction par logique medicale.
+- JAMAIS de signalement d'une valeur partagee par les deux JSON.
+- JAMAIS de texte libre en dehors du bloc \`\`\`text\`\`\`.
+- Ta reponse se termine apres INSTRUCTION MEMBRE.`;
 }
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STEP 2 — Final TSV prompt
-// Call this after the member has filled in their decisions in the review report.
-// Pass the original data, the original TSV, and the completed review report.
+// STEP 2 — TSV final
 // ─────────────────────────────────────────────────────────────────────────────
-function buildDoubleCheckStep2Prompt(data, tsvData, reviewReport) {
-  const lang         = data.lang        || "Francais";
-  const moduleName   = data.module      || "-";
-  const wilaya       = data.wilaya      || "-";
-  const year         = data.year        || "-";
-  const level        = data.level       || "-";
-  const period       = data.period      || "-";
-  const rotation     = data.rotation    || "-";
-  const nQst         = data.nQst        || "?";
-  const missingPos   = Array.isArray(data.missingPos)  ? data.missingPos  : [];
-  const schemaQsts   = Array.isArray(data.schemaQsts)  ? data.schemaQsts  : [];
-  const subcategories = Array.isArray(data.subcategories) ? data.subcategories : [];
-  const expectedRows = typeof nQst === "number" ? nQst - missingPos.length : "?";
-  const missingSummary = missingPos.length > 0  ? missingPos.join(", ")  : "aucune";
-  const schemaSummary  = schemaQsts.length > 0  ? schemaQsts.join(", ")  : "aucune";
-  const subcategoryNote = subcategories.length > 0
-    ? subcategories.map(sc => `${sc.name}: questions ${sc.range}`).join(", ")
-    : "aucune";
-  const levelValue = String(level || "").trim();
-  const moduleValue = String(moduleName || "").trim().toLowerCase();
-  const isResidanat = levelValue === "7" || moduleValue === "résidanat";
-  const examType = isResidanat ? "Résidanat" : "Externat";
 
-  return `Tu es le second modele auditeur pour un projet de numerisation d'examens medicaux algeriens.
+function buildDoubleCheckStep2Prompt(data, json1, json2, reviewReport) {
+  const lang           = data.lang        || "Francais";
+  const moduleName     = data.module      || "-";
+  const wilaya         = data.wilaya      || "-";
+  const year           = data.year        || "-";
+  const nQst           = data.nQst        || "?";
+  const missingPos     = Array.isArray(data.missingPos)    ? data.missingPos    : [];
+  const schemaQsts     = Array.isArray(data.schemaQsts)    ? data.schemaQsts    : [];
+  const expectedRows   = typeof nQst === "number" ? nQst - missingPos.length : "?";
+  const missingSummary = missingPos.length > 0 ? missingPos.join(", ") : "aucune";
+  const schemaSummary  = schemaQsts.length > 0 ? schemaQsts.join(", ") : "aucune";
 
-Tu recois dans cette etape :
-1. le PDF original de l'examen
-2. le TSV du premier modele (ci-dessous)
-3. le rapport de revue de l'etape 1, complete avec les decisions du membre (ci-dessous)
+  return `Tu es le troisieme modele arbitre pour un projet de numerisation d'examens medicaux algeriens.
 
-Ta mission est d'appliquer toutes les corrections approuvees et de produire le TSV final propre,
-sans aucun marqueur [INCERTAIN], [SWAP] ou [REVIEW].
+Tu recois :
+1. JSON1 — produit par le premier modele (ci-dessous) — BASE DE DEPART
+2. JSON2 — produit par le second modele (ci-dessous) — reference pour les corrections
+3. Le rapport de comparaison complete avec les decisions du membre (ci-dessous)
 
-═══════════════════════════════════════════
-CONTEXTE DE L'EXAMEN
-═══════════════════════════════════════════
-- Langue              : ${lang}
-- Module              : ${moduleName}
-- Wilaya              : ${wilaya}
-- Annee               : ${year}
-- Nombre de QCMs declares  : ${nQst}
-- Nombre de lignes attendues : ${expectedRows}
-- Corrige Type present : ${data.hasCT ? "OUI" : "NON"}
-- Cas cliniques presents : ${data.hasCas ? "OUI" : "NON"}
-- Questions d'association : ${data.hasComb ? "OUI" : "NON"}
+Ta mission : construire le JSON final propre en partant de JSON1,
+en appliquant toutes les corrections approuvees par le membre.
+
+Format de sortie : un tableau JSON de questions (array d'objets).
+Chaque objet contient uniquement les champs non vides parmi :
+  cas | num | text | a | b | c | d | e | f | g | correct | exp | hint | categoryName | tagSuggere | subcategoryName | year | tag
+Omets les champs vides ou null. Preserve l'ordre canonique des champs.
+
+══════════════════════════════════════════════════════
+CONTEXTE
+══════════════════════════════════════════════════════
+- Langue                         : ${lang}
+- Module                         : ${moduleName}
+- Wilaya                         : ${wilaya}
+- Annee                          : ${year}
+- Nombre de QCMs declares        : ${nQst}
+- Nombre de lignes attendues     : ${expectedRows}
+- Corrige Type present           : ${data.hasCT  ? "OUI" : "NON"}
+- Cas cliniques presents         : ${data.hasCas  ? "OUI" : "NON"}
+- Questions d'association        : ${data.hasComb ? "OUI" : "NON"}
 - Questions declarees manquantes : ${missingSummary}
-- Questions avec schema/image : ${schemaSummary}
+- Questions avec schema/image    : ${schemaSummary}
 
-TSV DU PREMIER MODELE
-${tsvData}
+JSON1 — BASE DE DEPART
+${json1}
 
-RAPPORT DE REVUE AVEC DECISIONS DU MEMBRE
+JSON2 — REFERENCE
+${json2}
+
+RAPPORT DE COMPARAISON AVEC DECISIONS DU MEMBRE
 ${reviewReport}
 
-═══════════════════════════════════════════
-REGLES D'APPLICATION DES CORRECTIONS
-═══════════════════════════════════════════
-1. Lis chaque ligne du rapport de revue.
+${injectTaxonomy()}
 
-2. Pour chaque ligne BLOQUANT :
-   - Si Decision membre = texte de remplacement fourni : applique exactement ce texte dans le TSV final.
-   - Si Decision membre = "confirmer" ou similaire : applique la Correction proposee du rapport.
-   - Si Decision membre = "rejeter" ou similaire : garde le texte original du premier TSV, sans marqueur.
-   - Si Decision membre est vide : ARRETE et retourne VALIDATION FAILED avec reference de la ligne bloquante.
+══════════════════════════════════════════════════════
+REGLES DE CONSTRUCTION
+══════════════════════════════════════════════════════
 
-3. Pour chaque ligne DECISION INLINE :
-   - Si Decision membre est vide ou "valider" : applique la Correction proposee du rapport.
-   - Si Decision membre contient un texte different : applique le texte du membre, pas la correction proposee.
+BASE : pars de JSON1.questions comme tableau de depart.
+Puis applique les corrections du rapport question par question.
 
-4. Pour chaque ligne SILENT FIX (AUTO) : applique la correction proposee sans la signaler.
+INTERPRETATION DU RAPPORT :
+  Reference         → champ a modifier dans JSON1
+  Type              → code taxonomique — quelle regle appliquer
+  JSON1             → valeur actuelle dans JSON1 (contexte)
+  JSON2             → valeur alternative dans JSON2 (contexte)
+  JSONF             → suggestion du modele arbitre
+  Member Validation → SEULE AUTORITE — ce qui est applique au final
+  Full Phrase       → contexte uniquement, jamais une instruction
 
-5. Supprime tous les marqueurs [INCERTAIN: ...], [SWAP: ...] et [REVIEW: ...] du TSV final.
-   - Si un marqueur [INCERTAIN], [SWAP] ou [REVIEW] subsiste sans decision dans le rapport : VALIDATION FAILED.
+APPLICATION selon Member Validation :
+  "Validate"         → applique la valeur JSONF.
+  Texte personnalise → applique exactement le texte du membre.
+  "[Here]"           → ARRETE. Retourne VALIDATION FAILED avec la reference.
 
-6. Ne modifie aucune cellule qui n'est pas listee dans le rapport, sauf les SILENT FIX cosmetiques.
+APPLICATION selon le Type :
+  SPELL, ACRONYM, PREFIX_NUM, PREFIX_PROP → remplace le mot cible dans le champ JSON en utilisant la valeur JSONF,
+      puis SUPPRIME tous les crochets [ et ] avant d'ecrire dans le JSON final.
+      Les crochets sont des marqueurs visuels du rapport UNIQUEMENT — ils ne doivent JAMAIS apparaitre dans le JSON final.
+      Exemple : JSONF = "Les antigenes sont [reconnus] par les [BCR]" → JSON = "Les antigenes sont reconnus par les BCR"
+  DIGIT, UNIT, SYMBOL   → remplace la valeur ou le caractere cible dans le champ JSON.
+  PROP_DIVERGE          → remplace le texte entier du champ par la valeur membre.
+  PROP_TRUNCATED        → remplace le texte tronque par la valeur complete approuvee par le membre.
+  PROP_SWAP             → echange les deux champs concernes selon la decision membre.
+  PROP_ORDER            → reordonne les champs a/b/c/d/e selon la decision membre.
+  QCM_SHIFT             → parser le JSONF ligne par ligne en utilisant les prefixes "Text:" / "A:" / "B:" / "C:" / "D:" / "E:" comme separateurs de champs.
+      Chaque segment est mappe vers le champ JSON correspondant (Text→text, A→a, B→b, etc.).
+      Format JSONF attendu : "Text: [valeur] / A: [valeur] / B: [valeur] / C: [valeur] / D: [valeur] / E: [valeur]"
+      Si Member Validation = "Validate" → utiliser directement chaque segment tel quel, sans les prefixes ni les "/".
+      Si un segment vaut encore "???" malgre Member Validation = "Validate" → ARRETE, retourne VALIDATION FAILED sur cette reference.
+  CT_DIVERGE, CT_DRIFT  → remplace le champ 'correct' par la valeur membre.
+  CT_SPACING            → reecris 'correct' sans espace interne.
+  HINT_DIVERGE          → remplace le champ 'hint' par la valeur membre.
+  SWAP_DIVERGE          → applique la decision membre sur 'correct'.
+  CAS_DIVERGE           → applique la decision membre sur 'cas'.
+  FIELD_MISSING         → ajoute ou supprime le champ selon la decision membre.
+  ROW_COUNT             → VALIDATION FAILED si non resolu.
+  AUDIT_ONLY            → aucune action sur le TSV — information uniquement.
 
-7. Apres application de toutes les corrections, verifie une derniere fois :
-   - Aucun marqueur [INCERTAIN], [SWAP] ou [REVIEW] ne subsiste.
-   - Le nombre de lignes = ${expectedRows}.
-   - Aucune cellule Correct ne contient une deduction medicale.
-   - Le TSV est propre, professionnel, sans \\n inutile.
+Champs non listes dans le rapport → prendre la valeur de JSON1 telle quelle.
 
-INTERDICTIONS ABSOLUES POUR LE TSV FINAL
+INTERDICTIONS ABSOLUES :
 - Ne jamais inventer une correction non approuvee par le membre.
-- Ne jamais modifier une cellule qui n'est pas listee dans le rapport.
-- Ne jamais utiliser tes connaissances medicales pour corriger une reponse CT.
-- Ne jamais deplacer une reponse CT d'une question vers une autre.
-- Ne jamais reformuler un texte meme s'il te semble maladroit, sauf si le membre l'a explicitement demande.
-- Ne jamais deplacer ou reordonner les propositions A, B, C, D, E.
+- Ne jamais modifier un champ absent du rapport.
+- Ne jamais corriger le CT par logique medicale.
+- Ne jamais deplacer les propositions a-e sauf PROP_ORDER confirme.
+- Ne jamais introduire un espace dans une valeur correct (BCE reste BCE).
 
-═══════════════════════════════════════════
-CAS 1 — TOUT EST RESOLU : VALIDATION PASSED
-═══════════════════════════════════════════
-Si toutes les lignes BLOQUANT ont une decision membre valide et que le TSV final est propre :
+VERIFICATION FINALE :
+  - Aucun marqueur residuel [Here], [SWAP] ou [REVIEW] dans les valeurs JSON (verifier ces chaines exactes uniquement).
+  - Aucun crochet [ ou ] dans les valeurs JSON — les crochets SPELL du rapport doivent avoir ete supprimes.
+  - Nombre d'objets dans le tableau = ${expectedRows}.
+  - Aucun champ correct ne contient une deduction medicale.
+  - Aucun champ text ne commence par un prefixe de question.
 
-Retourne un seul bloc \`\`\`text ... \`\`\` contenant exactement :
+══════════════════════════════════════════════════════
+CAS 1 — VALIDATION PASSED
+══════════════════════════════════════════════════════
+
+Retourne deux blocs dans ta reponse :
+
+BLOC 1 — resume en texte brut (pas dans un bloc code) :
 
 VALIDATION PASSED
 Module              : ${moduleName} [confirme]
 Nombre de questions : ${expectedRows} attendu / [X detecte apres corrections]
-Corrige Type        : ${data.hasCT ? "[compatible / probleme — preciser]" : "non applicable"}
-Cas cliniques       : ${data.hasCas ? "[compatible / probleme — preciser]" : "non applicable"}
-Questions d'association : ${data.hasComb ? "[compatible / probleme — preciser]" : "non applicable"}
-Images / schemas    : ${schemaQsts.length > 0 ? "[compatible / probleme — preciser]" : "non applicable"}
+Corrige Type        : ${data.hasCT  ? "[compatible / probleme]" : "non applicable"}
+Cas cliniques       : ${data.hasCas  ? "[compatible / probleme]" : "non applicable"}
+Questions d'association : ${data.hasComb ? "[compatible / probleme]" : "non applicable"}
+Images / schemas    : ${schemaQsts.length > 0 ? "[compatible / probleme]" : "non applicable"}
 Marqueurs residuels : aucun
-Corrections appliquees : [nombre total de corrections appliquees]
-Conclusion audit    : tableau final valide pour construction du CSV
------ FINAL TSV -----
-[TSV final complet, propre, sans aucun marqueur]
+Corrections appliquees : [nombre]
+Divergences resolues : [nombre]
+Conclusion          : JSON final valide
 
-Regles de format du TSV final :
-- Propre et professionnel : majuscule initiale corrigee quand necessaire, ponctuation propre.
-- Aucun marqueur [INCERTAIN], [SWAP] ou [REVIEW].
-- Une cellule = une ligne sauf si plusieurs parties reelles du contenu imposent un \\n.
-- Aucun texte libre avant VALIDATION PASSED ni apres la derniere ligne du TSV.
-- Un seul bloc.
+BLOC 2 — le JSON final dans un bloc \`\`\`json :
 
-═══════════════════════════════════════════
-CAS 2 — BLOCAGE RESIDUEL : VALIDATION FAILED
-═══════════════════════════════════════════
-Si au moins une ligne BLOQUANT n'a pas de decision membre valide, ou si un marqueur subsiste
-sans resolution, ou si une inconsistance irresolvable est detectee :
+\`\`\`json
+[
+  { "num": 1, "text": "...", "a": "...", "b": "...", "correct": "..." },
+  ...
+]
+\`\`\`
 
-Retourne un seul bloc \`\`\`text ... \`\`\` contenant exactement :
+REGLES FORMAT :
+- BLOC 1 commence exactement par "VALIDATION PASSED"
+- BLOC 2 est un JSON array valide — parseable par JSON.parse()
+- Aucun champ vide ou null dans les objets — omets-les
+- Aucun marqueur residuel dans les valeurs JSON
+- Un seul bloc \`\`\`json\`\`\`
+
+══════════════════════════════════════════════════════
+CAS 2 — VALIDATION FAILED
+══════════════════════════════════════════════════════
 
 VALIDATION FAILED
-Raison : [description precise du blocage residuel]
-References bloquantes : [liste des N° de problemes non resolus du rapport]
-Action requise : Completer les decisions manquantes et relancer l'etape 2.
+Raison : [description precise]
+References bloquantes : [liste]
+Action requise : Remplacer chaque "[Here]" apres verification dans le PDF, puis relancer l'etape 2.
 
-- Aucun TSV dans ce cas.
-- Aucune version partielle.
-- Aucun texte libre en dehors du bloc.`;
+- Aucun JSON. Aucune version partielle. Aucun texte libre en dehors du bloc.`;
 }
 
 
@@ -359,42 +750,34 @@ Action requise : Completer les decisions manquantes et relancer l'etape 2.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Generate the Step 1 prompt (review report, no TSV).
- * @param {object} data    - exam metadata
- * @param {string} tsvData - TSV string from the first model
+ * Generate the comparison report prompt (Step 1).
+ * Send to a third neutral model — no PDF needed.
+ * @param {object} data  - exam metadata
+ * @param {string} json1 - JSON string from model 1
+ * @param {string} json2 - JSON string from model 2
  * @returns {string}
  */
-function generateDoubleCheckStep1Prompt(data, tsvData) {
-  return buildDoubleCheckStep1Prompt(data || {}, tsvData || "");
+function generateDoubleCheckPrompt(data, json1, json2) {
+  return buildDoubleCheckPrompt(data || {}, json1 || "", json2 || "");
 }
 
 /**
- * Generate the Step 2 prompt (final TSV after member decisions).
- * @param {object} data          - exam metadata (same object as step 1)
- * @param {string} tsvData       - original TSV from the first model (re-injected for full context)
- * @param {string} reviewReport  - the completed review report with member decisions filled in
+ * Generate the final JSON prompt (Step 2).
+ * @param {object} data         - exam metadata
+ * @param {string} json1        - JSON string from model 1 (base)
+ * @param {string} json2        - JSON string from model 2 (reference)
+ * @param {string} reviewReport - completed comparison report with member decisions
  * @returns {string}
  */
-function generateDoubleCheckStep2Prompt(data, tsvData, reviewReport) {
-  return buildDoubleCheckStep2Prompt(data || {}, tsvData || "", reviewReport || "");
+function generateDoubleCheckStep2Prompt(data, json1, json2, reviewReport) {
+  return buildDoubleCheckStep2Prompt(data || {}, json1 || "", json2 || "", reviewReport || "");
 }
 
-// ─── Legacy compatibility shims ───────────────────────────────────────────────
-// These preserve backward compatibility if existing app code still calls the
-// old function names. They route to Step 1 by default.
-// Remove these once the app has been updated to use the two-step API above.
-
-function buildDoubleCheckPrompt(data, tsvData) {
-  return buildDoubleCheckStep1Prompt(data, tsvData);
+// ─── Exports ──────────────────────────────────────────────────────────────────
+if (typeof module !== "undefined") {
+  module.exports = { generateDoubleCheckPrompt, generateDoubleCheckStep2Prompt };
 }
-
-function generateDoubleCheckPromptFromContext(data, tsvData) {
-  return buildDoubleCheckStep1Prompt(data || {}, tsvData || "");
-}
-
-function generateDoubleCheckPrompt(arg1, arg2) {
-  if (typeof arg2 === "string") {
-    return buildDoubleCheckStep1Prompt(arg1 || {}, arg2);
-  }
-  return buildDoubleCheckStep1Prompt({}, arg1 || "");
+if (typeof window !== "undefined") {
+  window.generateDoubleCheckPrompt      = generateDoubleCheckPrompt;
+  window.generateDoubleCheckStep2Prompt = generateDoubleCheckStep2Prompt;
 }

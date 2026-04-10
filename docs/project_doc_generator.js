@@ -330,20 +330,18 @@ function generateMarkdown(data) {
   [
     "1. [Project Overview](#-project-overview)",
     "2. [Quick Start Guide](#-quick-start-guide)",
-    "3. [🚨 CRITICAL: AI File Modification Rules](#-critical-ai-file-modification-rules)",
-    "4. [Project Statistics](#-project-statistics)",
-    "5. [Project Structure](#-project-structure)",
-    "6. [External Dependencies](#-external-dependencies)",
-    "7. [Module Documentation](#-module-documentation)",
-    "8. [API Endpoints](#-api-endpoints)",
-    "9. [Dependency Graph](#-dependency-graph)",
-    "10. [Configuration & Environment](#-configuration--environment)",
-    "11. [File Naming Conventions](#-file-naming-conventions)",
-    "12. [Safety Features](#️-safety-features)",
-    "13. [Troubleshooting](#-troubleshooting)",
-    "14. [Development Guidelines](#-development-guidelines)",
-    "15. [Version History](#-version-history)",
-    "16. [Additional Resources](#-additional-resources)",
+    "3. [Project Statistics](#-project-statistics)",
+    "4. [Project Structure](#-project-structure)",
+    "5. [External Dependencies](#-external-dependencies)",
+    "6. [Module Documentation](#-module-documentation)",
+    "7. [API Endpoints](#-api-endpoints)",
+    "8. [Dependency Graph](#-dependency-graph)",
+    "9. [Configuration & Environment](#-configuration--environment)",
+    "10. [File Naming Conventions](#-file-naming-conventions)",
+    "11. [Troubleshooting](#-troubleshooting)",
+    "12. [Development Guidelines](#-development-guidelines)",
+    "13. [Version History](#-version-history)",
+    "14. [Additional Resources](#-additional-resources)",
   ].forEach(l => p(l));
   br(); hr(); br();
 
@@ -382,96 +380,6 @@ function generateMarkdown(data) {
   p("# Regenerate with JSON export"); p("node project_doc_generator.js --json");
   p("```"); br();
   hr(); br();
-
-  // ── AI file modification rules ────────────────────────────────────────────
-  h("## 🚨 CRITICAL: AI FILE MODIFICATION RULES"); br();
-  p("> **🔴 SEVERITY LEVEL: CRITICAL**");
-  p("> **⚠️ NON-COMPLIANCE WILL RESULT IN DATA LOSS**");
-  p("> **📖 READ COMPLETELY BEFORE ANY MODIFICATIONS**");
-  br();
-  h("### ⚠️ MANDATORY REQUIREMENTS FOR ALL FILE MODIFICATIONS"); br();
-  h("#### 1️⃣ Auto-Fix Script Requirement"); br();
-  p("**When ANY file modification is requested, you MUST:**"); br();
-  p("- Create a standalone Node.js script for the modification");
-  p("- Script must be placed in the main directory (next to `server.js`)");
-  p("- Script name format: `autofix_<description>_<timestamp>.js`");
-  p("  - Example: `autofix_update_prompt_20260404_143022.js`");
-  br();
-  p("**Script Requirements:**");
-  p("```javascript");
-  p(`/**`);
-  p(` * Auto-fix script template`);
-  p(` * Purpose: [Brief description]`);
-  p(` * Created: [Date and time]`);
-  p(` */`);
-  p(`const fs   = require('fs');`);
-  p(`const path = require('path');`);
-  br();
-  p(`const BACKUP_BASE = path.join(__dirname, '0-Archive', 'backups');`);
-  p(`const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);`);
-  p(`const BACKUP_DIR  = path.join(BACKUP_BASE, 'backup_' + ts);`);
-  br();
-  p(`const FILES_TO_MODIFY = ['server.js', 'public/exam.html'];`);
-  br();
-  p(`function createBackup() {`);
-  p(`  fs.mkdirSync(BACKUP_DIR, { recursive: true });`);
-  p(`  for (const f of FILES_TO_MODIFY) {`);
-  p(`    if (fs.existsSync(f)) {`);
-  p(`      fs.copyFileSync(f, path.join(BACKUP_DIR, path.basename(f)));`);
-  p(`      console.log('  ✓ Backed up:', f);`);
-  p(`    }`);
-  p(`  }`);
-  p(`}`);
-  br();
-  p(`function applyModifications() {`);
-  p(`  // YOUR MODIFICATION CODE HERE`);
-  p(`}`);
-  br();
-  p(`createBackup();`);
-  p(`applyModifications();`);
-  p(`console.log('✅ Auto-fix completed!');`);
-  p("```"); br();
-
-  h("#### 2️⃣ Backup Directory Structure (MANDATORY)"); br();
-  p("```");
-  p(`${PROJECT_ROOT}/0-Archive/backups/`);
-  p("├── backup_2026-04-04T14-30-22/");
-  p("│   ├── server.js");
-  p("│   └── exam.html");
-  p("└── backup_2026-04-05T09-12-00/");
-  p("    └── digitizePrompt.js");
-  p("```"); br();
-  p("**⚠️ CRITICAL RULES:**");
-  p("- ✅ **DO:** Create timestamped subfolder (format: `backup_YYYY-MM-DDTHH-MM-SS`)");
-  p("- ✅ **DO:** Place ALL modified files inside the timestamped subfolder");
-  p("- ❌ **DON'T:** Put files directly in the backups folder");
-  p("- ❌ **DON'T:** Create backups anywhere else");
-  br();
-  h("#### 3️⃣ Response Format (REQUIRED)"); br();
-  p("- Provide ONLY the auto-fix script — no long explanations");
-  p("- One line of instruction: `Place next to server.js and run: node autofix_xxx.js`");
-  p("- Detailed docs only if the user explicitly asks for them");
-  br();
-  h("#### 4️⃣ Prompt and Report File Rules"); br();
-  p("When editing prompts or report PDFs, follow `PROMPT_EDITING_RULES.md` and `EXAM_DATA.md`.");
-  p("Stable exported function names — **never rename without updating all callers:**");
-  p("- `generateDigitizePrompt`");
-  p("- `generateDoubleCheckPromptFromContext`");
-  p("- `generateDoubleCheckPrompt`");
-  p("- `buildAdminReportBuffer`");
-  p("- `buildPublicReportBuffer`");
-  p("- `buildReportContext`");
-  br();
-  h("### 📋 QUICK REFERENCE CHECKLIST"); br();
-  p("```");
-  p("✓ [ ] Created Node.js auto-fix script");
-  p("✓ [ ] Script includes backup creation code");
-  p("✓ [ ] Backup uses timestamped subfolder");
-  p("✓ [ ] Script name includes timestamp");
-  p("✓ [ ] Response is concise (no unnecessary detail)");
-  p("✓ [ ] Stable function names preserved");
-  p("```");
-  br(); hr(); br();
 
   // ── Statistics ────────────────────────────────────────────────────────────
   h("## 📊 PROJECT STATISTICS"); br();
@@ -650,15 +558,6 @@ function generateMarkdown(data) {
   p("- **Functions:** `camelCase()`");
   p("- **Constants:** `UPPER_SNAKE_CASE`");
   br();
-  h("### Auto-Fix Scripts");
-  p("- **Format:** `autofix_<description>_<YYYYMMDD_HHMMSS>.js`");
-  p("- **Example:** `autofix_update_prompt_20260404_143022.js`");
-  p("- **Location:** Project root (next to `server.js`)");
-  br();
-  h("### Backup Folders");
-  p("- **Format:** `backup_<YYYY-MM-DDTHH-MM-SS>/`");
-  p("- **Location:** `0-Archive/backups/`");
-  br();
   h("### Upload Files (Google Drive)");
   p("- **Exam PDF:** `Wilaya_Year_PR_Module_CT_NQQ_Nmiss_V1.pdf`");
   p("- **QCM CSV:** `Wilaya_Year_PR_Module_QCM_V1.csv`");
@@ -666,33 +565,10 @@ function generateMarkdown(data) {
   p("- **Public Report:** `Wilaya_Level_Module_YYRef_Public_Report_V1.pdf`");
   br(); hr(); br();
 
-  // ── Safety features ───────────────────────────────────────────────────────
-  h("## 🛡️ SAFETY FEATURES"); br();
-  h("### Automatic Backups"); br();
-  p("Every file modification through auto-fix scripts includes:"); br();
-  p("- ✅ **Timestamped backups** — Each backup has a unique timestamp");
-  p("- ✅ **Original files preserved** — No data loss");
-  p("- ✅ **Organized structure** — All backups in `0-Archive/backups/`");
-  p("- ✅ **Easy rollback** — Simple copy-back process");
-  br();
-  h("### Rollback Procedure"); br();
-  p("```javascript");
-  p("const fs   = require('fs');");
-  p("const path = require('path');");
-  p("// 1. Identify the backup folder");
-  p("const BACKUP = path.join(__dirname, '0-Archive', 'backups', 'backup_2026-04-04T14-30-22');");
-  p("// 2. Copy files back");
-  p("for (const file of fs.readdirSync(BACKUP)) {");
-  p("  fs.copyFileSync(path.join(BACKUP, file), path.join(__dirname, file));");
-  p("  console.log('Restored:', file);");
-  p("}");
-  p("```");
-  br(); hr(); br();
-
   // ── Troubleshooting ───────────────────────────────────────────────────────
   h("## 🔧 TROUBLESHOOTING"); br();
   h("### Common Issues"); br();
-  p("#### Issue: `Cannot find module` error after running auto-fix script");
+  p("#### Issue: `Cannot find module` error");
   p("**Solution:** `npm install`"); br();
   p("#### Issue: Google API 403 / permission denied");
   p("**Solution:** Ensure the service account is shared on the target Sheet and Drive folder."); br();
@@ -730,7 +606,6 @@ function generateMarkdown(data) {
   p("2. Follow established patterns");
   p("3. Regenerate documentation: `node docs/project_doc_generator.js`");
   p("4. Update `package.json` if adding new npm packages");
-  p("5. Create a backup before making any changes");
   br(); hr(); br();
 
   // ── Version history ───────────────────────────────────────────────────────
