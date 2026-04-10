@@ -576,6 +576,7 @@
       let pendingOrigPdfFile = null;
       let pendingAffichagePdfFile = null;
       let googleUser = null;
+      let googleClientId = "";
       let subcategoriesState = [];
       let draggedSubcategoryId = null;
       const SUBCATEGORY_CATALOG = [
@@ -608,8 +609,10 @@
       }
 
       async function initGoogleAuth() {
-        let GOOGLE_CLIENT_ID = "";
-        try { const cfg = await (await fetch(`${API}/api/config`)).json(); GOOGLE_CLIENT_ID = cfg.googleClientId || ""; } catch (e) {}
+        try {
+          const cfg = await (await fetch(`${API}/api/config`)).json();
+          googleClientId = cfg.googleClientId || "";
+        } catch (e) {}
         const stored = localStorage.getItem("examTrackerUser");
         if (stored) {
           try {
@@ -620,11 +623,11 @@
           } catch (e) { localStorage.removeItem("examTrackerUser"); }
         }
         document.getElementById("signInScreen").style.display = "flex";
-        if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID === "YOUR_CLIENT_ID_HERE") {
+        if (!googleClientId || googleClientId === "YOUR_CLIENT_ID_HERE") {
           document.getElementById("googleSignInBtn").innerHTML = '<p style="color:var(--red-text);font-size:12px;">Warning: Client ID not configured.</p>';
           return;
         }
-        google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleCredentialResponse });
+        google.accounts.id.initialize({ client_id: googleClientId, callback: handleCredentialResponse });
         google.accounts.id.renderButton(document.getElementById("googleSignInBtn"), { type: "standard", size: "large", theme: "outline", text: "signin_with", shape: "rectangular", width: 280 });
       }
 
@@ -635,7 +638,11 @@
           `<span>${googleUser.email}</span>` +
           `<button class="signout-btn" onclick="signOut()">Sign out</button>`;
       }
-      function signOut() { googleUser = null; localStorage.removeItem("examTrackerUser"); location.reload(); }
+      function signOut() {
+        googleUser = null;
+        localStorage.removeItem("examTrackerUser");
+        location.reload();
+      }
 
       // Boot
       async function boot() {

@@ -36,10 +36,14 @@ const HEADER_ROW      = parseInt(process.env.HEADER_ROW || '1');
 const SERVICE_ACCOUNT = JSON.parse(process.env.SERVICE_ACCOUNT_JSON || '{}');
 const DRIVE_FOLDER_ID = process.env.DRIVE_FOLDER_ID || '';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const OWNER_GOOGLE_CLIENT_ID = process.env.OWNER_GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID || '';
+const OWNER_GOOGLE_CLIENT_SECRET = process.env.OWNER_GOOGLE_CLIENT_SECRET || '';
+const OWNER_GOOGLE_REFRESH_TOKEN = process.env.OWNER_GOOGLE_REFRESH_TOKEN || '';
 
-
-async function uploadBufferToDrive(fileBuffer, name) {
-  const token = await getAccessToken();
+async function uploadBufferToDrive(fileBuffer, name, token) {
+  if (!token) {
+    throw new Error('Missing owner Google Drive access token.');
+  }
   if (!DRIVE_FOLDER_ID) {
     throw new Error('DRIVE_FOLDER_ID is not set in environment variables.');
   }
@@ -81,6 +85,8 @@ async function uploadBufferToDrive(fileBuffer, name) {
 // Service Account -> OAuth2 access token (JWT)
 let cachedToken = null;
 let tokenExpiry = 0;
+let cachedOwnerDriveToken = null;
+let ownerDriveTokenExpiry = 0;
 
 function base64url(buf) {
   return buf.toString('base64')
@@ -125,6 +131,34 @@ async function getAccessToken() {
   return cachedToken;
 }
 
+async function getOwnerDriveAccessToken() {
+  if (cachedOwnerDriveToken && Date.now() < ownerDriveTokenExpiry - 60000) return cachedOwnerDriveToken;
+
+  if (!OWNER_GOOGLE_CLIENT_ID || !OWNER_GOOGLE_CLIENT_SECRET || !OWNER_GOOGLE_REFRESH_TOKEN) {
+    throw new Error('Owner Google Drive OAuth is not configured. Set OWNER_GOOGLE_CLIENT_ID, OWNER_GOOGLE_CLIENT_SECRET, and OWNER_GOOGLE_REFRESH_TOKEN.');
+  }
+
+  const resp = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: OWNER_GOOGLE_CLIENT_ID,
+      client_secret: OWNER_GOOGLE_CLIENT_SECRET,
+      refresh_token: OWNER_GOOGLE_REFRESH_TOKEN,
+      grant_type: 'refresh_token',
+    }).toString(),
+  });
+
+  const data = await resp.json();
+  if (!resp.ok || !data.access_token) {
+    throw new Error('Owner Drive token error: ' + JSON.stringify(data));
+  }
+
+  cachedOwnerDriveToken = data.access_token;
+  ownerDriveTokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
+  return cachedOwnerDriveToken;
+}
+
 // Routes
 
 // GET /api/sheet -> read all rows
@@ -163,10 +197,14 @@ app.put('/api/sheet/:rowIndex', async (req, res) => {
 // POST /api/upload -> upload file to Google Drive and return shareable URL
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   try {
+    const token = await getOwnerDriveAccessToken();
+    if (!req.file) {
+      return res.status(400).json({ error: 'Missing uploaded file.' });
+    }
     const { filename } = req.body;
     const fileBuffer   = req.file.buffer;
     const name         = filename || req.file.originalname;
-    const uploaded = await uploadBufferToDrive(fileBuffer, name);
+    const uploaded = await uploadBufferToDrive(fileBuffer, name, token);
     res.json({ url: uploaded.url });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -176,6 +214,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 // POST /api/report-pdf -> generate admin/public PDF, upload to Drive, return public URL
 app.post('/api/report-pdf', async (req, res) => {
   try {
+    const token = await getOwnerDriveAccessToken();
     const { type, data } = req.body || {};
     if (!['admin', 'public'].includes(type)) {
       return res.status(400).json({ error: 'Invalid report type. Use "admin" or "public".' });
@@ -190,7 +229,7 @@ app.post('/api/report-pdf', async (req, res) => {
     const pdfBuffer = type === 'admin'
       ? buildAdminReportBuffer(data)
       : buildPublicReportBuffer(data);
-    const uploaded = await uploadBufferToDrive(pdfBuffer, filename);
+    const uploaded = await uploadBufferToDrive(pdfBuffer, filename, token);
 
     res.json({
       type,
@@ -207,7 +246,7 @@ app.get('/api/drive-download', async (req, res) => {
   const fileId = (req.query.id || '').replace(/[^a-zA-Z0-9_\-]/g, '');
   if (!fileId) return res.status(400).json({ error: 'Missing file id' });
   try {
-    const token = await getAccessToken();
+    const token = await getOwnerDriveAccessToken();
     const metaRes = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType&supportsAllDrives=true`,
       { headers: { Authorization: `Bearer ${token}` } }
