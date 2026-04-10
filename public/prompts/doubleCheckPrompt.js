@@ -6,8 +6,8 @@
 //    - Chaque modele produit son propre JSON (json1 et json2).
 //    - Un TROISIEME modele recoit les deux JSON et compare les divergences
 //      question par question, sans avoir besoin du PDF.
-//    - Le rapport liste les divergences avec JSON1, JSON2, JSONF et Member Validation.
-//    - Step 2 : le troisieme modele applique les decisions du membre et produit le TSV final.
+//    - Le rapport liste les divergences avec JSON1, JSON2 et JSONF.
+//    - Step 2 : le troisieme modele applique STRICTEMENT JSONF et produit le JSON final.
 //
 //  Exports :
 //    generateDoubleCheckPrompt(data, json1, json2)                      → rapport (Step 1)
@@ -125,8 +125,7 @@ const TAXONOMY = {
         "Reference : [Num].[champ]  ex: 12.d\n" +
         "JSON1 : texte complet de la proposition dans JSON1\n" +
         "JSON2 : texte complet de la proposition dans JSON2\n" +
-        "JSONF : ??? (le membre verifie dans le PDF)\n" +
-        "Member Validation : [Here]",
+        "JSONF : ??? (remplacer par la valeur finale correcte apres verification dans le PDF)",
     },
     {
       code: "PROP_ORDER",
@@ -143,8 +142,7 @@ const TAXONOMY = {
         "Reference : [Num].props\n" +
         "JSON1 : ordre JSON1 — a='debut...' b='debut...' c='debut...' d='debut...' e='debut...'\n" +
         "JSON2 : ordre JSON2 — a='debut...' b='debut...' c='debut...' d='debut...' e='debut...'\n" +
-        "JSONF : ??? (le membre verifie l'ordre dans le PDF)\n" +
-        "Member Validation : [Here]",
+        "JSONF : ??? (remplacer par l'ordre final correct apres verification dans le PDF)",
     },
     {
       code: "PROP_SWAP",
@@ -162,8 +160,7 @@ const TAXONOMY = {
         "Reference : [Num].[champ1]-[champ2]  ex: 7.d-e\n" +
         "JSON1 : [champ1]='texte complet' [champ2]='texte complet'\n" +
         "JSON2 : [champ1]='texte complet' [champ2]='texte complet'\n" +
-        "JSONF : [champ1]=[valeur correcte attendue] / [champ2]=[valeur correcte attendue] (le membre verifie dans le PDF)\n" +
-        "Member Validation : [Here]",
+        "JSONF : [champ1]=[valeur correcte attendue] / [champ2]=[valeur correcte attendue] (remplir avec les valeurs finales correctes apres verification dans le PDF)",
     },
     {
       code: "QCM_SHIFT",
@@ -190,8 +187,7 @@ const TAXONOMY = {
         "  C: ???\n" +
         "  D: ???\n" +
         "  E: ???\n" +
-        "(le membre remplace chaque ??? par la valeur correcte apres verification dans le PDF)\n" +
-        "Member Validation : [Here]\n" +
+        "(remplacer chaque ??? par la valeur correcte apres verification dans le PDF)\n" +
         "Full Phrase : liste toutes les raisons individuelles separees par ' + '",
     },
     {
@@ -210,8 +206,7 @@ const TAXONOMY = {
         "Reference : [Num].[champ]  ex: 12.b\n" +
         "JSON1 : texte tronque depuis JSON1\n" +
         "JSON2 : texte complet depuis JSON2\n" +
-        "JSONF : ??? (le membre verifie le texte complet dans le PDF)\n" +
-        "Member Validation : [Here]",
+        "JSONF : ??? (remplacer par le texte complet correct apres verification dans le PDF)",
     },
     {
       code: "CT_DIVERGE",
@@ -539,7 +534,7 @@ Puis le tableau des divergences dans l'ordre des questions.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TABLEAU DES DIVERGENCES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Reference<TAB>Type<TAB>JSON1<TAB>JSON2<TAB>JSONF<TAB>Member Validation<TAB>Full Phrase
+Reference<TAB>Type<TAB>JSON1<TAB>JSON2<TAB>JSONF<TAB>Full Phrase
 
 COLONNES :
 - Reference        : [Num].[champ]  ex: 7.b  12.correct  7.d-e (PROP_SWAP)  19.QCM (QCM_SHIFT)  25.props (PROP_ORDER)  global (ROW_COUNT)
@@ -554,20 +549,19 @@ COLONNES :
                      Pour QCM_SHIFT : reconstruction ligne par ligne avec ??? sur chaque champ divergent.
                      Pour SPELL : phrase complete avec le mot corrige entre [crochets].
                      Pour PROP_SWAP : [champ1]=??? / [champ2]=???
-- Member Validation: "Validate" si INLINE et JSONF evident | "[Here]" si BLOQUANT ou JSONF="???"
 - Full Phrase      : contexte — phrase complete depuis le JSON le plus complet, ou description de l'ecart. Pour QCM_SHIFT : liste toutes les raisons separees par " + ".
 
 REGLE CRITIQUE JSONF POUR PROP_DIVERGE / PROP_TRUNCATED / PROP_SWAP / PROP_ORDER / QCM_SHIFT / CT_DIVERGE / CT_DRIFT :
-→ JSONF = "???" (ou reconstruction avec ???) TOUJOURS — le membre seul tranche apres verification dans le PDF.
-→ Member Validation = "[Here]" TOUJOURS pour ces types.
+→ JSONF = "???" (ou reconstruction avec ???) tant que la verification PDF n'a pas ete faite.
+→ Une fois le rapport complete, JSONF devient la source de verite finale pour ces types.
 
 Termine par :
 ---
 TOTAL DIVERGENCES       : [nombre total]
 QUESTIONS CONCORDANTES  : [nombre de questions identiques sur tous les champs]
 QUESTIONS DIVERGENTES   : [nombre de questions avec au moins une divergence]
-BLOQUANTS               : [nombre de lignes avec Member Validation = "[Here]"]
-INSTRUCTION MEMBRE : Les lignes INLINE sont pre-validees ("Validate"). Pour chaque ligne BLOQUANT (Member Validation = "[Here]"), verifiez dans le PDF puis : (1) remplacez "???" dans JSONF par la valeur correcte, (2) remplacez "[Here]" dans Member Validation par "Validate". Renvoyez le rapport complet pour l'etape 2.
+BLOQUANTS               : [nombre de lignes ou JSONF contient encore "???"]
+INSTRUCTION MEMBRE : Les lignes INLINE ont deja un JSONF final. Pour chaque ligne BLOQUANT, verifiez dans le PDF puis remplacez tous les "???" dans JSONF par la valeur correcte. Renvoyez ensuite le rapport complet pour l'etape 2.
 
 ⛔ INTERDICTIONS ABSOLUES
 - JAMAIS de TSV. JAMAIS de VALIDATION PASSED/FAILED.
@@ -599,10 +593,10 @@ function buildDoubleCheckStep2Prompt(data, json1, json2, reviewReport) {
 Tu recois :
 1. JSON1 — produit par le premier modele (ci-dessous) — BASE DE DEPART
 2. JSON2 — produit par le second modele (ci-dessous) — reference pour les corrections
-3. Le rapport de comparaison complete avec les decisions du membre (ci-dessous)
+3. Le rapport de comparaison complete avec JSONF finalise (ci-dessous)
 
 Ta mission : construire le JSON final propre en partant de JSON1,
-en appliquant toutes les corrections approuvees par le membre.
+en appliquant toutes les corrections de JSONF.
 
 Format de sortie : un tableau JSON de questions (array d'objets).
 Chaque objet contient uniquement les champs non vides parmi :
@@ -630,7 +624,7 @@ ${json1}
 JSON2 — REFERENCE
 ${json2}
 
-RAPPORT DE COMPARAISON AVEC DECISIONS DU MEMBRE
+RAPPORT DE COMPARAISON FINALISE
 ${reviewReport}
 
 ${injectTaxonomy()}
@@ -647,14 +641,12 @@ INTERPRETATION DU RAPPORT :
   Type              → code taxonomique — quelle regle appliquer
   JSON1             → valeur actuelle dans JSON1 (contexte)
   JSON2             → valeur alternative dans JSON2 (contexte)
-  JSONF             → suggestion du modele arbitre
-  Member Validation → SEULE AUTORITE — ce qui est applique au final
+  JSONF             → SEULE AUTORITE — valeur finale a appliquer
   Full Phrase       → contexte uniquement, jamais une instruction
 
-APPLICATION selon Member Validation :
-  "Validate"         → applique la valeur JSONF.
-  Texte personnalise → applique exactement le texte du membre.
-  "[Here]"           → ARRETE. Retourne VALIDATION FAILED avec la reference.
+APPLICATION GENERALE :
+  JSONF complete     → applique STRICTEMENT JSONF.
+  JSONF avec "???"   → ARRETE. Retourne VALIDATION FAILED avec la reference.
 
 APPLICATION selon le Type :
   SPELL, ACRONYM, PREFIX_NUM, PREFIX_PROP → remplace le mot cible dans le champ JSON en utilisant la valeur JSONF,
@@ -662,35 +654,35 @@ APPLICATION selon le Type :
       Les crochets sont des marqueurs visuels du rapport UNIQUEMENT — ils ne doivent JAMAIS apparaitre dans le JSON final.
       Exemple : JSONF = "Les antigenes sont [reconnus] par les [BCR]" → JSON = "Les antigenes sont reconnus par les BCR"
   DIGIT, UNIT, SYMBOL   → remplace la valeur ou le caractere cible dans le champ JSON.
-  PROP_DIVERGE          → remplace le texte entier du champ par la valeur membre.
-  PROP_TRUNCATED        → remplace le texte tronque par la valeur complete approuvee par le membre.
-  PROP_SWAP             → echange les deux champs concernes selon la decision membre.
-  PROP_ORDER            → reordonne les champs a/b/c/d/e selon la decision membre.
+  PROP_DIVERGE          → remplace le texte entier du champ par JSONF.
+  PROP_TRUNCATED        → remplace le texte tronque par la valeur complete contenue dans JSONF.
+  PROP_SWAP             → echange les deux champs concernes selon JSONF.
+  PROP_ORDER            → reordonne les champs a/b/c/d/e selon JSONF.
   QCM_SHIFT             → parser le JSONF ligne par ligne en utilisant les prefixes "Text:" / "A:" / "B:" / "C:" / "D:" / "E:" comme separateurs de champs.
       Chaque segment est mappe vers le champ JSON correspondant (Text→text, A→a, B→b, etc.).
       Format JSONF attendu : "Text: [valeur] / A: [valeur] / B: [valeur] / C: [valeur] / D: [valeur] / E: [valeur]"
-      Si Member Validation = "Validate" → utiliser directement chaque segment tel quel, sans les prefixes ni les "/".
-      Si un segment vaut encore "???" malgre Member Validation = "Validate" → ARRETE, retourne VALIDATION FAILED sur cette reference.
-  CT_DIVERGE, CT_DRIFT  → remplace le champ 'correct' par la valeur membre.
+      Utiliser directement chaque segment tel quel, sans les prefixes ni les "/".
+      Si un segment vaut encore "???" → ARRETE, retourne VALIDATION FAILED sur cette reference.
+  CT_DIVERGE, CT_DRIFT  → remplace le champ 'correct' par JSONF.
   CT_SPACING            → reecris 'correct' sans espace interne.
-  HINT_DIVERGE          → remplace le champ 'hint' par la valeur membre.
-  SWAP_DIVERGE          → applique la decision membre sur 'correct'.
-  CAS_DIVERGE           → applique la decision membre sur 'cas'.
-  FIELD_MISSING         → ajoute ou supprime le champ selon la decision membre.
+  HINT_DIVERGE          → remplace le champ 'hint' par JSONF.
+  SWAP_DIVERGE          → applique JSONF sur 'correct'.
+  CAS_DIVERGE           → applique JSONF sur 'cas'.
+  FIELD_MISSING         → ajoute ou supprime le champ selon JSONF.
   ROW_COUNT             → VALIDATION FAILED si non resolu.
   AUDIT_ONLY            → aucune action sur le TSV — information uniquement.
 
 Champs non listes dans le rapport → prendre la valeur de JSON1 telle quelle.
 
 INTERDICTIONS ABSOLUES :
-- Ne jamais inventer une correction non approuvee par le membre.
+- Ne jamais inventer une correction absente de JSONF.
 - Ne jamais modifier un champ absent du rapport.
 - Ne jamais corriger le CT par logique medicale.
 - Ne jamais deplacer les propositions a-e sauf PROP_ORDER confirme.
 - Ne jamais introduire un espace dans une valeur correct (BCE reste BCE).
 
 VERIFICATION FINALE :
-  - Aucun marqueur residuel [Here], [SWAP] ou [REVIEW] dans les valeurs JSON (verifier ces chaines exactes uniquement).
+  - Aucun marqueur residuel [SWAP] ou [REVIEW] dans les valeurs JSON (verifier ces chaines exactes uniquement).
   - Aucun crochet [ ou ] dans les valeurs JSON — les crochets SPELL du rapport doivent avoir ete supprimes.
   - Nombre d'objets dans le tableau = ${expectedRows}.
   - Aucun champ correct ne contient une deduction medicale.
@@ -739,7 +731,7 @@ CAS 2 — VALIDATION FAILED
 VALIDATION FAILED
 Raison : [description precise]
 References bloquantes : [liste]
-Action requise : Remplacer chaque "[Here]" apres verification dans le PDF, puis relancer l'etape 2.
+Action requise : Remplacer chaque "???" dans JSONF apres verification dans le PDF, puis relancer l'etape 2.
 
 - Aucun JSON. Aucune version partielle. Aucun texte libre en dehors du bloc.`;
 }
