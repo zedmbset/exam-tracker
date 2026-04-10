@@ -576,6 +576,23 @@
       let pendingOrigPdfFile = null;
       let pendingAffichagePdfFile = null;
       let googleUser = null;
+      let subcategoriesState = [];
+      let draggedSubcategoryId = null;
+      const SUBCATEGORY_CATALOG = [
+        { name: "Anatomie", modules: ["unit1", "unit2", "unit3", "unit4", "unit5"], levels: [2] },
+        { name: "Biochimie", modules: ["unit2", "unit3", "unit4"], levels: [2] },
+        { name: "Biophysique", modules: ["unit1", "unit5"], levels: [2] },
+        { name: "Histologie", modules: ["unit1", "unit2", "unit3", "unit4", "unit5"], levels: [2] },
+        { name: "Physiologie", modules: ["unit1", "unit2", "unit3", "unit4", "unit5"], levels: [2] },
+        { name: "Biochimie", modules: ["unit1", "unit2", "unit3", "unit4"], levels: [3] },
+        { name: "Physiopathologie", modules: ["unit1", "unit2", "unit3", "unit4"], levels: [3] },
+        { name: "Psychologie medicale", modules: ["unit1"], levels: [3] },
+        { name: "Radiologie", modules: ["unit1", "unit2", "unit3", "unit4"], levels: [3] },
+        { name: "Semiologie", modules: ["unit1", "unit2", "unit3", "unit4"], levels: [3] },
+        { name: "Biologie", modules: ["residanat"], levels: [7] },
+        { name: "Medicale", modules: ["residanat"], levels: [7] },
+        { name: "Chirurgie", modules: ["residanat"], levels: [7] },
+      ];
 
       // Google Auth
       function handleCredentialResponse(response) {
@@ -655,6 +672,28 @@
         return String(value || "").toLowerCase().replace(/[\s_]/g, "");
       }
 
+      function normalizeTextToken(value) {
+        return String(value || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "");
+      }
+
+      function getModuleCategoryKey(row = activeRow) {
+        const normalizedModule = normalizeTextToken(cell(row, "Module"));
+        const unitMatch = normalizedModule.match(/^unite?([1-5])$/);
+        if (unitMatch) return `unit${unitMatch[1]}`;
+        if (normalizedModule === "residanat") return "residanat";
+        return "";
+      }
+
+      function getLevelNumber(row = activeRow) {
+        const rawLevel = String(cell(row, "Level") || "").trim();
+        const match = rawLevel.match(/^(\d+)/);
+        return match ? parseInt(match[1], 10) : NaN;
+      }
+
       function colIdx(name) {
         const exact = headers.indexOf(name);
         if (exact >= 0) return exact;
@@ -675,6 +714,58 @@
       }
       function cell(row, n) { const i = colIdx(n); return i >= 0 ? row.cells[i] || "" : ""; }
       function setCell(row, n, v) { const i = colIdx(n); if (i >= 0) { while (row.cells.length <= i) row.cells.push(""); row.cells[i] = v; } }
+
+      function parseSubcategoriesValue(value) {
+        if (Array.isArray(value)) return value;
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          if (!trimmed || trimmed === "[]") return [];
+          try {
+            const parsed = JSON.parse(trimmed);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (e) {
+            return [];
+          }
+        }
+        return [];
+      }
+
+      function getStoredSubcategories(row = activeRow) {
+        return parseSubcategoriesValue(parseTags(row).subcategories);
+      }
+
+      function getDefaultSubcategoriesForRow(row = activeRow) {
+        const moduleKey = getModuleCategoryKey(row);
+        const levelNumber = getLevelNumber(row);
+        if (!moduleKey || Number.isNaN(levelNumber)) return [];
+
+        return SUBCATEGORY_CATALOG
+          .filter(item => item.modules.includes(moduleKey) && item.levels.includes(levelNumber))
+          .map(item => ({ name: item.name, range: "" }));
+      }
+
+      function shouldShowSubcategoriesForRow(row = activeRow) {
+        return !!getModuleCategoryKey(row);
+      }
+
+      function mergeSubcategorySets(savedSubcategories, defaultSubcategories) {
+        const merged = [];
+        const seen = new Set();
+        const addItem = (item) => {
+          const normalizedName = normalizeTextToken(item.name);
+          if (!normalizedName || seen.has(normalizedName)) return;
+          seen.add(normalizedName);
+          merged.push({
+            id: item.id || Date.now() + Math.random(),
+            name: String(item.name || "").trim(),
+            range: String(item.range || "").trim(),
+          });
+        };
+
+        savedSubcategories.forEach(addItem);
+        defaultSubcategories.forEach(addItem);
+        return merged;
+      }
 
       function parseTags(row) {
         let tags = {};
@@ -1227,6 +1318,7 @@
 
         document.getElementById("stepsContainer").innerHTML = steps.join("");
 
+        initSubcategories();
         refreshPromptText();
       }
 
@@ -1353,6 +1445,16 @@
                     onchange="refreshPromptText();this.nextElementSibling.textContent=this.checked?'Yes - has association / combination questions':'No association questions'">
                   <span style="font-size:13px;color:var(--text);">${tags.hasComb ? "Yes - has association / combination questions" : "No association questions"}</span>
                 </label>
+              </div>
+              <div id="subcategorySection" class="form-row full" style="display:none;">
+                <label>Subcategories mapping</label>
+                <div class="instruction-box" style="padding:12px 14px;">
+                  Add subcategories only for Unite 1-5 and Residanat exams. Each row maps a subcategory name to a question range like 1-20.
+                </div>
+                <div style="display:flex;justify-content:flex-start;margin-top:8px;">
+                  <button type="button" class="btn btn-sm" onclick="addSubcategoryRow()">+ Add subcategory</button>
+                </div>
+                <div id="subcategoryList" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"></div>
               </div>
             </div>
           </div>`;
@@ -1490,20 +1592,139 @@
         return stepCardWrap(3, examId, state, "Paste MBset quiz link", "Optional - paste after importing into MBset", body, footer);
       }
 
+      function initSubcategories() {
+        if (!activeRow) {
+          subcategoriesState = [];
+          return;
+        }
+        const savedSubcategories = getStoredSubcategories(activeRow);
+        const defaultSubcategories = getDefaultSubcategoriesForRow(activeRow);
+        subcategoriesState = mergeSubcategorySets(savedSubcategories, defaultSubcategories);
+        renderSubcategories();
+        checkSubcategoryVisibility();
+      }
+
+      function addSubcategoryRow() {
+        subcategoriesState.push({ id: Date.now() + Math.random(), name: "", range: "" });
+        renderSubcategories();
+        refreshPromptText();
+      }
+
+      function removeSubcategoryRow(id) {
+        subcategoriesState = subcategoriesState.filter(sc => sc.id !== id);
+        renderSubcategories();
+        refreshPromptText();
+      }
+
+      function updateSubcategory(id, field, value) {
+        const item = subcategoriesState.find(sc => sc.id === id);
+        if (!item) return;
+        item[field] = value;
+        refreshPromptText();
+      }
+
+      function renderSubcategories() {
+        const container = document.getElementById("subcategoryList");
+        if (!container) return;
+
+        if (!subcategoriesState.length) {
+          container.innerHTML = `<div class="field-hint" style="padding:10px 12px;border:1px dashed var(--border2);border-radius:var(--radius);background:var(--bg2);">No subcategories added yet.</div>`;
+          return;
+        }
+
+        container.innerHTML = subcategoriesState.map(sc => `
+          <div
+            draggable="true"
+            ondragstart="handleSubcategoryDragStart(event, ${JSON.stringify(sc.id)})"
+            ondragover="handleSubcategoryDragOver(event, ${JSON.stringify(sc.id)})"
+            ondragleave="handleSubcategoryDragLeave(event)"
+            ondrop="handleSubcategoryDrop(event, ${JSON.stringify(sc.id)})"
+            ondragend="handleSubcategoryDragEnd()"
+            style="display:flex;gap:8px;align-items:center;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);"
+          >
+            <button
+              type="button"
+              title="Drag to reorder"
+              style="cursor:grab;border:1px solid var(--border2);background:var(--bg);border-radius:10px;padding:8px 10px;color:var(--text3);font-size:16px;line-height:1;"
+            >⋮⋮</button>
+            <input
+              type="text"
+              value="${String(sc.name || "").replace(/"/g, "&quot;")}"
+              placeholder="Subcategory name (e.g. Anatomie)"
+              oninput="updateSubcategory(${JSON.stringify(sc.id)}, 'name', this.value)"
+              style="flex:1;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;"
+            >
+            <input
+              type="text"
+              value="${String(sc.range || "").replace(/"/g, "&quot;")}"
+              placeholder="Question range (e.g. 1-20)"
+              oninput="updateSubcategory(${JSON.stringify(sc.id)}, 'range', this.value)"
+              style="width:180px;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;"
+            >
+            <button type="button" class="btn btn-sm" onclick="removeSubcategoryRow(${JSON.stringify(sc.id)})" style="color:var(--red-text);border-color:var(--red-border);">Remove</button>
+          </div>
+        `).join("");
+      }
+
+      function handleSubcategoryDragStart(event, id) {
+        draggedSubcategoryId = id;
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", String(id));
+      }
+
+      function handleSubcategoryDragOver(event, id) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        const row = event.currentTarget;
+        if (!row) return;
+        row.style.borderColor = "var(--accent)";
+        row.style.background = "var(--blue-bg)";
+      }
+
+      function handleSubcategoryDragLeave(event) {
+        const row = event.currentTarget;
+        if (!row) return;
+        row.style.borderColor = "var(--border2)";
+        row.style.background = "var(--bg2)";
+      }
+
+      function handleSubcategoryDrop(event, targetId) {
+        event.preventDefault();
+        handleSubcategoryDragLeave(event);
+        const sourceId = draggedSubcategoryId;
+        draggedSubcategoryId = null;
+        if (sourceId == null || sourceId === targetId) return;
+
+        const sourceIndex = subcategoriesState.findIndex(sc => sc.id === sourceId);
+        const targetIndex = subcategoriesState.findIndex(sc => sc.id === targetId);
+        if (sourceIndex < 0 || targetIndex < 0) return;
+
+        const [movedItem] = subcategoriesState.splice(sourceIndex, 1);
+        subcategoriesState.splice(targetIndex, 0, movedItem);
+        renderSubcategories();
+        refreshPromptText();
+      }
+
+      function handleSubcategoryDragEnd() {
+        draggedSubcategoryId = null;
+        renderSubcategories();
+      }
+
+      function checkSubcategoryVisibility() {
+        const section = document.getElementById("subcategorySection");
+        if (!section) return;
+        const shouldShow = shouldShowSubcategoriesForRow(activeRow);
+        section.style.display = shouldShow ? "flex" : "none";
+      }
+
       // Context Extractor
       function getExamContext() {
         if (!activeRow) return {};
         const tags = parseTags(activeRow);
 
-        let subcategories = [];
-        try {
-          const subcatStr = tags.subcategories || "[]";
-          if (subcatStr && subcatStr.trim() !== "[]") {
-            subcategories = JSON.parse(subcatStr);
-          }
-        } catch (e) {
-          subcategories = [];
-        }
+        const subcategories = document.getElementById("subcategorySection")
+          ? subcategoriesState.map(sc => ({ name: String(sc.name || "").trim(), range: String(sc.range || "").trim() })).filter(sc => sc.name || sc.range)
+          : getStoredSubcategories(activeRow);
 
         return {
           module: cell(activeRow, "Module") || "[Preciser l'unite]",
@@ -1681,6 +1902,12 @@
         const examDateVal = document.getElementById("tags_examDate")?.value || "";
         const langVal    = document.getElementById("tags_lang")?.value || "Francais";
         const annotations = parseAnnotations(document.getElementById("tags_annotations")?.value || "");
+        const shouldSaveSubcategories = shouldShowSubcategoriesForRow(activeRow);
+        const cleanedSubcategories = shouldSaveSubcategories
+          ? subcategoriesState
+              .map(sc => ({ name: String(sc.name || "").trim(), range: String(sc.range || "").trim() }))
+              .filter(sc => sc.name || sc.range)
+          : [];
 
         if (examDateVal) setCell(activeRow, "ExamDate", examDateVal);
 
@@ -1692,6 +1919,7 @@
           hasCT:   hasCTVal,
           hasCas:  hasCasVal,
           hasComb: hasCombVal,
+          subcategories: cleanedSubcategories,
         });
         delete mergedTags.missingQsts;
         setCell(activeRow, "Tags", JSON.stringify(mergedTags));
