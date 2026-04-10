@@ -92,6 +92,10 @@ async function getDriveFileMeta(fileId, token) {
   return metaRes.json();
 }
 
+function buildPublicDriveDownloadUrl(fileId) {
+  return `https://drive.google.com/uc?export=download&id=${fileId}`;
+}
+
 function buildNextVersionedFilename(baseStem, extension, existingName = '') {
   const safeExtension = String(extension || '').replace(/^\./, '');
   const fileSuffix = safeExtension ? `.${safeExtension}` : '';
@@ -295,7 +299,7 @@ app.get('/api/drive-download', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(name || fileId)}"`);
     fileRes.body.pipe(res);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.redirect(buildPublicDriveDownloadUrl(fileId));
   }
 });
 
