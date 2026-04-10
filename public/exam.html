@@ -1632,8 +1632,9 @@
           return;
         }
         const savedSubcategories = getStoredSubcategories(activeRow);
-        const defaultSubcategories = getDefaultSubcategoriesForRow(activeRow);
-        subcategoriesState = mergeSubcategorySets(savedSubcategories, defaultSubcategories);
+        subcategoriesState = savedSubcategories.length
+          ? mergeSubcategorySets(savedSubcategories, [])
+          : mergeSubcategorySets([], getDefaultSubcategoriesForRow(activeRow));
         renderSubcategories();
         checkSubcategoryVisibility();
       }
