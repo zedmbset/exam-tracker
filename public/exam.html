@@ -689,9 +689,9 @@
 
       function getModuleCategoryKey(row = activeRow) {
         const normalizedModule = normalizeTextToken(cell(row, "Module"));
-        const unitMatch = normalizedModule.match(/^unite?([1-5])$/);
+        const unitMatch = normalizedModule.match(/^unite?([1-5]).*$/);
         if (unitMatch) return `unit${unitMatch[1]}`;
-        if (normalizedModule === "residanat") return "residanat";
+        if (/^residanat.*$/.test(normalizedModule)) return "residanat";
         return "";
       }
 
@@ -1200,6 +1200,33 @@
         const m = url.match(/\/d\/([^\/?#]+)/) || url.match(/[?&]id=([^&]+)/);
         if (!m) return "";
         return `https://docs.google.com/spreadsheets/d/${m[1]}/edit`;
+      }
+
+      function extractDriveFileId(url) {
+        if (!url) return "";
+        const match = String(url).match(/\/d\/([^\/?#]+)/) || String(url).match(/[?&]id=([^&]+)/);
+        return match ? match[1] : "";
+      }
+
+      async function getDriveFileName(url) {
+        const fileId = extractDriveFileId(url);
+        if (!fileId) return "";
+        const res = await fetch(`${API}/api/drive-meta?id=${encodeURIComponent(fileId)}`);
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || "Unable to read existing Drive file metadata");
+        return data.name || "";
+      }
+
+      function buildNextVersionedFilename(baseStem, extension, existingName = "") {
+        const ext = String(extension || "").replace(/^\./, "");
+        const fileSuffix = ext ? `.${ext}` : "";
+        const currentName = String(existingName || "").trim();
+        if (!currentName) return `${baseStem}${fileSuffix}`;
+        const escapedExt = ext.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const versionRegex = new RegExp(`_V(\\d+)\\.${escapedExt}$`, "i");
+        const versionMatch = currentName.match(versionRegex);
+        if (versionMatch) return `${baseStem}_V${parseInt(versionMatch[1], 10) + 1}${fileSuffix}`;
+        return `${baseStem}_V1${fileSuffix}`;
       }
 
       // Step checkbox state (localStorage)
@@ -1934,14 +1961,20 @@
         const uploadPdfKind = async (file, columnName, kind) => {
           btn.textContent = "Uploading PDF...";
           const existingUrl = cell(activeRow, columnName);
-          const versionSuffix = existingUrl ? "_V1" : "";
           const ctSuffix = hasCTVal ? "_CT" : "";
           const _pr = (cell(activeRow, "Period") + cell(activeRow, "Rotation")).replace(/\s+/g, "");
           const baseName = [cell(activeRow, "Wilaya"), cell(activeRow, "Year"), _pr || null, cell(activeRow, "Module")]
             .filter(Boolean).join("_").replace(/\s+/g, "_");
-          const fname = kind === "affichage"
-            ? `${baseName}${ctSuffix}_Affichage${versionSuffix}.pdf`
-            : `${baseName}${ctSuffix}_${nQstVal}Q_${annotations.missingPos.length}miss${versionSuffix}.pdf`;
+          const missCount = annotations.missingPos.length;
+          const stem = kind === "affichage"
+            ? `${baseName}${ctSuffix}_Affichage`
+            : [
+                `${baseName}${ctSuffix}`,
+                nQstVal ? `${nQstVal}Q` : null,
+                missCount > 0 ? `${missCount}miss` : null,
+              ].filter(Boolean).join("_");
+          const existingName = existingUrl ? await getDriveFileName(existingUrl) : "";
+          const fname = buildNextVersionedFilename(stem, "pdf", existingName);
           const fd = new FormData();
           fd.append("file", file, fname);
           fd.append("filename", fname);
@@ -2200,15 +2233,15 @@
         const rotation = String(cell(activeRow, "Rotation") || "").replace(/\s+/g, "");
         const pr       = `${period}${rotation}`;
         const missCount = annotations.missingPos.length;
-        const fnameParts = [
+        const stemParts = [
           wilaya || null, level || null, module || null,
           `${yearShort}${pr}` || null,
           nQstVal ? `${nQstVal}Q` : null,
           hasCTVal ? "CT" : null,
           missCount > 0 ? `${missCount}miss` : null,
-          "V1"
         ].filter(Boolean);
-        const fname = `${fnameParts.join("_")}.xlsx`;
+        const existingExcelName = cell(activeRow, "Quiz_Tbl") ? await getDriveFileName(cell(activeRow, "Quiz_Tbl")) : "";
+        const fname = buildNextVersionedFilename(stemParts.join("_"), "xlsx", existingExcelName);
 
         try {
           const workbookBlob = jsonToWorkbookBlob(questions);
@@ -2327,6 +2360,8 @@
             affichagePdfUrl: cell(activeRow, "AffichagePDF"),
             csvUrl: cell(activeRow, "Quiz_Tbl"),
             quizLink: cell(activeRow, "Quiz_Link"),
+            adminReportUrl: getStoredReportLink(activeRow, "admin"),
+            publicReportUrl: getStoredReportLink(activeRow, "public"),
             tags,
           }
         };

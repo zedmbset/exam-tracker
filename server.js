@@ -6,7 +6,7 @@ const multer   = require('multer');
 const fetch    = (...args) => import('node-fetch').then(({default: f}) => f(...args));
 const FormData = require('form-data');
 const crypto   = require('crypto');
-const { buildBaseReportFilename } = require('./reports/reportPdfShared');
+const { buildBaseReportFilename, extractDriveFileId } = require('./reports/reportPdfShared');
 const { buildAdminReportBuffer } = require('./reports/adminReportPdf');
 const { buildPublicReportBuffer } = require('./reports/publicReportPdf');
 
@@ -80,6 +80,31 @@ async function uploadBufferToDrive(fileBuffer, name, token) {
   });
 
   return { id, url: `https://drive.google.com/file/d/${id}/view`, mimeType };
+}
+
+async function getDriveFileMeta(fileId, token) {
+  if (!fileId) throw new Error('Missing file id');
+  const metaRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType&supportsAllDrives=true`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!metaRes.ok) throw new Error(await metaRes.text());
+  return metaRes.json();
+}
+
+function buildNextVersionedFilename(baseStem, extension, existingName = '') {
+  const safeExtension = String(extension || '').replace(/^\./, '');
+  const fileSuffix = safeExtension ? `.${safeExtension}` : '';
+  const currentName = String(existingName || '').trim();
+  if (!currentName) return `${baseStem}${fileSuffix}`;
+
+  const escapedExt = safeExtension.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const versionRegex = new RegExp(`_V(\\d+)\\.${escapedExt}$`, 'i');
+  const versionMatch = currentName.match(versionRegex);
+  if (versionMatch) {
+    return `${baseStem}_V${parseInt(versionMatch[1], 10) + 1}${fileSuffix}`;
+  }
+  return `${baseStem}_V1${fileSuffix}`;
 }
 
 // Service Account -> OAuth2 access token (JWT)
@@ -225,7 +250,18 @@ app.post('/api/report-pdf', async (req, res) => {
 
     const baseName = buildBaseReportFilename(data);
     const suffix = type === 'admin' ? 'Admin_Report' : 'Public_Report';
-    const filename = `${baseName}_${suffix}_V1.pdf`;
+    const existingUrl = type === 'admin' ? data.adminReportUrl : data.publicReportUrl;
+    let existingName = '';
+    if (existingUrl) {
+      const existingId = extractDriveFileId(existingUrl);
+      if (existingId) {
+        try {
+          const meta = await getDriveFileMeta(existingId, token);
+          existingName = meta.name || '';
+        } catch (e) {}
+      }
+    }
+    const filename = buildNextVersionedFilename(`${baseName}_${suffix}`, 'pdf', existingName);
     const pdfBuffer = type === 'admin'
       ? buildAdminReportBuffer(data)
       : buildPublicReportBuffer(data);
@@ -247,12 +283,7 @@ app.get('/api/drive-download', async (req, res) => {
   if (!fileId) return res.status(400).json({ error: 'Missing file id' });
   try {
     const token = await getOwnerDriveAccessToken();
-    const metaRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType&supportsAllDrives=true`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!metaRes.ok) throw new Error(await metaRes.text());
-    const { name, mimeType } = await metaRes.json();
+    const { name, mimeType } = await getDriveFileMeta(fileId, token);
 
     const fileRes = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`,
@@ -263,6 +294,17 @@ app.get('/api/drive-download', async (req, res) => {
     res.setHeader('Content-Type', mimeType || 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(name || fileId)}"`);
     fileRes.body.pipe(res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/drive-meta', async (req, res) => {
+  const fileId = (req.query.id || '').replace(/[^a-zA-Z0-9_\-]/g, '');
+  if (!fileId) return res.status(400).json({ error: 'Missing file id' });
+  try {
+    const token = await getOwnerDriveAccessToken();
+    res.json(await getDriveFileMeta(fileId, token));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
