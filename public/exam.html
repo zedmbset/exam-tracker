@@ -562,9 +562,9 @@
 
       const COLS = {
         ID_Exams: 0, Wilaya: 1, Year: 2, Level: 3, Rotation: 4, Period: 5,
-        Module: 6, Start: 7, End: 8, ExamDate: 9, Status: 10,
-        OrigPDF: 11, AffichagePDF: 12, Quiz_Tbl: 13, Membre: 14, Tags: 15, Quiz_Link: 16,
-        Admin_Report: 17, Public_Report: 18,
+        categoryId: 6, Module: 7, Start: 8, End: 9, ExamDate: 10, Status: 11,
+        OrigPDF: 12, AffichagePDF: 13, Quiz_Tbl: 14, Membre: 15, Tags: 16, Quiz_Link: 17,
+        Admin_Report: 18, Public_Report: 19,
       };
 
       const EXAM_STATUS_OPTIONS = ["Completed", "In Progress", "Pending", "Not Started"];
@@ -579,6 +579,8 @@
       let googleClientId = "";
       let subcategoriesState = [];
       let draggedSubcategoryId = null;
+      let composedSubmodulesState = [];
+      let draggedComposedSubmoduleId = null;
       const SUBCATEGORY_CATALOG = [
         { name: "Anatomie", modules: ["unit1", "unit2", "unit3", "unit4", "unit5"], levels: [2] },
         { name: "Biochimie", modules: ["unit2", "unit3", "unit4"], levels: [2] },
@@ -593,6 +595,64 @@
         { name: "Biologie", modules: ["residanat"], levels: [7] },
         { name: "Medicale", modules: ["residanat"], levels: [7] },
         { name: "Chirurgie", modules: ["residanat"], levels: [7] },
+      ];
+      const COMPOSED_EXAM_CATALOG = [
+        {
+          wilaya: "constantine",
+          module: "Appareil Locomoteur",
+          categoryIds: ["Cnst_ORTHOPEDIE", "Cnst_MPR", "Cnst_RHUMATOLOGIE"],
+          submodules: [
+            { name: "Orthopédie", categoryId: "Cnst_ORTHOPEDIE" },
+            { name: "MPR", categoryId: "Cnst_MPR" },
+            { name: "Rhumatologie", categoryId: "Cnst_RHUMATOLOGIE" },
+          ],
+        },
+        {
+          wilaya: "constantine",
+          module: "Onco-Hématologie",
+          categoryIds: ["Cnst_HEMATOLOGIE", "Cnst_ONCOLOGIE_MEDICALE"],
+          submodules: [
+            { name: "Hématologie", categoryId: "Cnst_HEMATOLOGIE" },
+            { name: "Oncologie médicale", categoryId: "Cnst_ONCOLOGIE_MEDICALE" },
+          ],
+        },
+        {
+          wilaya: "constantine",
+          module: "Urologie-Néphrologie",
+          categoryIds: ["Cnst_NEPHROLOGIE", "Cnst_UROLOGIE"],
+          submodules: [
+            { name: "Néphrologie", categoryId: "Cnst_NEPHROLOGIE" },
+            { name: "Urologie", categoryId: "Cnst_UROLOGIE" },
+          ],
+        },
+        {
+          wilaya: "setif",
+          module: "Appareil Locomoteur",
+          categoryIds: ["Setif21", "Setif29", "Setif36"],
+          submodules: [
+            { name: "MPR", categoryId: "Setif21" },
+            { name: "Orthopédie", categoryId: "Setif29" },
+            { name: "Rhumatologie", categoryId: "Setif36" },
+          ],
+        },
+        {
+          wilaya: "setif",
+          module: "Onco-Hématologie",
+          categoryIds: ["Setif16", "Setif26"],
+          submodules: [
+            { name: "Hématologie", categoryId: "Setif16" },
+            { name: "Oncologie médicale", categoryId: "Setif26" },
+          ],
+        },
+        {
+          wilaya: "setif",
+          module: "Urologie-Néphrologie",
+          categoryIds: ["Setif25", "Setif48"],
+          submodules: [
+            { name: "Néphrologie", categoryId: "Setif25" },
+            { name: "Urologie", categoryId: "Setif48" },
+          ],
+        },
       ];
 
       // Google Auth
@@ -737,8 +797,88 @@
         return [];
       }
 
+      function parseCategoryIdList(value) {
+        return String(value || "")
+          .split(",")
+          .map(item => String(item || "").trim())
+          .filter(Boolean);
+      }
+
+      function normalizeCategoryIdSet(value) {
+        return parseCategoryIdList(value)
+          .map(item => item.toUpperCase())
+          .sort()
+          .join("|");
+      }
+
+      function parseComposedSubmodulesValue(value) {
+        if (Array.isArray(value)) return value;
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          if (!trimmed || trimmed === "[]") return [];
+          try {
+            const parsed = JSON.parse(trimmed);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (e) {
+            return [];
+          }
+        }
+        return [];
+      }
+
       function getStoredSubcategories(row = activeRow) {
         return parseSubcategoriesValue(parseTags(row).subcategories);
+      }
+
+      function getStoredComposedSubmodules(row = activeRow) {
+        return parseComposedSubmodulesValue(parseTags(row).composedSubmodules);
+      }
+
+      function getComposedExamDefinition(row = activeRow) {
+        const ids = parseCategoryIdList(cell(row, "categoryId"));
+        if (ids.length <= 1) return null;
+        const wilaya = normalizeTextToken(cell(row, "Wilaya"));
+        const normalizedIds = normalizeCategoryIdSet(ids.join(","));
+        return COMPOSED_EXAM_CATALOG.find(item =>
+          normalizeTextToken(item.wilaya) === wilaya &&
+          normalizeCategoryIdSet(item.categoryIds.join(",")) === normalizedIds
+        ) || null;
+      }
+
+      function isComposedExam(row = activeRow) {
+        return !!getComposedExamDefinition(row);
+      }
+
+      function buildDefaultComposedSubmodules(row = activeRow) {
+        const definition = getComposedExamDefinition(row);
+        if (!definition) return [];
+        return definition.submodules.map(item => ({
+          id: `${item.categoryId}-${Date.now()}-${Math.random()}`,
+          name: item.name,
+          categoryId: item.categoryId,
+          range: "",
+        }));
+      }
+
+      function mergeComposedSubmoduleSets(savedSubmodules, defaultSubmodules) {
+        const merged = [];
+        const seen = new Set();
+        const addItem = (item) => {
+          const categoryId = String(item.categoryId || "").trim();
+          const normalizedId = categoryId.toUpperCase();
+          if (!normalizedId || seen.has(normalizedId)) return;
+          seen.add(normalizedId);
+          merged.push({
+            id: item.id || `${categoryId}-${Date.now()}-${Math.random()}`,
+            name: String(item.name || "").trim(),
+            categoryId,
+            range: String(item.range || "").trim(),
+          });
+        };
+
+        savedSubmodules.forEach(addItem);
+        defaultSubmodules.forEach(addItem);
+        return merged;
       }
 
       function getDefaultSubcategoriesForRow(row = activeRow) {
@@ -825,6 +965,90 @@
         return entries.map(e => e.pos + e.tag).join(', ');
       }
 
+      function parseQuestionRangeList(value, maxQuestionNumber) {
+        const text = String(value || "").trim();
+        if (!text) return { ok: false, error: "Missing range", values: [] };
+        const values = [];
+        const seen = new Set();
+        for (const rawPart of text.split(",")) {
+          const part = rawPart.trim();
+          if (!part) continue;
+          const match = part.match(/^(\d+)(?:-(\d+))?$/);
+          if (!match) return { ok: false, error: `Invalid range "${part}"`, values: [] };
+          const start = parseInt(match[1], 10);
+          const end = match[2] ? parseInt(match[2], 10) : start;
+          if (start < 1 || end < start) return { ok: false, error: `Invalid range "${part}"`, values: [] };
+          if (maxQuestionNumber && end > maxQuestionNumber) return { ok: false, error: `Range "${part}" exceeds total questions`, values: [] };
+          for (let num = start; num <= end; num++) {
+            if (!seen.has(num)) {
+              seen.add(num);
+              values.push(num);
+            }
+          }
+        }
+        return values.length ? { ok: true, values } : { ok: false, error: "Missing range", values: [] };
+      }
+
+      function validateComposedSubmodulesState(items, nQst, missingPos) {
+        const maxQuestionNumber = parseInt(nQst, 10);
+        if (!(maxQuestionNumber > 0)) {
+          return { ok: false, message: "Enter the total number of questions before saving composed submodule ranges." };
+        }
+        const missingSet = new Set((missingPos || []).map(num => parseInt(num, 10)).filter(num => Number.isInteger(num)));
+        const seen = new Map();
+        for (const item of items) {
+          if (!String(item.range || "").trim()) {
+            return { ok: false, message: `Range is required for submodule ${item.name}.` };
+          }
+          const parsed = parseQuestionRangeList(item.range, maxQuestionNumber);
+          if (!parsed.ok) {
+            return { ok: false, message: `${item.name}: ${parsed.error}.` };
+          }
+          for (const num of parsed.values) {
+            if (seen.has(num)) {
+              return { ok: false, message: `Question ${num} is assigned to both ${seen.get(num)} and ${item.name}.` };
+            }
+            seen.set(num, item.name);
+          }
+        }
+
+        for (let num = 1; num <= maxQuestionNumber; num++) {
+          if (missingSet.has(num)) continue;
+          if (!seen.has(num)) {
+            return { ok: false, message: `Question ${num} is not covered by any composed submodule range.` };
+          }
+        }
+        return { ok: true };
+      }
+
+      function getCategoryIdForQuestionNum(num, row = activeRow, composedItems = composedSubmodulesState) {
+        const questionNum = parseInt(num, 10);
+        if (!Number.isInteger(questionNum)) return "";
+        if (!isComposedExam(row)) {
+          return parseCategoryIdList(cell(row, "categoryId"))[0] || "";
+        }
+        for (const item of composedItems || []) {
+          const parsed = parseQuestionRangeList(item.range, parseInt(parseTags(row).nQst, 10) || 0);
+          if (!parsed.ok) continue;
+          if (parsed.values.includes(questionNum)) return String(item.categoryId || "").trim();
+        }
+        return "";
+      }
+
+      function applyDerivedQuestionFields(questions, row = activeRow) {
+        const definition = getComposedExamDefinition(row);
+        const defaultCategoryId = parseCategoryIdList(cell(row, "categoryId"))[0] || "";
+        return (questions || []).map(question => {
+          const nextQuestion = { ...question };
+          delete nextQuestion.categoryName;
+          const assignedCategoryId = definition
+            ? getCategoryIdForQuestionNum(nextQuestion.num, row, composedSubmodulesState)
+            : defaultCategoryId;
+          if (assignedCategoryId) nextQuestion.categoryId = assignedCategoryId;
+          return nextQuestion;
+        });
+      }
+
       function getMissing(row) {
         const tags = parseTags(row);
         const m = [];
@@ -841,6 +1065,11 @@
         if (!cell(row, "OrigPDF")) missing.push("Original PDF");
         if (!(cell(row, "ExamDate") || cell(row, "Exam Date"))) missing.push("Exam date");
         if (!(parseInt(tags.nQst, 10) > 0)) missing.push("Total number of questions");
+        if (isComposedExam(row)) {
+          const stored = getStoredComposedSubmodules(row);
+          const composedValidation = validateComposedSubmodulesState(stored, tags.nQst, tags.missingPos || []);
+          if (!composedValidation.ok) missing.push("Composed submodule ranges");
+        }
         return {
           ready: missing.length === 0,
           missing,
@@ -1055,7 +1284,7 @@
       }
 
       function jsonToWorkbookBlob(questions) {
-        const COLS_ORDER = ["cas","num","text","a","b","c","d","e","f","g","correct","exp","hint","categoryName","tagSuggere","year","tag"];
+        const COLS_ORDER = ["cas","num","text","a","b","c","d","e","f","g","correct","exp","hint","categoryId","tagSuggere","year","tag"];
         const usedKeys = COLS_ORDER.filter(k => questions.some(q => q[k] != null && q[k] !== ""));
         const header = usedKeys.map(k => /[A-Z]/.test(k) ? k : k.charAt(0).toUpperCase() + k.slice(1));
         const rows = [header, ...questions.map(q => usedKeys.map(k => {
@@ -1530,6 +1759,13 @@
                 </div>
                 <div id="subcategoryList" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"></div>
               </div>
+              <div id="composedSubmoduleSection" class="form-row full" style="display:none;">
+                <label>Composed exam submodules</label>
+                <div class="instruction-box" style="padding:12px 14px;">
+                  For composed exams, each fixed submodule must receive a question range. You can reorder the submodules, but their names stay locked because the final export assigns the matching categoryId automatically.
+                </div>
+                <div id="composedSubmoduleList" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"></div>
+              </div>
             </div>
           </div>`;
 
@@ -1653,13 +1889,19 @@
       function initSubcategories() {
         if (!activeRow) {
           subcategoriesState = [];
+          composedSubmodulesState = [];
           return;
         }
         const savedSubcategories = getStoredSubcategories(activeRow);
         subcategoriesState = savedSubcategories.length
           ? mergeSubcategorySets(savedSubcategories, [])
           : mergeSubcategorySets([], getDefaultSubcategoriesForRow(activeRow));
+        const savedComposedSubmodules = getStoredComposedSubmodules(activeRow);
+        composedSubmodulesState = savedComposedSubmodules.length
+          ? mergeComposedSubmoduleSets(savedComposedSubmodules, buildDefaultComposedSubmodules(activeRow))
+          : buildDefaultComposedSubmodules(activeRow);
         renderSubcategories();
+        renderComposedSubmodules();
         checkSubcategoryVisibility();
       }
 
@@ -1725,6 +1967,45 @@
         `).join("");
       }
 
+      function renderComposedSubmodules() {
+        const container = document.getElementById("composedSubmoduleList");
+        if (!container) return;
+
+        if (!composedSubmodulesState.length) {
+          container.innerHTML = `<div class="field-hint" style="padding:10px 12px;border:1px dashed var(--border2);border-radius:var(--radius);background:var(--bg2);">No composed submodules detected for this exam.</div>`;
+          return;
+        }
+
+        container.innerHTML = composedSubmodulesState.map(item => `
+          <div
+            draggable="true"
+            ondragstart="handleComposedSubmoduleDragStart(event, ${JSON.stringify(item.id)})"
+            ondragover="handleComposedSubmoduleDragOver(event, ${JSON.stringify(item.id)})"
+            ondragleave="handleComposedSubmoduleDragLeave(event)"
+            ondrop="handleComposedSubmoduleDrop(event, ${JSON.stringify(item.id)})"
+            ondragend="handleComposedSubmoduleDragEnd()"
+            style="display:flex;gap:8px;align-items:center;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);"
+          >
+            <button
+              type="button"
+              title="Drag to reorder"
+              style="cursor:grab;border:1px solid var(--border2);background:var(--bg);border-radius:10px;padding:8px 10px;color:var(--text3);font-size:16px;line-height:1;"
+            >⋮⋮</button>
+            <div style="flex:1;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;">
+              <div style="font-weight:600;">Submodule: ${item.name}</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px;">categoryId: ${item.categoryId}</div>
+            </div>
+            <input
+              type="text"
+              value="${String(item.range || "").replace(/"/g, "&quot;")}"
+              placeholder="Question range (e.g. 1-20)"
+              oninput="updateComposedSubmoduleRange(${JSON.stringify(item.id)}, this.value)"
+              style="width:220px;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;"
+            >
+          </div>
+        `).join("");
+      }
+
       function handleSubcategoryDragStart(event, id) {
         draggedSubcategoryId = id;
         event.dataTransfer.effectAllowed = "move";
@@ -1771,9 +2052,62 @@
 
       function checkSubcategoryVisibility() {
         const section = document.getElementById("subcategorySection");
+        const composedSection = document.getElementById("composedSubmoduleSection");
         if (!section) return;
         const shouldShow = shouldShowSubcategoriesForRow(activeRow);
         section.style.display = shouldShow ? "flex" : "none";
+        if (composedSection) composedSection.style.display = isComposedExam(activeRow) ? "flex" : "none";
+      }
+
+      function updateComposedSubmoduleRange(id, value) {
+        const item = composedSubmodulesState.find(sc => sc.id === id);
+        if (!item) return;
+        item.range = value;
+        refreshPromptText();
+      }
+
+      function handleComposedSubmoduleDragStart(event, id) {
+        draggedComposedSubmoduleId = id;
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", String(id));
+      }
+
+      function handleComposedSubmoduleDragOver(event) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        const row = event.currentTarget;
+        if (!row) return;
+        row.style.borderColor = "var(--accent)";
+        row.style.background = "var(--blue-bg)";
+      }
+
+      function handleComposedSubmoduleDragLeave(event) {
+        const row = event.currentTarget;
+        if (!row) return;
+        row.style.borderColor = "var(--border2)";
+        row.style.background = "var(--bg2)";
+      }
+
+      function handleComposedSubmoduleDrop(event, targetId) {
+        event.preventDefault();
+        handleComposedSubmoduleDragLeave(event);
+        const sourceId = draggedComposedSubmoduleId;
+        draggedComposedSubmoduleId = null;
+        if (sourceId == null || sourceId === targetId) return;
+
+        const sourceIndex = composedSubmodulesState.findIndex(sc => sc.id === sourceId);
+        const targetIndex = composedSubmodulesState.findIndex(sc => sc.id === targetId);
+        if (sourceIndex < 0 || targetIndex < 0) return;
+
+        const [movedItem] = composedSubmodulesState.splice(sourceIndex, 1);
+        composedSubmodulesState.splice(targetIndex, 0, movedItem);
+        renderComposedSubmodules();
+        refreshPromptText();
+      }
+
+      function handleComposedSubmoduleDragEnd() {
+        draggedComposedSubmoduleId = null;
+        renderComposedSubmodules();
       }
 
       // Context Extractor
@@ -1784,9 +2118,17 @@
         const subcategories = document.getElementById("subcategorySection")
           ? subcategoriesState.map(sc => ({ name: String(sc.name || "").trim(), range: String(sc.range || "").trim() })).filter(sc => sc.name || sc.range)
           : getStoredSubcategories(activeRow);
+        const composedSubmodules = document.getElementById("composedSubmoduleSection")
+          ? composedSubmodulesState.map(item => ({
+              name: String(item.name || "").trim(),
+              categoryId: String(item.categoryId || "").trim(),
+              range: String(item.range || "").trim(),
+            })).filter(item => item.name || item.range || item.categoryId)
+          : getStoredComposedSubmodules(activeRow);
 
         return {
           module: cell(activeRow, "Module") || "[Preciser l'unite]",
+          categoryId: cell(activeRow, "categoryId") || "",
           wilaya: cell(activeRow, "Wilaya") || "-",
           year: cell(activeRow, "Year") || "XXXX",
           level: cell(activeRow, "Level") || "-",
@@ -1807,6 +2149,8 @@
           missingPos: document.getElementById("tags_annotations") ? parseAnnotations(document.getElementById("tags_annotations").value || "").missingPos : (tags.missingPos || []),
           schemaQsts: document.getElementById("tags_annotations") ? parseAnnotations(document.getElementById("tags_annotations").value || "").schemaQsts : (tags.schemaQsts || []),
           subcategories: subcategories,
+          composedSubmodules: composedSubmodules,
+          isComposedExam: isComposedExam(activeRow),
           isTwoColumn: document.getElementById("tags_isTwoColumn")?.checked || tags.isTwoColumn || false
         };
       }
@@ -1928,6 +2272,25 @@
               .map(sc => ({ name: String(sc.name || "").trim(), range: String(sc.range || "").trim() }))
               .filter(sc => sc.name || sc.range)
           : [];
+        const shouldSaveComposedSubmodules = isComposedExam(activeRow);
+        const cleanedComposedSubmodules = shouldSaveComposedSubmodules
+          ? composedSubmodulesState
+              .map(item => ({
+                name: String(item.name || "").trim(),
+                categoryId: String(item.categoryId || "").trim(),
+                range: String(item.range || "").trim(),
+              }))
+              .filter(item => item.name || item.range || item.categoryId)
+          : [];
+
+        if (shouldSaveComposedSubmodules) {
+          const composedValidation = validateComposedSubmodulesState(cleanedComposedSubmodules, nQstVal, annotations.missingPos);
+          if (!composedValidation.ok) {
+            notify(composedValidation.message, "error");
+            btn.textContent = "Save"; btn.disabled = false;
+            return;
+          }
+        }
 
         if (examDateVal) setCell(activeRow, "ExamDate", examDateVal);
 
@@ -1940,6 +2303,7 @@
           hasCas:  hasCasVal,
           hasComb: hasCombVal,
           subcategories: cleanedSubcategories,
+          composedSubmodules: cleanedComposedSubmodules,
         });
         delete mergedTags.missingQsts;
         setCell(activeRow, "Tags", JSON.stringify(mergedTags));
@@ -2189,7 +2553,8 @@
           notify("No VALIDATION PASSED signal found in the output", "error"); return;
         }
 
-        const questions = extractVerifiedJson(combined);
+        const rawQuestions = extractVerifiedJson(combined);
+        const questions = applyDerivedQuestionFields(rawQuestions);
         if (!questions || !questions.length) {
           notify("No valid JSON array found — make sure the output includes the final JSON array", "error"); return;
         }
@@ -2198,6 +2563,9 @@
         const residualMarkers = jsonText.match(/\[(?:Here|SWAP|REVIEW)[^\]]*\]/gi) || [];
         if (residualMarkers.length > 0) {
           notify(`${residualMarkers.length} unresolved marker(s) in JSON — fix them before importing`, "error"); return;
+        }
+        if (questions.some(q => !String(q.categoryId || "").trim())) {
+          notify("Some questions could not be assigned to a categoryId — check composed submodule ranges.", "error"); return;
         }
 
         const btn = document.getElementById("saveStep3Btn");

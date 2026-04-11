@@ -44,25 +44,32 @@ const TAXONOMY = {
     {
       code: "DIGIT",
       mode: "INLINE_OR_BLOQUANT",
-      description: "Chiffre ou nombre different entre JSON1 et JSON2.",
+      description: "Chiffre, valeur clinique, dose, unite numerique ou mesure differente entre JSON1 et JSON2.",
       qualifies: [
         "JSON1 dit '50%', JSON2 dit '30%'",
         "JSON1 dit '1.2 millions', JSON2 dit '2,4 millions'",
+        "JSON1 dit '84 ans', JSON2 dit '78 ans'",
+        "JSON1 dit '95/46', JSON2 dit '95/50'",
       ],
       never: [
+        "Ne jamais signaler si la difference est uniquement typographique et ne change pas la valeur.",
+        "Exemple a ignorer : '10%' vs '10 %' si le nombre est identique.",
         "Ne jamais trancher par logique medicale — la verification humaine tranche dans le PDF.",
       ],
-      modeRule: "INLINE si un des deux est evidemment une coquille OCR. BLOQUANT si les deux sont plausibles.",
+      modeRule: "INLINE si un des deux est evidemment une coquille OCR sans ambiguite. BLOQUANT si les deux valeurs sont plausibles, cliniquement significatives ou modifient une mesure.",
     },
     {
       code: "SYMBOL",
       mode: "INLINE",
-      description: "Caractere grec, symbole ou encodage different entre JSON1 et JSON2.",
+      description: "Caractere grec, symbole mathematique ou signe clinique different entre JSON1 et JSON2 et susceptible de changer le sens.",
       qualifies: [
         "JSON1 dit 'b', JSON2 dit 'β' → JSONF = β",
         "JSON1 dit 'mm3', JSON2 dit 'mm³' → JSONF = mm³",
+        "JSON1 dit 'Natalite mortalite', JSON2 dit 'Natalite + mortalite' → JSONF = Natalite + mortalite",
       ],
       never: [
+        "Ne jamais signaler la typographie francaise autour des signes ': ; ? !'.",
+        "Ne jamais signaler un espace avant ou apres un symbole si le sens reste strictement identique.",
         "Ne jamais modifier si les deux JSON ont le meme symbole.",
       ],
     },
@@ -291,29 +298,37 @@ const TAXONOMY = {
         "JSON1 a 'correct' pour Q3, JSON2 n'a pas ce champ.",
       ],
       never: [
-        "Ne pas signaler les champs derives (categoryName, year, tag, exp) — derivations du contexte.",
+        "Ne pas signaler les champs derives (categoryId, year, tag, exp) — derivations du contexte.",
       ],
     },
     {
       code: "AUDIT_ONLY",
-      mode: "INLINE",
-      description: "Incertitude CRITICAL ou HIGH presente dans audit d'un seul JSON — information pour la verification humaine.",
+      mode: "INLINE_OR_BLOQUANT",
+      description: "Incertitude CRITICAL ou HIGH presente dans audit d'un seul JSON — informative ou bloquante selon le champ impacte.",
       qualifies: [
         "JSON1.audit.uncertainties a un riskLevel CRITICAL sur Q5.b, JSON2 ne l'a pas logge.",
+        "JSON2.audit.uncertainties a un riskLevel HIGH sur 'correct' pour Q43, JSON1 ne l'a pas logge.",
       ],
       never: [
         "Ne pas signaler les entrees identiques dans les deux audits.",
         "Ne pas signaler les entrees LOW ou MEDIUM sauf si elles concernent le champ 'correct'.",
+        "Ne pas laisser en INLINE une incertitude HIGH ou CRITICAL qui touche 'correct', 'cas' ou la structure du QCM.",
       ],
+      modeRule: "BLOQUANT si le champ impacte est 'correct', 'cas', une valeur clinique ou la structure du QCM. INLINE sinon.",
     },
   ],
 
   silentFix: [
     "Espacement avant ponctuation double — typographie francaise valide.",
+    "Espacement avant ': ; ? !' — difference purement typographique.",
     "Presence ou absence d'un deux-points final dans un intitule — cosmetique.",
+    "Presence ou absence d'un point final de phrase — cosmetique.",
     "Casse initiale d'une proposition — cosmetique.",
+    "Accentuation d'une majuscule quand le mot reste lexicalement identique (ex: Etat vs État).",
+    "Ligature ou variante typographique sans changement de sens (ex: Oedeme vs Œdème).",
     "Double espace ou coupure de mot — cosmetique.",
-    "Valeurs de champs derives (categoryName, year, tag, exp, tagSuggere) — jamais a auditer.",
+    "Difference de separateur decimal ou de symbole de pourcentage uniquement typographique si la valeur numerique reste identique.",
+    "Valeurs de champs derives (categoryId, year, tag, exp, tagSuggere) — jamais a auditer.",
     "Differences mineures dans le champ 'exp' — champ derive, ignorer.",
   ],
 };
@@ -414,6 +429,12 @@ Tu NE recois PAS le PDF. Tu travailles exclusivement depuis les deux JSON.
 Ta mission : identifier toutes les divergences entre JSON1 et JSON2, les classer,
 et produire un rapport structure pour que la verification humaine tranche en consultant le PDF.
 
+OBJECTIF PRIORITAIRE :
+- Le but n'est PAS de maximiser le nombre de differences trouvees.
+- Le but est de MINIMISER la charge de verification humaine tout en preservant la securite.
+- Tu dois donc remonter uniquement les divergences serieuses, structurelles, cliniquement significatives ou liees au champ "correct".
+- Les differences purement cosmetiques ou typographiques doivent etre absorbees par normalisation mentale puis ignorees.
+
 IMPORTANT — FLUX SUR DEUX TOURS AVEC LE MEME MODELE :
 - Tour 1 (ce message) : compare JSON1 et JSON2 puis retourne UNIQUEMENT le REVIEW REPORT.
 - Ensuite, la verification humaine corrige JSONF directement dans ce rapport.
@@ -452,6 +473,7 @@ PROCEDURE DE COMPARAISON
 ETAPE 1 — COMPTAGE
   Compare le nombre d'objets dans JSON1.questions et JSON2.questions.
   Si different entre eux ou different de ${expectedRows} : signale ROW_COUNT (BLOQUANT).
+  Si ROW_COUNT est signale, verifie immediatement s'il existe ensuite un decalage de numerotation ou un glissement de plage.
 
 ETAPE 2 — COMPARAISON QUESTION PAR QUESTION
   Pour chaque question (en te basant sur le champ "num") :
@@ -459,7 +481,7 @@ ETAPE 2 — COMPARAISON QUESTION PAR QUESTION
     → Si identiques ou cosmetiquement equivalents : OK, ne rien signaler.
     → Si divergents : une ligne dans le tableau avec le code adequat.
 
-  CHAMPS A IGNORER : categoryName, tagSuggere, year, tag, exp (derives — jamais auditer).
+  CHAMPS A IGNORER : categoryId, tagSuggere, year, tag, exp (derives — jamais auditer).
 
 ETAPE 3 — AUDIT
   Compare JSON1.audit.uncertainties et JSON2.audit.uncertainties.
@@ -478,12 +500,35 @@ REGLE 1 — DIVERGENCE = SEUL CRITERE DE SIGNALEMENT
   ✗ INTERDIT : corriger par logique medicale.
   ✗ INTERDIT : signaler une valeur partagee par les deux JSON.
 
+REGLE 1B — NORMALISATION MENTALE AVANT SIGNALEMENT
+  Avant de decider qu'une divergence est reportable, neutralise mentalement :
+  - les espaces avant ': ; ? !'
+  - les espaces doubles
+  - la presence/absence d'un point final
+  - les variantes d'accent/casse ne changeant pas le mot
+  - les variantes typographiques sans changement de sens
+  Si le sens reste strictement identique apres cette normalisation, ne rien signaler.
+
 REGLE 2 — JSONF
   SECTION A (textuelles) :
-    → Si un des deux JSON est evidemment correct (ex: β vs b) → JSONF = valeur correcte, INLINE.
+    → Si un des deux JSON est evidemment correct sans ambiguite et sans logique medicale (ex: β vs b) → JSONF = valeur correcte, INLINE.
     → Si les deux sont plausibles → JSONF = "???", BLOQUANT.
   SECTION B (structurelles) :
     → JSONF = "???" toujours — la verification humaine tranche apres verification dans le PDF.
+
+REGLE 2B — DIVERGENCES SERIEUSES UNIQUEMENT
+  Tu dois privilegier :
+  - ROW_COUNT / glissement de numerotation
+  - QCM_SHIFT / PROP_ORDER / PROP_SWAP / PROP_TRUNCATED
+  - CAS_DIVERGE avec valeurs cliniques
+  - DIGIT quand la valeur change reellement
+  - CT_DIVERGE / CT_DRIFT / SWAP_DIVERGE
+  - AUDIT_ONLY HIGH/CRITICAL sur correct, cas ou structure
+  Tu dois supprimer du rapport :
+  - les espaces avant deux-points ou points d'interrogation
+  - les accents purement cosmetiques
+  - la ponctuation finale seule
+  - toute micro-difference non medicale qui n'augmente pas la securite de verification
 
 REGLE 3 — CHOISIR LE BON CODE POUR LES DIVERGENCES DE PROPOSITIONS
 
@@ -511,6 +556,14 @@ REGLE 4 — GROUPEMENT QCM_SHIFT : QUAND REGROUPER
   Full Phrase = concatenation de toutes les raisons : "Decalage enonce + propositions decalees + champs manquants"
   ⚠ NE PAS emettre de lignes separees pour chaque champ quand QCM_SHIFT est utilise.
 
+REGLE 4B — COURT-CIRCUIT STRUCTUREL
+  Si ROW_COUNT est present ET qu'un decalage de plage est detecte :
+  - signale le bloc structurel principal en priorite
+  - utilise QCM_SHIFT ou une ligne structurelle groupee pour la zone affectee
+  - n'emets pas de cascades de lignes cosmetiques dans cette zone
+  - n'emets pas de micro-divergences sur les questions dont l'alignement est devenu incertain
+  Objectif : une zone mal alignee doit produire peu de lignes, mais tres informatives.
+
 REGLE 5 — PROP_SWAP : FORMAT OBLIGATOIRE
   Reference = [Num].[champ1]-[champ2]  ex: 7.d-e
   JSON1 : [champ1]='texte complet D dans JSON1' / [champ2]='texte complet E dans JSON1'
@@ -530,6 +583,13 @@ REGLE 7 — SPELL : MISE EN EVIDENCE PAR CROCHETS
   JSONF  : phrase avec [mot_correct] entre crochets
   ⚠ Ne mettre entre crochets QUE le(s) mot(s) qui divergent, pas toute la phrase.
 
+REGLE 8 — PRIORISATION DU RAPPORT
+  Trie les lignes dans cet ordre :
+  1. BLOQUANTS structurels (ROW_COUNT, QCM_SHIFT, FIELD_MISSING, PROP_TRUNCATED, PROP_ORDER, PROP_SWAP)
+  2. BLOQUANTS de correction / valeurs cliniques (CT_DIVERGE, CT_DRIFT, CAS_DIVERGE, DIGIT serieux, AUDIT_ONLY promu BLOQUANT)
+  3. INLINE a forte valeur uniquement
+  Si les BLOQUANTS structurels existent, les micro-lignes cosmetiques restantes doivent etre supprimees.
+
 ══════════════════════════════════════════════════════
 FORMAT DE SORTIE — UN SEUL BLOC \`\`\`text\`\`\`
 ══════════════════════════════════════════════════════
@@ -538,6 +598,7 @@ IMPORTANT :
 - Tu dois retourner exactement un unique bloc \`\`\`text\`\`\` et rien d'autre.
 - REVIEW REPORT, le tableau, le resume final et les instructions doivent tous etre dans ce meme bloc \`\`\`text\`\`\`.
 - Si tu sors une partie du rapport hors du bloc, la reponse est invalide.
+- La reponse est INVALIDE si le rapport est domine par des differences typographiques alors que des divergences structurelles, de valeurs cliniques ou de champ "correct" existent.
 
 Ligne 1 exacte : REVIEW REPORT
 Ligne 2 exacte : ---

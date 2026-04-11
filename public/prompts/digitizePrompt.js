@@ -21,6 +21,9 @@ function generateDigitizePrompt(data) {
   const subcategoryNote = data.subcategories && data.subcategories.length > 0
     ? `- Sous-categories et leurs plages de questions :\n${data.subcategories.map(sc => `    * ${sc.name}: questions ${sc.range}`).join('\n')}`
     : "- Aucune sous-categorie definie.";
+  const composedSubmoduleNote = data.isComposedExam && data.composedSubmodules && data.composedSubmodules.length > 0
+    ? `- Examen compose : assigne le champ "categoryId" selon ces sous-modules fixes et leurs plages de questions :\n${data.composedSubmodules.map(item => `    * ${item.name} -> ${item.categoryId} : questions ${item.range}`).join('\n')}`
+    : `- categoryId par question : utilise le categoryId unique de l'examen (${data.categoryId || "[categoryId manquant]"}).`;
 
   const missingNote = Array.isArray(data.missingPos) && data.missingPos.length > 0
     ? `- Questions declarees manquantes : ${data.missingPos.join(", ")}.`
@@ -64,6 +67,7 @@ ${data.rotation ? `- Rotation          : ${data.rotation}` : ""}
 - Cas Cliniques     : ${data.hasCas ? "OUI" : "NON"}
 - Questions assoc.  : ${data.hasComb ? "OUI" : "NON"}
 ${subcategoryNote}
+${composedSubmoduleNote}
 ${missingNote}
 ${schemaNote}
 ${twoColumnWarning}
@@ -152,7 +156,7 @@ Un seul bloc. Pas de deuxieme bloc.
 STRUCTURE DE "questions"  (tableau d'objets)
 ──────────────────────────────────────────────────────
 Chaque objet represente une question. Inclus uniquement les champs non-null
-SAUF pour les champs obligatoires (num, text, categoryName, year, tag).
+SAUF pour les champs obligatoires (num, text, categoryId, year, tag).
 Omets un champ si sa valeur est null ET qu'il n'est pas obligatoire.
 
 Schema d'un objet question :
@@ -170,7 +174,7 @@ Schema d'un objet question :
   "correct"         : "lettres CT sans separateur ex: 'ACD', ou [SWAP:...] si suspect, ou omis si absent",
   "exp"             : "Based on official course support (official pdf course) the right answer is \\"<correct>\\" please generate explanation based on those right answers (propositions) — ou omis si correct absent",
   "hint"            : "combinaisons d'association traduites en lettres A-G — ou omis",
-  "categoryName"    : "${moduleName}",
+  "categoryId"      : "${data.categoryId || "[categoryId manquant]"}",
   "tagSuggere"      : "nom de la sous-categorie si examen mappe, sinon omis",
   "year"            : "${year}",
   "tag"             : ${tagTemplate}
@@ -192,6 +196,10 @@ Regles specifiques par champ :
                Remplace <correct> par la valeur exacte du champ "correct".
 - "hint"     : uniquement pour questions d'association. Traduis combinaisons source → lettres A-G.
                Exemple : si PDF dit "1 et 3" et 1→A, 3→C → ecris "A et C".
+- "categoryId" : obligatoire pour chaque question.
+               ${data.isComposedExam
+                 ? 'Examen compose — attribue le categoryId exact du sous-module dont la plage contient le numero de question.'
+                 : 'Examen simple — utilise le meme categoryId unique pour toutes les questions.'}
 - "tag"      : tableau de 4 elements. Remplace <num> par la valeur du champ "num".
                ${isResidanat
                  ? 'Pour Résidanat : remplace <tagSuggere> par la valeur reelle de "tagSuggere".'
@@ -296,7 +304,7 @@ Types de cleaningType autorises :
   SYMBOL_ENCODING_FIX → caractere corrompu PDF remplace par le symbole correct
   OTHER_AUTHORIZED    → autre correction explicitement autorisee par une regle du prompt
 
-IMPORTANT : Ne documente PAS les remplissages de champs derives (categoryName, year, tag, exp,
+IMPORTANT : Ne documente PAS les remplissages de champs derives (categoryId, year, tag, exp,
 tagSuggere). Ces valeurs sont des derivations du contexte, pas des nettoyages du PDF.
 Ne documente PAS les absences normales de champs optionnels.
 

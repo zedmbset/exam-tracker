@@ -202,7 +202,7 @@ The final TSV columns are derived from app context and PDF content:
 | `Correct` | PDF/CT | From Corrige Type if present, otherwise empty |
 | `Exp` | Derived | Template based on `Correct` value |
 | `Hint` | PDF | Association helper from PDF if applicable |
-| `categoryName` | App context | Always `module` value |
+| `categoryId` | App context / derived mapping | Simple exam: row `categoryId`; composed exam: mapped from saved submodule ranges |
 | `tagSuggere` | Derived | From `subcategories` mapping based on `Num` |
 | `Year` | App context | Always `year` value |
 | `Tag` | Derived | Built from context and row values, exported as comma-space text |
@@ -237,6 +237,23 @@ After generating all rows for an exam:
 2. Remove any column whose cells are empty for ALL rows
 3. Preserve canonical order among remaining columns
 4. Pruning is per exam, never per row
+
+### Composed Exams
+
+When the sheet row `categoryId` contains multiple IDs separated by commas, the app treats the exam as composed only if the combination matches one of the hardcoded definitions for that `Wilaya`.
+
+In that case:
+- Step 1 shows fixed draggable submodule rows
+- submodule names are locked
+- each row requires a question range
+- the mapping is stored in `Tags.composedSubmodules`
+- final exported questions receive the exact `categoryId` of the matching submodule range
+
+Missing-question behavior:
+- ranges are checked against real question numbers
+- a missing question still belongs conceptually to its submodule range
+- no exported row is created for the missing question
+- later questions keep their original submodule/categoryId assignment
 
 Commonly pruned columns:
 - `F`, `G` (if no association questions)
