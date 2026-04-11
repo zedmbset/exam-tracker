@@ -1,5 +1,5 @@
 ﻿// ─────────────────────────────────────────────────────────────────────────────
-//  doubleCheckPrompt.js  —  Comparaison deux JSON + TSV final
+//  doubleCheckPrompt.js  —  Comparaison deux JSON + JSON final
 //
 //  NOUVELLE APPROCHE :
 //    - Le meme prompt de digitisation est envoye a DEUX modeles independants.
@@ -11,7 +11,7 @@
 //
 //  Exports :
 //    generateDoubleCheckPrompt(data, json1, json2)                      → rapport (Step 1)
-//    generateDoubleCheckStep2Prompt(data, json1, json2, reviewReport)   → TSV final (Step 2)
+//    generateDoubleCheckStep2Prompt(data, json1, json2, reviewReport)   → JSON final (Step 2)
 // ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -40,7 +40,7 @@ const TAXONOMY = {
         "JSON1  : '...Les antigenes sont [reconnues] seulement par les [HCR]'\n" +
         "JSON2  : '...Les antigenes sont [reconnus] seulement par les [BCR]'\n" +
         "JSONF  : '...Les antigenes sont [reconnus] seulement par les [BCR]'\n" +
-        "Objectif : le membre repere immediatement le mot corrige sans relire toute la phrase.",
+        "Objectif : la verification humaine repere immediatement le mot corrige sans relire toute la phrase.",
     },
     {
       code: "DIGIT",
@@ -51,7 +51,7 @@ const TAXONOMY = {
         "JSON1 dit '1.2 millions', JSON2 dit '2,4 millions'",
       ],
       never: [
-        "Ne jamais trancher par logique medicale — le membre verifie dans le PDF.",
+        "Ne jamais trancher par logique medicale — la verification humaine tranche dans le PDF.",
       ],
       modeRule: "INLINE si un des deux est evidemment une coquille OCR. BLOQUANT si les deux sont plausibles.",
     },
@@ -200,7 +200,7 @@ const TAXONOMY = {
       ],
       never: [
         "Ne pas confondre avec PROP_DIVERGE (contenu completement different).",
-        "Ne pas corriger par deduction — le membre verifie le texte complet dans le PDF.",
+        "Ne pas corriger par deduction — la verification humaine verifie le texte complet dans le PDF.",
       ],
       howToReport:
         "Reference : [Num].[champ]  ex: 12.b\n" +
@@ -228,7 +228,7 @@ const TAXONOMY = {
         "JSON1: Q5=ACD Q6=B, JSON2: Q5=B Q6=ACD",
       ],
       never: [
-        "Ne corriger sans confirmation du membre.",
+        "Ne corriger qu'apres verification humaine.",
       ],
     },
     {
@@ -298,7 +298,7 @@ const TAXONOMY = {
     {
       code: "AUDIT_ONLY",
       mode: "INLINE",
-      description: "Incertitude CRITICAL ou HIGH presente dans audit d'un seul JSON — information pour le membre.",
+      description: "Incertitude CRITICAL ou HIGH presente dans audit d'un seul JSON — information pour la verification humaine.",
       qualifies: [
         "JSON1.audit.uncertainties a un riskLevel CRITICAL sur Q5.b, JSON2 ne l'a pas logge.",
       ],
@@ -402,7 +402,7 @@ CETTE ETAPE = RAPPORT DE COMPARAISON UNIQUEMENT.
 - INTERDICTION TOTALE d'ecrire VALIDATION PASSED ou VALIDATION FAILED.
 - INTERDICTION TOTALE de trancher par logique medicale.
 - Ton unique livrable est le bloc \`\`\`text\`\`\` du rapport de comparaison.
-- Termine ta reponse apres la ligne "INSTRUCTION MEMBRE". Rien d'autre apres.
+- Termine ta reponse apres la ligne "INSTRUCTION VERIFICATION HUMAINE". Rien d'autre apres.
 ⛔⛔⛔ FIN DES REGLES ABSOLUES ⛔⛔⛔
 
 Tu recois :
@@ -411,7 +411,7 @@ Tu recois :
 
 Tu NE recois PAS le PDF. Tu travailles exclusivement depuis les deux JSON.
 Ta mission : identifier toutes les divergences entre JSON1 et JSON2, les classer,
-et produire un rapport structure pour que le membre tranche en consultant le PDF.
+et produire un rapport structure pour que la verification humaine tranche en consultant le PDF.
 
 ══════════════════════════════════════════════════════
 CONTEXTE DE L'EXAMEN
@@ -475,7 +475,7 @@ REGLE 2 — JSONF
     → Si un des deux JSON est evidemment correct (ex: β vs b) → JSONF = valeur correcte, INLINE.
     → Si les deux sont plausibles → JSONF = "???", BLOQUANT.
   SECTION B (structurelles) :
-    → JSONF = "???" toujours — le membre tranche apres verification dans le PDF.
+    → JSONF = "???" toujours — la verification humaine tranche apres verification dans le PDF.
 
 REGLE 3 — CHOISIR LE BON CODE POUR LES DIVERGENCES DE PROPOSITIONS
 
@@ -507,13 +507,13 @@ REGLE 5 — PROP_SWAP : FORMAT OBLIGATOIRE
   Reference = [Num].[champ1]-[champ2]  ex: 7.d-e
   JSON1 : [champ1]='texte complet D dans JSON1' / [champ2]='texte complet E dans JSON1'
   JSON2 : [champ1]='texte complet D dans JSON2' / [champ2]='texte complet E dans JSON2'
-  JSONF : [champ1]=??? / [champ2]=???  (le membre verifie l'ordre dans le PDF)
+  JSONF : [champ1]=??? / [champ2]=???  (la verification humaine verifie l'ordre dans le PDF)
   ⚠ NE PAS emettre deux lignes PROP_DIVERGE separees quand PROP_SWAP est detecte.
 
 REGLE 6 — PROP_ORDER : FORMAT OBLIGATOIRE DE JSON1 ET JSON2
   JSON1 : a="8 premiers mots..." b="8 premiers mots..." c="..." d="..." e="..."
   JSON2 : a="8 premiers mots..." b="8 premiers mots..." c="..." d="..." e="..."
-  Cela permet au membre de voir immediatement quel champ est echange.
+  Cela permet a la verification humaine de voir immediatement quel champ est echange.
 
 REGLE 7 — SPELL : MISE EN EVIDENCE PAR CROCHETS
   Pour toute divergence de type SPELL, entourer le mot divergent de [] dans JSON1, JSON2 ET JSONF.
@@ -561,19 +561,19 @@ TOTAL DIVERGENCES       : [nombre total]
 QUESTIONS CONCORDANTES  : [nombre de questions identiques sur tous les champs]
 QUESTIONS DIVERGENTES   : [nombre de questions avec au moins une divergence]
 BLOQUANTS               : [nombre de lignes ou JSONF contient encore "???"]
-INSTRUCTION MEMBRE : Les lignes INLINE ont deja un JSONF final. Pour chaque ligne BLOQUANT, verifiez dans le PDF puis remplacez tous les "???" dans JSONF par la valeur correcte. Renvoyez ensuite le rapport complet pour l'etape 2.
+INSTRUCTION VERIFICATION HUMAINE : Les lignes INLINE ont deja un JSONF final. Pour chaque ligne BLOQUANT, verifiez dans le PDF puis remplacez tous les "???" dans JSONF par la valeur correcte. Renvoyez ensuite le rapport complet pour l'etape 2.
 
 ⛔ INTERDICTIONS ABSOLUES
 - JAMAIS de TSV. JAMAIS de VALIDATION PASSED/FAILED.
 - JAMAIS de correction par logique medicale.
 - JAMAIS de signalement d'une valeur partagee par les deux JSON.
 - JAMAIS de texte libre en dehors du bloc \`\`\`text\`\`\`.
-- Ta reponse se termine apres INSTRUCTION MEMBRE.`;
+- Ta reponse se termine apres INSTRUCTION VERIFICATION HUMAINE.`;
 }
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STEP 2 — TSV final
+// STEP 2 — JSON final
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildDoubleCheckStep2Prompt(data, json1, json2, reviewReport) {
@@ -758,7 +758,7 @@ function generateDoubleCheckPrompt(data, json1, json2) {
  * @param {object} data         - exam metadata
  * @param {string} json1        - JSON string from model 1 (base)
  * @param {string} json2        - JSON string from model 2 (reference)
- * @param {string} reviewReport - completed comparison report with member decisions
+ * @param {string} reviewReport - completed comparison report with final JSONF values
  * @returns {string}
  */
 function generateDoubleCheckStep2Prompt(data, json1, json2, reviewReport) {
