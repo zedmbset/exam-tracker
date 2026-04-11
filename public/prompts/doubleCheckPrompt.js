@@ -313,7 +313,7 @@ const TAXONOMY = {
     "Presence ou absence d'un deux-points final dans un intitule — cosmetique.",
     "Casse initiale d'une proposition — cosmetique.",
     "Double espace ou coupure de mot — cosmetique.",
-    "Valeurs de champs derives (categoryName, year, tag, exp, subcategoryName) — jamais a auditer.",
+    "Valeurs de champs derives (categoryName, year, tag, exp, tagSuggere) — jamais a auditer.",
     "Differences mineures dans le champ 'exp' — champ derive, ignorer.",
   ],
 };
@@ -459,7 +459,7 @@ ETAPE 2 — COMPARAISON QUESTION PAR QUESTION
     → Si identiques ou cosmetiquement equivalents : OK, ne rien signaler.
     → Si divergents : une ligne dans le tableau avec le code adequat.
 
-  CHAMPS A IGNORER : categoryName, subcategoryName, year, tag, exp (derives — jamais auditer).
+  CHAMPS A IGNORER : categoryName, tagSuggere, year, tag, exp (derives — jamais auditer).
 
 ETAPE 3 — AUDIT
   Compare JSON1.audit.uncertainties et JSON2.audit.uncertainties.

@@ -835,6 +835,18 @@
         return m;
       }
 
+      function getStep1PromptRequirements(row) {
+        const tags = parseTags(row);
+        const missing = [];
+        if (!cell(row, "OrigPDF")) missing.push("Original PDF");
+        if (!(cell(row, "ExamDate") || cell(row, "Exam Date"))) missing.push("Exam date");
+        if (!(parseInt(tags.nQst, 10) > 0)) missing.push("Total number of questions");
+        return {
+          ready: missing.length === 0,
+          missing,
+        };
+      }
+
       function toDateInputValue(str) {
         if (!str) return "";
         str = str.trim();
@@ -1043,10 +1055,14 @@
       }
 
       function jsonToWorkbookBlob(questions) {
-        const COLS_ORDER = ["cas","num","text","a","b","c","d","e","f","g","correct","exp","hint","categoryName","tagSuggere","subcategoryName","year","tag"];
+        const COLS_ORDER = ["cas","num","text","a","b","c","d","e","f","g","correct","exp","hint","categoryName","tagSuggere","year","tag"];
         const usedKeys = COLS_ORDER.filter(k => questions.some(q => q[k] != null && q[k] !== ""));
         const header = usedKeys.map(k => /[A-Z]/.test(k) ? k : k.charAt(0).toUpperCase() + k.slice(1));
-        const rows = [header, ...questions.map(q => usedKeys.map(k => String(q[k] ?? "")))];
+        const rows = [header, ...questions.map(q => usedKeys.map(k => {
+          const value = q[k];
+          if (k === "tag" && Array.isArray(value)) return value.join(", ");
+          return String(value ?? "");
+        }))];
 
         const maxCols = rows[0].length;
         const lastRef = `${columnNumberToName(maxCols)}${rows.length}`;
@@ -1359,6 +1375,7 @@
         const examId = cell(row, "ID_Exams") || String(row._rowIndex);
         const state  = loadStepState(examId);
         const tags   = parseTags(row);
+        const step1Prompt = getStep1PromptRequirements(row);
 
         const pdfUrl  = cell(row, "OrigPDF");
         const affichagePdfUrl = cell(row, "AffichagePDF");
@@ -1368,7 +1385,7 @@
 
         const steps = [
           buildStep1(row, examId, state, pdfUrl, affichagePdfUrl, tags, examDateVal),
-          buildStep2(examId, state),
+          step1Prompt.ready ? buildStep2(examId, state) : buildStep2Locked(examId, state, step1Prompt.missing),
           buildStep3(examId, state, csvUrl),
           buildStep4(examId, state, quizLink),
         ];
@@ -1376,7 +1393,7 @@
         document.getElementById("stepsContainer").innerHTML = steps.join("");
 
         initSubcategories();
-        refreshPromptText();
+        if (step1Prompt.ready) refreshPromptText();
       }
 
       function stepCardWrap(idx, examId, state, title, subtitle, bodyHtml, footerHtml) {
@@ -1477,7 +1494,7 @@
               <div class="form-row full">
                 <label>Question annotations</label>
                 <input type="text" id="tags_annotations" value="${annotationsToString(tags)}" placeholder="e.g. 3m, 7s, 15-17m, 20s" oninput="refreshPromptText()">
-                <div class="field-hint"><strong>m</strong> = missing &nbsp;&middot;&nbsp; <strong>s</strong> = has schema/table &nbsp;&middot;&nbsp; ranges ok (e.g. 5-8m)</div>
+                <div class="field-hint"><strong>m</strong> = missing Qst &nbsp;&middot;&nbsp; <strong>s</strong> = Qst contain schema/table &nbsp;&middot;&nbsp; you can use ranges, e.g. 5-8m</div>
               </div>
               <div class="form-row">
                 <label>Has Corrige Type (CT)</label>
@@ -1607,6 +1624,19 @@
           </div>`;
 
         return stepCardWrap(1, examId, state, "AI Digitization & Double Check", "Two AIs digitize, a third AI builds the review report, then the same third AI finalizes JSON after you return the corrected report", body, "");
+      }
+
+      function buildStep2Locked(examId, state, missingFields) {
+        const missingList = (missingFields || []).map(item => `<li>${item}</li>`).join("");
+        const body = `
+          <div class="instruction-box">
+            <strong>Save Step 1 first to unlock the digitization prompt.</strong>
+            <ul>
+              ${missingList}
+            </ul>
+          </div>`;
+
+        return stepCardWrap(1, examId, state, "AI Digitization & Double Check", "This prompt appears only after the required Step 1 information is saved", body, "");
       }
 
       function buildStep4(examId, state, quizLink) {

@@ -35,7 +35,7 @@ function generateDigitizePrompt(data) {
     : `- Format de page : colonne unique, lecture de haut en bas.`;
 
   const tagTemplate = isResidanat
-    ? `["${examType} ${data.wilaya || '[Wilaya]'}", "<subcategoryName> ${year}", "No. <num>", "${data.hasCT ? 'Corrigé type' : 'Corrigé proposé'}"]`
+    ? `["${examType} ${data.wilaya || '[Wilaya]'}", "<tagSuggere> ${year}", "No. <num>", "${data.hasCT ? 'Corrigé type' : 'Corrigé proposé'}"]`
     : `["${examType} ${data.wilaya || '[Wilaya]'}", "${period ? period + ' ' : ''}${year}", "No. <num>", "${data.hasCT ? 'Corrigé type' : 'Corrigé proposé'}"]`;
 
   return `Tu es un assistant specialise en extraction d'examens medicaux.
@@ -171,7 +171,7 @@ Schema d'un objet question :
   "exp"             : "Based on official course support (official pdf course) the right answer is \\"<correct>\\" please generate explanation based on those right answers (propositions) — ou omis si correct absent",
   "hint"            : "combinaisons d'association traduites en lettres A-G — ou omis",
   "categoryName"    : "${moduleName}",
-  "subcategoryName" : "nom de la sous-categorie si examen mappe, sinon omis",
+  "tagSuggere"      : "nom de la sous-categorie si examen mappe, sinon omis",
   "year"            : "${year}",
   "tag"             : ${tagTemplate}
 }
@@ -194,11 +194,11 @@ Regles specifiques par champ :
                Exemple : si PDF dit "1 et 3" et 1→A, 3→C → ecris "A et C".
 - "tag"      : tableau de 4 elements. Remplace <num> par la valeur du champ "num".
                ${isResidanat
-                 ? 'Pour Résidanat : remplace <subcategoryName> par la valeur reelle de "subcategoryName".'
+                 ? 'Pour Résidanat : remplace <tagSuggere> par la valeur reelle de "tagSuggere".'
                  : 'Pour Externat : utilise periode et annee fournies dans le contexte.'}
 - "f", "g"   : omis si aucune question d'association dans l'examen.
 - "hint"     : omis si aucune question d'association dans l'examen.
-- "subcategoryName" : omis si examen non mappe (pas de subcategories definies).
+- "tagSuggere" : omis si examen non mappe (pas de subcategories definies).
 
 ${data.isTwoColumn ? `
 EXAMEN DEUX COLONNES — REGLES STRICTES
@@ -297,7 +297,7 @@ Types de cleaningType autorises :
   OTHER_AUTHORIZED    → autre correction explicitement autorisee par une regle du prompt
 
 IMPORTANT : Ne documente PAS les remplissages de champs derives (categoryName, year, tag, exp,
-subcategoryName). Ces valeurs sont des derivations du contexte, pas des nettoyages du PDF.
+tagSuggere). Ces valeurs sont des derivations du contexte, pas des nettoyages du PDF.
 Ne documente PAS les absences normales de champs optionnels.
 
 ══════════════════════════════════════════════════════

@@ -203,10 +203,9 @@ The final TSV columns are derived from app context and PDF content:
 | `Exp` | Derived | Template based on `Correct` value |
 | `Hint` | PDF | Association helper from PDF if applicable |
 | `categoryName` | App context | Always `module` value |
-| `tagSuggere` | Reserved | Always empty (reserved for future use) |
-| `subcategoryName` | Derived | From `subcategories` mapping based on `Num` |
+| `tagSuggere` | Derived | From `subcategories` mapping based on `Num` |
 | `Year` | App context | Always `year` value |
-| `Tag` | Derived | JSON array built from context and row values |
+| `Tag` | Derived | Built from context and row values, exported as comma-space text |
 
 ### Tag Construction Rules
 
@@ -219,7 +218,7 @@ The `Tag` column is a JSON array with exactly 4 elements:
 
 **For Residanat exams:**
 ```json
-["Residanat <Wilaya>", "<subcategoryName> <Year>", "No. <Num>", "Corrige type/propose"]
+["Residanat <Wilaya>", "<tagSuggere> <Year>", "No. <Num>", "Corrige type/propose"]
 ```
 
 Where:
@@ -227,8 +226,9 @@ Where:
 - `<Period>` comes from `period` field
 - `<Year>` comes from `year` field
 - `<Num>` comes from the question number
-- `<subcategoryName>` comes from `subcategories` mapping (for Residanat only)
+- `<tagSuggere>` comes from `subcategories` mapping (for Residanat only)
 - Last element is `"Corrige type"` if `hasCT` is true, otherwise `"Corrige propose"`
+- In the exported Excel/TSV, the array is displayed as comma-space text such as `Externat Constantine, 2024, No. 1, Corrigé type`
 
 ### Column Pruning Rules
 
@@ -239,10 +239,9 @@ After generating all rows for an exam:
 4. Pruning is per exam, never per row
 
 Commonly pruned columns:
-- `tagSuggere` (always empty)
 - `F`, `G` (if no association questions)
 - `Hint` (if no association questions)
-- `subcategoryName` (if not a mapped exam)
+- `tagSuggere` (if not a mapped exam)
 - `Exp` (if all `Correct` values are empty)
 ## Field Meanings
 
