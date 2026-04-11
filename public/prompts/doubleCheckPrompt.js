@@ -401,6 +401,8 @@ CETTE ETAPE = RAPPORT DE COMPARAISON UNIQUEMENT.
 - INTERDICTION TOTALE d'ecrire VALIDATION PASSED ou VALIDATION FAILED.
 - INTERDICTION TOTALE de trancher par logique medicale.
 - Ton unique livrable est le bloc \`\`\`text\`\`\` du rapport de comparaison.
+- La reponse est INVALIDE si le REVIEW REPORT n'est pas entierement a l'interieur d'un unique bloc \`\`\`text\`\`\`.
+- La reponse est INVALIDE si tu ajoutes du texte avant ou apres ce bloc \`\`\`text\`\`\`.
 - Termine ta reponse apres la ligne "INSTRUCTION VERIFICATION HUMAINE". Rien d'autre apres.
 ⛔⛔⛔ FIN DES REGLES ABSOLUES ⛔⛔⛔
 
@@ -531,6 +533,11 @@ REGLE 7 — SPELL : MISE EN EVIDENCE PAR CROCHETS
 ══════════════════════════════════════════════════════
 FORMAT DE SORTIE — UN SEUL BLOC \`\`\`text\`\`\`
 ══════════════════════════════════════════════════════
+
+IMPORTANT :
+- Tu dois retourner exactement un unique bloc \`\`\`text\`\`\` et rien d'autre.
+- REVIEW REPORT, le tableau, le resume final et les instructions doivent tous etre dans ce meme bloc \`\`\`text\`\`\`.
+- Si tu sors une partie du rapport hors du bloc, la reponse est invalide.
 
 Ligne 1 exacte : REVIEW REPORT
 Ligne 2 exacte : ---
