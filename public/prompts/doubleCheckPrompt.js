@@ -568,13 +568,14 @@ QUESTIONS CONCORDANTES  : [nombre de questions identiques sur tous les champs]
 QUESTIONS DIVERGENTES   : [nombre de questions avec au moins une divergence]
 BLOQUANTS               : [nombre de lignes ou JSONF contient encore "???"]
 INSTRUCTION VERIFICATION HUMAINE : Les lignes INLINE ont deja un JSONF final. Pour chaque ligne BLOQUANT, verifiez dans le PDF puis remplacez tous les "???" dans JSONF par la valeur correcte. Ensuite, renvoyez ce REVIEW REPORT complete au meme troisieme modele dans la meme conversation pour obtenir VALIDATION PASSED + le JSON final.
+INSTRUCTION RETOUR MODELE : Quand ce REVIEW REPORT complet est renvoye dans la meme conversation avec tous les JSONF finalises, applique JSONF strictement puis retourne exactement : (1) un resume commencant par "VALIDATION PASSED", puis (2) un seul bloc \`\`\`json contenant uniquement le tableau JSON final des questions. N'enveloppe pas ce tableau dans un objet. N'ajoute aucune explication supplementaire.
 
 ⛔ INTERDICTIONS ABSOLUES
 - JAMAIS de TSV. JAMAIS de VALIDATION PASSED/FAILED.
 - JAMAIS de correction par logique medicale.
 - JAMAIS de signalement d'une valeur partagee par les deux JSON.
 - JAMAIS de texte libre en dehors du bloc \`\`\`text\`\`\`.
-- Ta reponse se termine apres INSTRUCTION VERIFICATION HUMAINE.`;
+- Ta reponse se termine apres INSTRUCTION RETOUR MODELE.`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
