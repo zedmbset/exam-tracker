@@ -568,8 +568,8 @@ QUESTIONS CONCORDANTES  : [nombre de questions identiques sur tous les champs]
 QUESTIONS DIVERGENTES   : [nombre de questions avec au moins une divergence]
 BLOQUANTS               : [nombre de lignes ou JSONF contient encore "???"]
 INSTRUCTION VERIFICATION HUMAINE : Les lignes INLINE ont deja un JSONF final. Pour chaque ligne BLOQUANT, verifiez dans le PDF puis remplacez tous les "???" dans JSONF par la valeur correcte. Ensuite, renvoyez ce REVIEW REPORT complete au meme troisieme modele dans la meme conversation pour obtenir VALIDATION PASSED + le JSON final.
-INSTRUCTION RETOUR MODELE : Quand ce REVIEW REPORT complet est renvoye dans la meme conversation avec tous les JSONF finalises, applique JSONF strictement puis retourne exactement deux blocs de code et rien d'autre : (1) un seul bloc \`\`\`text contenant le resume de validation ci-dessous, puis (2) un seul bloc \`\`\`json contenant uniquement le tableau JSON final des questions. N'enveloppe jamais ce tableau dans un objet. N'ajoute aucun texte hors des blocs de code.
-MODELE EXACT DU BLOC \`\`\`text\`\`\` FINAL :
+INSTRUCTION RETOUR MODELE : Quand ce REVIEW REPORT complet est renvoye dans la meme conversation avec tous les JSONF finalises, applique JSONF strictement puis retourne exactement un seul bloc de code \`\`\`text et rien d'autre. Dans cet unique bloc, mets d'abord le resume de validation ci-dessous, puis une ligne exacte "JSON FINAL :", puis le tableau JSON final des questions. N'enveloppe jamais ce tableau dans un objet. N'ajoute aucun texte hors de cet unique bloc de code.
+MODELE EXACT DE L'UNIQUE BLOC \`\`\`text\`\`\` FINAL :
 \`\`\`text
 VALIDATION PASSED
 Module              : [module confirme]
@@ -582,8 +582,12 @@ Marqueurs residuels : aucun
 Corrections appliquees : [nombre]
 Divergences resolues : [nombre]
 Conclusion          : JSON final valide
+JSON FINAL :
+[
+  { "num": 1, "text": "...", "a": "...", "b": "...", "correct": "..." }
+]
 \`\`\`
-FORMAT OBLIGATOIRE DU RETOUR FINAL : La reponse finale est invalide si elle ne contient pas exactement ces deux blocs de code dans cet ordre, si le bloc \`\`\`text\`\`\` ne commence pas exactement par "VALIDATION PASSED", si le bloc \`\`\`json contient autre chose qu'un tableau JSON pur, si tu utilises un objet racine comme {"questions":[...]}, ou si tu ajoutes du texte hors des blocs de code.
+FORMAT OBLIGATOIRE DU RETOUR FINAL : La reponse finale est invalide si elle ne contient pas exactement cet unique bloc \`\`\`text\`\`\`, si ce bloc ne commence pas exactement par "VALIDATION PASSED", si la ligne "JSON FINAL :" est absente, si le tableau JSON final n'est pas un tableau JSON pur, si tu utilises un objet racine comme {"questions":[...]}, ou si tu ajoutes du texte hors du bloc de code.
 
 ⛔ INTERDICTIONS ABSOLUES
 - JAMAIS de TSV. JAMAIS de VALIDATION PASSED/FAILED.

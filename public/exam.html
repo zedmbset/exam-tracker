@@ -1117,14 +1117,37 @@
         ]);
       }
 
-      // Extract JSON array from AI output (looks for ```json ... ``` block)
+      // Extract JSON array from AI output.
       function extractVerifiedJson(text) {
-        const match = text.match(/```json\s*([\s\S]*?)```/i);
-        if (!match) return null;
-        try {
-          const parsed = JSON.parse(match[1].trim());
-          if (Array.isArray(parsed)) return parsed;
-        } catch (e) {}
+        const candidates = [];
+
+        const jsonBlockMatch = text.match(/```json\s*([\s\S]*?)```/i);
+        if (jsonBlockMatch) candidates.push(jsonBlockMatch[1].trim());
+
+        const anyCodeBlocks = [...text.matchAll(/```(?:[a-zA-Z0-9_-]+)?\s*([\s\S]*?)```/g)];
+        for (const block of anyCodeBlocks) {
+          const content = (block[1] || "").trim();
+          if (content) candidates.push(content);
+        }
+
+        const jsonFinalMatch = text.match(/JSON FINAL\s*:\s*([\s\S]*)$/i);
+        if (jsonFinalMatch) candidates.push(jsonFinalMatch[1].trim());
+
+        candidates.push(text.trim());
+
+        for (const candidate of candidates) {
+          try {
+            const parsed = JSON.parse(candidate);
+            if (Array.isArray(parsed)) return parsed;
+          } catch (e) {}
+
+          const arrayMatch = candidate.match(/\[[\s\S]*\]/);
+          if (!arrayMatch) continue;
+          try {
+            const parsedArray = JSON.parse(arrayMatch[0]);
+            if (Array.isArray(parsedArray)) return parsedArray;
+          } catch (e) {}
+        }
         return null;
       }
 
@@ -2051,10 +2074,10 @@
           <div class="form-row">
             <label>
               Paste the final AI output
-              <span style="font-size:11px;font-weight:400;color:var(--red-text);margin-left:6px;">Must contain VALIDATION PASSED and a JSON array in a \`\`\`json block</span>
+              <span style="font-size:11px;font-weight:400;color:var(--red-text);margin-left:6px;">Must contain VALIDATION PASSED and the final JSON array in the same response</span>
             </label>
             <textarea class="tsv-textarea" id="combinedPasteInput"
-              placeholder='Paste the final AI output here: VALIDATION PASSED summary first, then the JSON array in a \`\`\`json block.'
+              placeholder='Paste the final AI output here: one single block containing VALIDATION PASSED summary and JSON FINAL array.'
               oninput="updateStep3ButtonState()"></textarea>
             <div id="validationStatusBanner" class="validation-status-banner" style="display:none;"></div>
             <div id="incertainStatusBanner" class="validation-status-banner" style="display:none;margin-top:4px;"></div>
@@ -2097,7 +2120,7 @@
             vBanner.innerHTML = `${WARN_SVG} No VALIDATION PASSED signal found in the pasted output`;
           } else {
             vBanner.className = "validation-status-banner validation-fail";
-            vBanner.innerHTML = `${WARN_SVG} No valid JSON array found — make sure the output contains a \`\`\`json block`;
+            vBanner.innerHTML = `${WARN_SVG} No valid JSON array found — make sure the output includes the final JSON array`;
           }
         }
 
@@ -2138,7 +2161,7 @@
 
         const questions = extractVerifiedJson(combined);
         if (!questions || !questions.length) {
-          notify("No valid JSON array found — make sure the output contains a ```json block", "error"); return;
+          notify("No valid JSON array found — make sure the output includes the final JSON array", "error"); return;
         }
 
         const jsonText = JSON.stringify(questions);
