@@ -1976,7 +1976,13 @@
           return;
         }
 
-        container.innerHTML = composedSubmodulesState.map(item => `
+        container.innerHTML = `
+          <div style="display:flex;gap:8px;align-items:center;padding:0 6px 4px 6px;color:var(--text3);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">
+            <div style="width:42px;"></div>
+            <div style="flex:1;">Submodule</div>
+            <div style="width:220px;">Question range</div>
+          </div>
+          ${composedSubmodulesState.map(item => `
           <div
             draggable="true"
             ondragstart="handleComposedSubmoduleDragStart(event, ${JSON.stringify(item.id)})"
@@ -1992,7 +1998,7 @@
               style="cursor:grab;border:1px solid var(--border2);background:var(--bg);border-radius:10px;padding:8px 10px;color:var(--text3);font-size:16px;line-height:1;"
             >⋮⋮</button>
             <div style="flex:1;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;">
-              <div style="font-weight:600;">Submodule: ${item.name}</div>
+              <div style="font-weight:600;">${item.name}</div>
               <div style="font-size:11px;color:var(--text3);margin-top:2px;">categoryId: ${item.categoryId}</div>
             </div>
             <input
@@ -2003,7 +2009,7 @@
               style="width:220px;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;"
             >
           </div>
-        `).join("");
+        `).join("")}`;
       }
 
       function handleSubcategoryDragStart(event, id) {
