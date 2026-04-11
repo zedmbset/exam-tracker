@@ -1555,13 +1555,13 @@
 
           <!-- Phase 3 : Comparison prompt (hidden until generated) -->
           <div id="dcPhase3" style="display:none;">
-            <div class="dc-divider"><span>Paste this comparison prompt into a THIRD neutral AI to generate the review report (no PDF needed)</span></div>
+            <div class="dc-divider"><span>Paste this prompt into a THIRD neutral AI to generate the review report, then send the corrected report back to that same AI</span></div>
             <div class="dc-phase">
               <div class="dc-phase-header">
                 <span class="dc-phase-badge" style="background:linear-gradient(135deg,#10b981,#059669);">3</span>
                 <div>
                   <div class="dc-phase-title">Review report prompt — copy into a third AI model</div>
-                  <div class="dc-phase-sub">No PDF attachment needed. The third AI compares both JSONs and returns a review report with JSONF proposals.</div>
+                  <div class="dc-phase-sub">No PDF attachment needed. The third AI compares both JSONs, returns a review report with JSONF proposals, then waits for the corrected report to produce VALIDATION PASSED + the final JSON.</div>
                 </div>
                 <button class="copy-btn" id="copyDcBtn" onclick="dcCopyCheckPrompt()" style="margin-left:auto;flex-shrink:0;">
                   ${svgCopy} Copy comparison prompt
@@ -1569,50 +1569,21 @@
               </div>
               <div class="prompt-text" id="dcCheckPromptText" style="margin-top:10px;"></div>
             </div>
-
-            <!-- Phase 4 : Paste review report -->
             <div class="dc-divider" style="margin-top:14px;">
-              <span>Human review: verify the PDF, resolve every ??? in JSONF, then paste the completed report below</span>
+              <span>Human review happens outside the app: fix JSONF in the report, send it back to the SAME third AI, then paste only the final AI output below in Step 3</span>
             </div>
-            <div class="dc-phase">
-              <div class="dc-phase-header">
-                <span class="dc-phase-badge" style="background:linear-gradient(135deg,#6c47d9,#4f46e5);">4</span>
-                <div>
-                  <div class="dc-phase-title">Paste the human-verified review report</div>
-                  <div class="dc-phase-sub">After you verify the PDF and fill every unresolved JSONF value, paste the completed report here to prepare the final correction prompt.</div>
-                </div>
-              </div>
-              <textarea class="tsv-textarea dc-tsv" id="dcReviewInput" style="margin-top:10px;min-height:100px;"
-                placeholder="Paste the completed divergence report here (all JSONF ??? resolved)..."></textarea>
-              <div style="display:flex;justify-content:flex-end;margin-top:8px;">
-                <button class="btn btn-primary btn-sm" onclick="dcGenerateStep2Prompt()">
-                  Generate final correction prompt →
-                </button>
-              </div>
-            </div>
-
-            <!-- Phase 5 : Step 2 prompt (hidden until generated) -->
-            <div id="dcPhase5" style="display:none;">
-              <div class="dc-divider" style="margin-top:14px;">
-                <span>Paste this final correction prompt back into the SAME third AI (no PDF needed)</span>
-              </div>
-              <div class="dc-phase">
-                <div class="dc-phase-header">
-                  <span class="dc-phase-badge" style="background:linear-gradient(135deg,#e11d48,#b91c1c);">5</span>
-                  <div>
-                    <div class="dc-phase-title">Final correction prompt — copy into the same third AI</div>
-                    <div class="dc-phase-sub">The same third AI must apply JSONF strictly, then return VALIDATION PASSED and the final clean JSON array.</div>
-                  </div>
-                  <button class="copy-btn" id="copyDcStep2Btn" onclick="dcCopyStep2Prompt()" style="margin-left:auto;flex-shrink:0;">
-                    ${svgCopy} Copy final correction prompt
-                  </button>
-                </div>
-                <div class="prompt-text" id="dcStep2PromptText" style="margin-top:10px;"></div>
-              </div>
+            <div class="instruction-box" style="margin-top:12px;">
+              <strong>Workflow after the report:</strong>
+              <ul>
+                <li>Check the PDF and resolve every <code>???</code> directly inside <code>JSONF</code>.</li>
+                <li>Send the completed report back to the same third AI in the same conversation.</li>
+                <li>Wait for <code>VALIDATION PASSED</code> and the final JSON array.</li>
+                <li>Paste only that final AI output in Step 3 below.</li>
+              </ul>
             </div>
           </div>`;
 
-        return stepCardWrap(1, examId, state, "AI Digitization & Double Check", "Two AIs digitize, a third AI builds the review report, then the same third AI finalizes JSON from human-verified JSONF", body, "");
+        return stepCardWrap(1, examId, state, "AI Digitization & Double Check", "Two AIs digitize, a third AI builds the review report, then the same third AI finalizes JSON after you return the corrected report", body, "");
       }
 
       function buildStep4(examId, state, quizLink) {
@@ -1855,30 +1826,6 @@
         notify("Comparison prompt ready — copy it (Phase 3)", "success");
       }
 
-      // Generate final correction prompt (Step 2)
-      function dcGenerateStep2Prompt() {
-        const json1        = (document.getElementById("dcJson1Input")?.value  || "").trim();
-        const json2        = (document.getElementById("dcJson2Input")?.value  || "").trim();
-        const reviewReport = (document.getElementById("dcReviewInput")?.value || "").trim();
-        if (!json1)        { notify("JSON from Model 1 missing — paste it in Phase 2a", "error"); return; }
-        if (!json2)        { notify("JSON from Model 2 missing — paste it in Phase 2b", "error"); return; }
-        if (!reviewReport) { notify("Paste the completed divergence report first (Phase 4)", "error"); return; }
-
-        const context = getExamContext();
-        const prompt  = typeof generateDoubleCheckStep2Prompt === "function"
-          ? generateDoubleCheckStep2Prompt(context, json1, json2, reviewReport)
-          : "";
-
-        const el     = document.getElementById("dcStep2PromptText");
-        const phase5 = document.getElementById("dcPhase5");
-        if (el) el.textContent = prompt;
-        if (phase5) {
-          phase5.style.display = "block";
-          phase5.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-        notify("Final correction prompt ready — send it to the same third AI (Phase 5)", "success");
-      }
-
       // Copy helpers
       function dcCopyCheckPrompt() {
         const text = document.getElementById("dcCheckPromptText")?.textContent || "";
@@ -1893,21 +1840,6 @@
             }
           }, 2500);
         }).catch(() => notify("Copy failed - select text manually.", "error"));
-      }
-
-      function dcCopyStep2Prompt() {
-        const text = document.getElementById("dcStep2PromptText")?.textContent || "";
-        if (!text) { notify("Generate the final correction prompt first", "error"); return; }
-        navigator.clipboard.writeText(text).then(() => {
-          const btn = document.getElementById("copyDcStep2Btn");
-          if (btn) { btn.classList.add("copied"); btn.textContent = "Copied"; }
-          setTimeout(() => {
-            if (btn) {
-              btn.classList.remove("copied");
-              btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy final correction prompt`;
-            }
-          }, 2500);
-        }).catch(() => notify("Copy failed — select the text manually.", "error"));
       }
 
       function copyPrompt() {

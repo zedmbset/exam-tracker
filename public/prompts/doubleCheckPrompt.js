@@ -11,7 +11,6 @@
 //
 //  Exports :
 //    generateDoubleCheckPrompt(data, json1, json2)                      → rapport (Step 1)
-//    generateDoubleCheckStep2Prompt(data, json1, json2, reviewReport)   → JSON final (Step 2)
 // ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -413,6 +412,13 @@ Tu NE recois PAS le PDF. Tu travailles exclusivement depuis les deux JSON.
 Ta mission : identifier toutes les divergences entre JSON1 et JSON2, les classer,
 et produire un rapport structure pour que la verification humaine tranche en consultant le PDF.
 
+IMPORTANT — FLUX SUR DEUX TOURS AVEC LE MEME MODELE :
+- Tour 1 (ce message) : compare JSON1 et JSON2 puis retourne UNIQUEMENT le REVIEW REPORT.
+- Ensuite, la verification humaine corrige JSONF directement dans ce rapport.
+- Tour 2 (message suivant dans la meme conversation) : si tu recois le REVIEW REPORT complete avec JSONF finalise,
+  tu dois alors appliquer JSONF strictement et retourner VALIDATION PASSED + le JSON final propre.
+- N'anticipe jamais le Tour 2 dans cette reponse. Ici, tu dois seulement produire le REVIEW REPORT.
+
 ══════════════════════════════════════════════════════
 CONTEXTE DE L'EXAMEN
 ══════════════════════════════════════════════════════
@@ -561,7 +567,7 @@ TOTAL DIVERGENCES       : [nombre total]
 QUESTIONS CONCORDANTES  : [nombre de questions identiques sur tous les champs]
 QUESTIONS DIVERGENTES   : [nombre de questions avec au moins une divergence]
 BLOQUANTS               : [nombre de lignes ou JSONF contient encore "???"]
-INSTRUCTION VERIFICATION HUMAINE : Les lignes INLINE ont deja un JSONF final. Pour chaque ligne BLOQUANT, verifiez dans le PDF puis remplacez tous les "???" dans JSONF par la valeur correcte. Renvoyez ensuite le rapport complet pour l'etape 2.
+INSTRUCTION VERIFICATION HUMAINE : Les lignes INLINE ont deja un JSONF final. Pour chaque ligne BLOQUANT, verifiez dans le PDF puis remplacez tous les "???" dans JSONF par la valeur correcte. Ensuite, renvoyez ce REVIEW REPORT complete au meme troisieme modele dans la meme conversation pour obtenir VALIDATION PASSED + le JSON final.
 
 ⛔ INTERDICTIONS ABSOLUES
 - JAMAIS de TSV. JAMAIS de VALIDATION PASSED/FAILED.
@@ -570,172 +576,6 @@ INSTRUCTION VERIFICATION HUMAINE : Les lignes INLINE ont deja un JSONF final. Po
 - JAMAIS de texte libre en dehors du bloc \`\`\`text\`\`\`.
 - Ta reponse se termine apres INSTRUCTION VERIFICATION HUMAINE.`;
 }
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// STEP 2 — JSON final
-// ─────────────────────────────────────────────────────────────────────────────
-
-function buildDoubleCheckStep2Prompt(data, json1, json2, reviewReport) {
-  const lang           = data.lang        || "Francais";
-  const moduleName     = data.module      || "-";
-  const wilaya         = data.wilaya      || "-";
-  const year           = data.year        || "-";
-  const nQst           = data.nQst        || "?";
-  const missingPos     = Array.isArray(data.missingPos)    ? data.missingPos    : [];
-  const schemaQsts     = Array.isArray(data.schemaQsts)    ? data.schemaQsts    : [];
-  const expectedRows   = typeof nQst === "number" ? nQst - missingPos.length : "?";
-  const missingSummary = missingPos.length > 0 ? missingPos.join(", ") : "aucune";
-  const schemaSummary  = schemaQsts.length > 0 ? schemaQsts.join(", ") : "aucune";
-
-  return `Tu es le troisieme modele arbitre pour un projet de numerisation d'examens medicaux algeriens.
-
-Tu recois :
-1. JSON1 — produit par le premier modele (ci-dessous) — BASE DE DEPART
-2. JSON2 — produit par le second modele (ci-dessous) — reference pour les corrections
-3. Le rapport de comparaison complete avec JSONF finalise (ci-dessous)
-
-Ta mission : construire le JSON final propre en partant de JSON1,
-en appliquant toutes les corrections de JSONF.
-
-Format de sortie : un tableau JSON de questions (array d'objets).
-Chaque objet contient uniquement les champs non vides parmi :
-  cas | num | text | a | b | c | d | e | f | g | correct | exp | hint | categoryName | tagSuggere | subcategoryName | year | tag
-Omets les champs vides ou null. Preserve l'ordre canonique des champs.
-
-══════════════════════════════════════════════════════
-CONTEXTE
-══════════════════════════════════════════════════════
-- Langue                         : ${lang}
-- Module                         : ${moduleName}
-- Wilaya                         : ${wilaya}
-- Annee                          : ${year}
-- Nombre de QCMs declares        : ${nQst}
-- Nombre de lignes attendues     : ${expectedRows}
-- Corrige Type present           : ${data.hasCT  ? "OUI" : "NON"}
-- Cas cliniques presents         : ${data.hasCas  ? "OUI" : "NON"}
-- Questions d'association        : ${data.hasComb ? "OUI" : "NON"}
-- Questions declarees manquantes : ${missingSummary}
-- Questions avec schema/image    : ${schemaSummary}
-
-JSON1 — BASE DE DEPART
-${json1}
-
-JSON2 — REFERENCE
-${json2}
-
-RAPPORT DE COMPARAISON FINALISE
-${reviewReport}
-
-${injectTaxonomy()}
-
-══════════════════════════════════════════════════════
-REGLES DE CONSTRUCTION
-══════════════════════════════════════════════════════
-
-BASE : pars de JSON1.questions comme tableau de depart.
-Puis applique les corrections du rapport question par question.
-
-INTERPRETATION DU RAPPORT :
-  Reference         → champ a modifier dans JSON1
-  Type              → code taxonomique — quelle regle appliquer
-  JSON1             → valeur actuelle dans JSON1 (contexte)
-  JSON2             → valeur alternative dans JSON2 (contexte)
-  JSONF             → SEULE AUTORITE — valeur finale a appliquer
-  Full Phrase       → contexte uniquement, jamais une instruction
-
-APPLICATION GENERALE :
-  JSONF complete     → applique STRICTEMENT JSONF.
-  JSONF avec "???"   → ARRETE. Retourne VALIDATION FAILED avec la reference.
-
-APPLICATION selon le Type :
-  SPELL, ACRONYM, PREFIX_NUM, PREFIX_PROP → remplace le mot cible dans le champ JSON en utilisant la valeur JSONF,
-      puis SUPPRIME tous les crochets [ et ] avant d'ecrire dans le JSON final.
-      Les crochets sont des marqueurs visuels du rapport UNIQUEMENT — ils ne doivent JAMAIS apparaitre dans le JSON final.
-      Exemple : JSONF = "Les antigenes sont [reconnus] par les [BCR]" → JSON = "Les antigenes sont reconnus par les BCR"
-  DIGIT, UNIT, SYMBOL   → remplace la valeur ou le caractere cible dans le champ JSON.
-  PROP_DIVERGE          → remplace le texte entier du champ par JSONF.
-  PROP_TRUNCATED        → remplace le texte tronque par la valeur complete contenue dans JSONF.
-  PROP_SWAP             → echange les deux champs concernes selon JSONF.
-  PROP_ORDER            → reordonne les champs a/b/c/d/e selon JSONF.
-  QCM_SHIFT             → parser le JSONF ligne par ligne en utilisant les prefixes "Text:" / "A:" / "B:" / "C:" / "D:" / "E:" comme separateurs de champs.
-      Chaque segment est mappe vers le champ JSON correspondant (Text→text, A→a, B→b, etc.).
-      Format JSONF attendu : "Text: [valeur] / A: [valeur] / B: [valeur] / C: [valeur] / D: [valeur] / E: [valeur]"
-      Utiliser directement chaque segment tel quel, sans les prefixes ni les "/".
-      Si un segment vaut encore "???" → ARRETE, retourne VALIDATION FAILED sur cette reference.
-  CT_DIVERGE, CT_DRIFT  → remplace le champ 'correct' par JSONF.
-  CT_SPACING            → reecris 'correct' sans espace interne.
-  HINT_DIVERGE          → remplace le champ 'hint' par JSONF.
-  SWAP_DIVERGE          → applique JSONF sur 'correct'.
-  CAS_DIVERGE           → applique JSONF sur 'cas'.
-  FIELD_MISSING         → ajoute ou supprime le champ selon JSONF.
-  ROW_COUNT             → VALIDATION FAILED si non resolu.
-  AUDIT_ONLY            → aucune action sur le TSV — information uniquement.
-
-Champs non listes dans le rapport → prendre la valeur de JSON1 telle quelle.
-
-INTERDICTIONS ABSOLUES :
-- Ne jamais inventer une correction absente de JSONF.
-- Ne jamais modifier un champ absent du rapport.
-- Ne jamais corriger le CT par logique medicale.
-- Ne jamais deplacer les propositions a-e sauf PROP_ORDER confirme.
-- Ne jamais introduire un espace dans une valeur correct (BCE reste BCE).
-
-VERIFICATION FINALE :
-  - Aucun marqueur residuel [SWAP] ou [REVIEW] dans les valeurs JSON (verifier ces chaines exactes uniquement).
-  - Aucun crochet [ ou ] dans les valeurs JSON — les crochets SPELL du rapport doivent avoir ete supprimes.
-  - Nombre d'objets dans le tableau = ${expectedRows}.
-  - Aucun champ correct ne contient une deduction medicale.
-  - Aucun champ text ne commence par un prefixe de question.
-
-══════════════════════════════════════════════════════
-CAS 1 — VALIDATION PASSED
-══════════════════════════════════════════════════════
-
-Retourne deux blocs dans ta reponse :
-
-BLOC 1 — resume en texte brut (pas dans un bloc code) :
-
-VALIDATION PASSED
-Module              : ${moduleName} [confirme]
-Nombre de questions : ${expectedRows} attendu / [X detecte apres corrections]
-Corrige Type        : ${data.hasCT  ? "[compatible / probleme]" : "non applicable"}
-Cas cliniques       : ${data.hasCas  ? "[compatible / probleme]" : "non applicable"}
-Questions d'association : ${data.hasComb ? "[compatible / probleme]" : "non applicable"}
-Images / schemas    : ${schemaQsts.length > 0 ? "[compatible / probleme]" : "non applicable"}
-Marqueurs residuels : aucun
-Corrections appliquees : [nombre]
-Divergences resolues : [nombre]
-Conclusion          : JSON final valide
-
-BLOC 2 — le JSON final dans un bloc \`\`\`json :
-
-\`\`\`json
-[
-  { "num": 1, "text": "...", "a": "...", "b": "...", "correct": "..." },
-  ...
-]
-\`\`\`
-
-REGLES FORMAT :
-- BLOC 1 commence exactement par "VALIDATION PASSED"
-- BLOC 2 est un JSON array valide — parseable par JSON.parse()
-- Aucun champ vide ou null dans les objets — omets-les
-- Aucun marqueur residuel dans les valeurs JSON
-- Un seul bloc \`\`\`json\`\`\`
-
-══════════════════════════════════════════════════════
-CAS 2 — VALIDATION FAILED
-══════════════════════════════════════════════════════
-
-VALIDATION FAILED
-Raison : [description precise]
-References bloquantes : [liste]
-Action requise : Remplacer chaque "???" dans JSONF apres verification dans le PDF, puis relancer l'etape 2.
-
-- Aucun JSON. Aucune version partielle. Aucun texte libre en dehors du bloc.`;
-}
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC API
@@ -753,23 +593,10 @@ function generateDoubleCheckPrompt(data, json1, json2) {
   return buildDoubleCheckPrompt(data || {}, json1 || "", json2 || "");
 }
 
-/**
- * Generate the final JSON prompt (Step 2).
- * @param {object} data         - exam metadata
- * @param {string} json1        - JSON string from model 1 (base)
- * @param {string} json2        - JSON string from model 2 (reference)
- * @param {string} reviewReport - completed comparison report with final JSONF values
- * @returns {string}
- */
-function generateDoubleCheckStep2Prompt(data, json1, json2, reviewReport) {
-  return buildDoubleCheckStep2Prompt(data || {}, json1 || "", json2 || "", reviewReport || "");
-}
-
 // ─── Exports ──────────────────────────────────────────────────────────────────
 if (typeof module !== "undefined") {
-  module.exports = { generateDoubleCheckPrompt, generateDoubleCheckStep2Prompt };
+  module.exports = { generateDoubleCheckPrompt };
 }
 if (typeof window !== "undefined") {
-  window.generateDoubleCheckPrompt      = generateDoubleCheckPrompt;
-  window.generateDoubleCheckStep2Prompt = generateDoubleCheckStep2Prompt;
+  window.generateDoubleCheckPrompt = generateDoubleCheckPrompt;
 }
