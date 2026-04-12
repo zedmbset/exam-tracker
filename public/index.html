@@ -55,10 +55,64 @@
   .progress-fill { height: 100%; background: #639922; border-radius: 2px; }
 
   /* Filters */
-  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
-  .filters input, .filters select { padding: 6px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 13px; }
-  .filters input { flex: 1; min-width: 160px; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
+  .filters input[type=text] { padding: 6px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 13px; flex: 1; min-width: 160px; outline: none; transition: border-color 0.15s; }
+  .filters input[type=text]:focus { border-color: var(--accent); }
+  .filters select { padding: 6px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 13px; }
   .row-count { font-size: 12px; color: var(--text3); margin-left: auto; }
+
+  /* Custom dropdown */
+  .fd-wrap { position: relative; display: inline-block; }
+  .fd-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 13px; cursor: pointer; white-space: nowrap; user-select: none; line-height: 1.4; transition: border-color 0.15s, background 0.15s; }
+  .fd-btn:hover { border-color: var(--accent); background: var(--bg2); }
+  .fd-btn.is-active { border-color: var(--accent); background: var(--blue-bg); color: var(--blue-text); }
+  .fd-badge { background: var(--accent); color: #fff; border-radius: 20px; font-size: 10px; font-weight: 700; padding: 1px 5px; }
+  .fd-caret { width: 10px; height: 10px; opacity: 0.45; flex-shrink: 0; transition: transform 0.15s; }
+  .fd-wrap.is-open .fd-caret { transform: rotate(180deg); }
+  .fd-panel { position: absolute; top: calc(100% + 5px); left: 0; min-width: 200px; background: var(--bg); border: 0.5px solid var(--border2); border-radius: var(--radius-lg); box-shadow: 0 8px 32px rgba(0,0,0,0.14); z-index: 300; display: none; overflow: hidden; }
+  .fd-wrap.is-open .fd-panel { display: block; }
+  .fd-panel-search { padding: 8px; border-bottom: 0.5px solid var(--border); }
+  .fd-panel-search input { width: 100%; padding: 5px 8px; border: 0.5px solid var(--border2); border-radius: 6px; background: var(--bg2); color: var(--text); font-size: 12px; outline: none; }
+  .fd-panel-opts { max-height: 210px; overflow-y: auto; padding: 4px 0; }
+  .fd-opt { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; transition: background 0.1s; }
+  .fd-opt:hover { background: var(--bg2); }
+  .fd-opt input[type=checkbox] { width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+  .fd-panel-footer { border-top: 0.5px solid var(--border); padding: 6px 10px; display: flex; justify-content: space-between; align-items: center; }
+  .fd-footer-count { font-size: 11px; color: var(--text3); }
+  .fd-clear-btn { font-size: 11px; color: var(--blue-text); cursor: pointer; background: none; border: none; padding: 0; }
+  .fd-clear-btn:hover { text-decoration: underline; }
+  .fd-no-opts { padding: 12px; text-align: center; font-size: 12px; color: var(--text3); }
+
+  /* Year filter */
+  .fd-tabs { display: flex; border-bottom: 0.5px solid var(--border); }
+  .fd-tab { flex: 1; padding: 8px 4px; font-size: 12px; font-weight: 500; text-align: center; cursor: pointer; color: var(--text2); border-bottom: 2px solid transparent; margin-bottom: -0.5px; transition: all 0.12s; }
+  .fd-tab.is-sel { color: var(--accent); border-bottom-color: var(--accent); background: var(--blue-bg); }
+  .fd-tab:hover:not(.is-sel) { background: var(--bg2); }
+  .fd-year-body { padding: 10px; }
+  .fd-year-range { display: flex; align-items: center; gap: 6px; }
+  .fd-year-range select { flex: 1; padding: 6px 8px; border: 0.5px solid var(--border2); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 12px; }
+  .fd-year-range-sep { color: var(--text3); font-size: 13px; flex-shrink: 0; }
+  .fd-yr-list { display: flex; flex-direction: column; gap: 2px; max-height: 180px; overflow-y: auto; }
+  .fd-yr-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 13px; cursor: pointer; transition: background 0.1s; }
+  .fd-yr-item:hover { background: var(--bg2); }
+  .fd-yr-item.is-sel { background: var(--blue-bg); color: var(--blue-text); font-weight: 500; }
+  .fd-yr-dot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--border2); flex-shrink: 0; transition: all 0.1s; }
+  .fd-yr-item.is-sel .fd-yr-dot { background: var(--accent); border-color: var(--accent); }
+
+  /* Filter chips */
+  .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; align-items: center; }
+  .filter-chips:empty { display: none; margin-bottom: 0; }
+  .f-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 10px; border-radius: 20px; border: 0.5px solid var(--blue-border); background: var(--blue-bg); color: var(--blue-text); font-size: 12px; }
+  .f-chip-x { background: none; border: none; cursor: pointer; color: currentColor; padding: 1px 2px; display: flex; align-items: center; opacity: 0.6; line-height: 1; font-size: 15px; border-radius: 50%; }
+  .f-chip-x:hover { opacity: 1; background: rgba(0,0,0,0.1); }
+  .f-clear-all { padding: 3px 10px; border-radius: 20px; border: 0.5px solid var(--border2); background: var(--bg); color: var(--text2); font-size: 12px; cursor: pointer; transition: all 0.12s; }
+  .f-clear-all:hover { border-color: var(--red-border); color: var(--red-text); background: var(--red-bg); }
+
+  /* Sortable table headers */
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--text); background: var(--bg3); }
+  .sort-icon { display: inline-block; margin-left: 3px; opacity: 0.25; vertical-align: middle; font-style: normal; }
+  th.sort-active .sort-icon { opacity: 1; color: var(--accent); }
   .table-actions { display: inline-flex; align-items: center; gap: 6px; }
   .status-select { min-width: 130px; padding: 5px 8px; border: 0.5px solid var(--border2); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 12px; }
   .status-select.status-saving { border-color: var(--amber-border); background: var(--amber-bg); color: var(--amber-text); }
@@ -216,14 +270,12 @@
     <div id="dashboard" style="display:none;">
       <div class="stats-row" id="statsRow"></div>
       <div class="filters">
-        <input type="text" id="searchBox" placeholder="Search module, wilaya…" oninput="renderTable()">
-        <select id="fWilaya" onchange="renderTable()"><option value="">All wilayas</option></select>
-        <select id="fYear" onchange="renderTable()"><option value="">All years</option></select>
-        <select id="fSemester" onchange="renderTable()"><option value="">All rotations</option></select>
-        <select id="fStatus" onchange="renderTable()">
-          <option value="">All statuses</option>
-        </select>
-        <select id="fCompletion" onchange="renderTable()">
+        <input type="text" id="searchBox" placeholder="Search module, wilaya…" oninput="onFilterChange()">
+        <div class="fd-wrap" id="fd-wilaya"></div>
+        <div class="fd-wrap" id="fd-year"></div>
+        <div class="fd-wrap" id="fd-rotation"></div>
+        <div class="fd-wrap" id="fd-status"></div>
+        <select id="fCompletion" onchange="onFilterChange()">
           <option value="">All rows</option>
           <option value="missing">Has missing fields</option>
           <option value="complete">Fully complete</option>
@@ -231,16 +283,11 @@
         <button class="btn btn-sm" onclick="copyFilteredDashboardLink()">Copy filtered link</button>
         <span class="row-count" id="rowCount"></span>
       </div>
+      <div class="filter-chips" id="filterChips"></div>
       <div class="table-card">
         <div class="table-wrap">
           <table>
-            <thead>
-              <tr>
-                <th>Wilaya</th><th>Year</th><th>Rotation</th><th>Module</th>
-                <th>Status</th><th>OrigPDF</th><th>Quiz_Tbl</th>
-                <th>N° Qst</th><th>Missing</th><th></th>
-              </tr>
-            </thead>
+            <thead><tr></tr></thead>
             <tbody id="tableBody"></tbody>
           </table>
         </div>
@@ -436,6 +483,20 @@ let activeRowIdx = null;
 let pendingFile  = null;
 let isApplyingFilterState = false;
 
+let filterState = {
+  q: '', wilayas: [],
+  yearMode: 'all', yearSingle: '', yearFrom: '', yearTo: '',
+  rotations: [], statuses: [], completion: '',
+};
+let sortState = { col: null, dir: 'asc' };
+let activeDropdown = null;
+const multiSelectControls = {};
+let yearFilterControl = null;
+
+document.addEventListener('click', () => {
+  if (activeDropdown) { activeDropdown.classList.remove('is-open'); activeDropdown = null; }
+});
+
 // ── Boot ────────────────────────────────────────────────────────────────────
 async function boot() {
   try {
@@ -478,7 +539,11 @@ function showDashboard() {
   document.getElementById('dashboard').style.display     = 'block';
   populateFilters();
   applyFilterStateFromUrl();
+  Object.values(multiSelectControls).forEach(c => c?.refreshBtn());
+  yearFilterControl?.refreshBtn();
+  renderChips();
   renderStats();
+  renderTableHeader();
   renderTable();
 }
 
@@ -499,26 +564,262 @@ function parseTags(row) {
   return tags;
 }
 
-function getCurrentFilterState() {
-  return {
-    q: document.getElementById('searchBox').value.trim(),
-    wilaya: document.getElementById('fWilaya').value,
-    year: document.getElementById('fYear').value,
-    rotation: document.getElementById('fSemester').value,
-    status: document.getElementById('fStatus').value,
-    completion: document.getElementById('fCompletion').value,
-  };
+// ── Multi-select dropdown builder ─────────────────────────────────────────────
+const CARET_SVG = `<svg class="fd-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="4 6 8 10 12 6"/></svg>`;
+
+function buildMultiSelect(wrapId, label, getSelected, setSelected, getOpts) {
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return null;
+  wrap.innerHTML = '';
+
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'fd-btn';
+
+  const panel = document.createElement('div');
+  panel.className = 'fd-panel';
+  wrap.appendChild(btn); wrap.appendChild(panel);
+
+  function refreshBtn() {
+    const sel = getSelected();
+    if (!sel.length) {
+      btn.className = 'fd-btn';
+      btn.innerHTML = `${label} ${CARET_SVG}`;
+    } else if (sel.length === 1) {
+      btn.className = 'fd-btn is-active';
+      btn.innerHTML = `${label}: <strong>${escapeHtml(sel[0])}</strong> ${CARET_SVG}`;
+    } else {
+      btn.className = 'fd-btn is-active';
+      btn.innerHTML = `${label} <span class="fd-badge">${sel.length}</span> ${CARET_SVG}`;
+    }
+  }
+
+  function openPanel() {
+    const opts = getOpts();
+    const sel = getSelected();
+    panel.innerHTML = `
+      <div class="fd-panel-search"><input type="text" placeholder="Search…" id="${wrapId}-srch" autocomplete="off"></div>
+      <div class="fd-panel-opts" id="${wrapId}-opts"></div>
+      <div class="fd-panel-footer">
+        <span class="fd-footer-count" id="${wrapId}-cnt">${sel.length} selected</span>
+        <button type="button" class="fd-clear-btn" id="${wrapId}-clr">Clear all</button>
+      </div>`;
+    const srch = document.getElementById(`${wrapId}-srch`);
+    const optsEl = document.getElementById(`${wrapId}-opts`);
+    const cntEl = document.getElementById(`${wrapId}-cnt`);
+
+    function renderOpts(filter) {
+      const visible = filter ? opts.filter(o => o.toLowerCase().includes(filter.toLowerCase())) : opts;
+      if (!visible.length) { optsEl.innerHTML = `<div class="fd-no-opts">No options</div>`; return; }
+      const cur = getSelected();
+      optsEl.innerHTML = visible.map(o => `
+        <label class="fd-opt">
+          <input type="checkbox" value="${escapeHtml(o)}" ${cur.includes(o)?'checked':''}>
+          <span>${escapeHtml(o)}</span>
+        </label>`).join('');
+      optsEl.querySelectorAll('input[type=checkbox]').forEach(cb => {
+        cb.addEventListener('change', e => {
+          e.stopPropagation();
+          const cur2 = getSelected().slice();
+          if (cb.checked) { if (!cur2.includes(cb.value)) cur2.push(cb.value); }
+          else { const i = cur2.indexOf(cb.value); if (i >= 0) cur2.splice(i,1); }
+          setSelected(cur2);
+          cntEl.textContent = cur2.length + ' selected';
+          refreshBtn(); renderChips(); renderTable();
+        });
+      });
+    }
+
+    renderOpts('');
+    setTimeout(() => srch.focus(), 40);
+    srch.addEventListener('input', () => renderOpts(srch.value));
+    srch.addEventListener('click', e => e.stopPropagation());
+    optsEl.addEventListener('click', e => e.stopPropagation());
+    document.getElementById(`${wrapId}-clr`).addEventListener('click', e => {
+      e.stopPropagation();
+      setSelected([]);
+      cntEl.textContent = '0 selected';
+      refreshBtn(); renderOpts(srch.value); renderChips(); renderTable();
+    });
+  }
+
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const isOpen = wrap.classList.contains('is-open');
+    if (activeDropdown && activeDropdown !== wrap) activeDropdown.classList.remove('is-open');
+    if (isOpen) { wrap.classList.remove('is-open'); activeDropdown = null; }
+    else { wrap.classList.add('is-open'); activeDropdown = wrap; openPanel(); }
+  });
+  panel.addEventListener('click', e => e.stopPropagation());
+  refreshBtn();
+  return { refreshBtn };
 }
 
+// ── Year dropdown builder ─────────────────────────────────────────────────────
+function buildYearFilter(wrapId, getOpts) {
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return null;
+  wrap.innerHTML = '';
+
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'fd-btn';
+
+  const panel = document.createElement('div');
+  panel.className = 'fd-panel'; panel.style.minWidth = '220px';
+  wrap.appendChild(btn); wrap.appendChild(panel);
+
+  function refreshBtn() {
+    const { yearMode, yearSingle, yearFrom, yearTo } = filterState;
+    if (yearMode === 'single' && yearSingle) {
+      btn.className = 'fd-btn is-active';
+      btn.innerHTML = `Year: <strong>${escapeHtml(yearSingle)}</strong> ${CARET_SVG}`;
+    } else if (yearMode === 'range' && (yearFrom || yearTo)) {
+      btn.className = 'fd-btn is-active';
+      btn.innerHTML = `Year: <strong>${escapeHtml(yearFrom||'…')} – ${escapeHtml(yearTo||'…')}</strong> ${CARET_SVG}`;
+    } else {
+      btn.className = 'fd-btn';
+      btn.innerHTML = `Year ${CARET_SVG}`;
+    }
+  }
+
+  function openPanel() {
+    const opts = getOpts();
+    const { yearMode, yearSingle, yearFrom, yearTo } = filterState;
+    panel.innerHTML = `
+      <div class="fd-tabs">
+        <div class="fd-tab ${yearMode==='all'?'is-sel':''}" data-tab="all">All</div>
+        <div class="fd-tab ${yearMode==='single'?'is-sel':''}" data-tab="single">Single</div>
+        <div class="fd-tab ${yearMode==='range'?'is-sel':''}" data-tab="range">Range</div>
+      </div>
+      <div class="fd-year-body" id="${wrapId}-body"></div>`;
+    const body = document.getElementById(`${wrapId}-body`);
+
+    function renderBody(mode) {
+      const { yearSingle, yearFrom, yearTo } = filterState;
+      if (mode === 'all') {
+        body.innerHTML = `<div style="padding:10px 8px;font-size:12px;color:var(--text3);text-align:center;">Showing all years</div>`;
+      } else if (mode === 'single') {
+        body.innerHTML = `<div class="fd-yr-list">${opts.map(y=>`
+          <div class="fd-yr-item ${yearSingle===y?'is-sel':''}" data-yr="${escapeHtml(y)}">
+            <span class="fd-yr-dot"></span>${escapeHtml(y)}
+          </div>`).join('')}</div>`;
+        body.querySelectorAll('.fd-yr-item').forEach(el => {
+          el.addEventListener('click', e => {
+            e.stopPropagation();
+            filterState.yearSingle = el.dataset.yr;
+            filterState.yearMode = 'single';
+            body.querySelectorAll('.fd-yr-item').forEach(x => x.classList.toggle('is-sel', x===el));
+            refreshBtn(); renderChips(); renderTable();
+          });
+        });
+      } else {
+        const mkOpts = (cur) => opts.map(y=>`<option value="${escapeHtml(y)}" ${cur===y?'selected':''}>${escapeHtml(y)}</option>`).join('');
+        body.innerHTML = `<div class="fd-year-range">
+          <select id="${wrapId}-from"><option value="">From</option>${mkOpts(yearFrom)}</select>
+          <span class="fd-year-range-sep">–</span>
+          <select id="${wrapId}-to"><option value="">To</option>${mkOpts(yearTo)}</select>
+        </div>`;
+        const fromEl = document.getElementById(`${wrapId}-from`);
+        const toEl   = document.getElementById(`${wrapId}-to`);
+        [fromEl, toEl].forEach(el => {
+          el.addEventListener('click', e => e.stopPropagation());
+          el.addEventListener('change', e => {
+            e.stopPropagation();
+            filterState.yearFrom = fromEl.value;
+            filterState.yearTo   = toEl.value;
+            filterState.yearMode = 'range';
+            refreshBtn(); renderChips(); renderTable();
+          });
+        });
+      }
+    }
+
+    panel.querySelectorAll('.fd-tab').forEach(tab => {
+      tab.addEventListener('click', e => {
+        e.stopPropagation();
+        const mode = tab.dataset.tab;
+        filterState.yearMode = mode;
+        if (mode === 'all') { filterState.yearSingle=''; filterState.yearFrom=''; filterState.yearTo=''; refreshBtn(); renderChips(); renderTable(); }
+        panel.querySelectorAll('.fd-tab').forEach(t => t.classList.toggle('is-sel', t===tab));
+        renderBody(mode);
+      });
+    });
+    renderBody(yearMode);
+  }
+
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const isOpen = wrap.classList.contains('is-open');
+    if (activeDropdown && activeDropdown !== wrap) activeDropdown.classList.remove('is-open');
+    if (isOpen) { wrap.classList.remove('is-open'); activeDropdown = null; }
+    else { wrap.classList.add('is-open'); activeDropdown = wrap; openPanel(); }
+  });
+  panel.addEventListener('click', e => e.stopPropagation());
+  refreshBtn();
+  return { refreshBtn };
+}
+
+// ── Filter change handler ─────────────────────────────────────────────────────
+function onFilterChange() {
+  filterState.q          = (document.getElementById('searchBox')?.value || '').trim();
+  filterState.completion = document.getElementById('fCompletion')?.value || '';
+  renderChips(); renderTable();
+}
+
+// ── Active filter chips ───────────────────────────────────────────────────────
+function renderChips() {
+  const el = document.getElementById('filterChips');
+  if (!el) return;
+  const chips = [];
+
+  if (filterState.q)
+    chips.push({ label: `"${filterState.q}"`, key: 'q', clear: () => { filterState.q=''; document.getElementById('searchBox').value=''; } });
+  if (filterState.wilayas.length)
+    chips.push({ label: `Wilaya: ${filterState.wilayas.join(', ')}`, key: 'w', clear: () => { filterState.wilayas=[]; multiSelectControls['fd-wilaya']?.refreshBtn(); } });
+  if (filterState.yearMode !== 'all' && (filterState.yearSingle || filterState.yearFrom || filterState.yearTo)) {
+    const yl = filterState.yearMode==='single' ? filterState.yearSingle : `${filterState.yearFrom||'…'} – ${filterState.yearTo||'…'}`;
+    chips.push({ label: `Year: ${yl}`, key: 'y', clear: () => { filterState.yearMode='all'; filterState.yearSingle=''; filterState.yearFrom=''; filterState.yearTo=''; yearFilterControl?.refreshBtn(); } });
+  }
+  if (filterState.rotations.length)
+    chips.push({ label: `Rotation: ${filterState.rotations.join(', ')}`, key: 'r', clear: () => { filterState.rotations=[]; multiSelectControls['fd-rotation']?.refreshBtn(); } });
+  if (filterState.statuses.length)
+    chips.push({ label: `Status: ${filterState.statuses.map(s=>s.replace(/^\S+\s*/,'')).join(', ')}`, key: 's', clear: () => { filterState.statuses=[]; multiSelectControls['fd-status']?.refreshBtn(); } });
+  if (filterState.completion)
+    chips.push({ label: filterState.completion==='missing' ? 'Has missing fields' : 'Fully complete', key: 'c', clear: () => { filterState.completion=''; document.getElementById('fCompletion').value=''; } });
+
+  if (!chips.length) { el.innerHTML = ''; return; }
+
+  el.innerHTML = chips.map((c,i) =>
+    `<span class="f-chip">${escapeHtml(c.label)}<button class="f-chip-x" data-i="${i}" title="Remove">&times;</button></span>`
+  ).join('') + `<button class="f-clear-all" id="btnClearAll">Clear all</button>`;
+
+  el.querySelectorAll('.f-chip-x').forEach(b => b.addEventListener('click', () => {
+    chips[+b.dataset.i].clear(); renderChips(); renderTable();
+  }));
+  document.getElementById('btnClearAll')?.addEventListener('click', clearAllFilters);
+}
+
+function clearAllFilters() {
+  filterState = { q:'', wilayas:[], yearMode:'all', yearSingle:'', yearFrom:'', yearTo:'', rotations:[], statuses:[], completion:'' };
+  document.getElementById('searchBox').value = '';
+  document.getElementById('fCompletion').value = '';
+  Object.values(multiSelectControls).forEach(c => c?.refreshBtn());
+  yearFilterControl?.refreshBtn();
+  renderChips(); renderTable();
+}
+
+// ── URL sync ──────────────────────────────────────────────────────────────────
+function getCurrentFilterState() { return { ...filterState }; }
+
 function buildDashboardUrlFromState(state = getCurrentFilterState()) {
-  const params = new URLSearchParams();
-  if (state.q) params.set('q', state.q);
-  if (state.wilaya) params.set('wilaya', state.wilaya);
-  if (state.year) params.set('year', state.year);
-  if (state.rotation) params.set('rotation', state.rotation);
-  if (state.status) params.set('status', state.status);
-  if (state.completion) params.set('completion', state.completion);
-  const qs = params.toString();
+  const p = new URLSearchParams();
+  if (state.q) p.set('q', state.q);
+  if (state.wilayas?.length) p.set('wilaya', state.wilayas.join(','));
+  if (state.yearMode==='single' && state.yearSingle) p.set('year', state.yearSingle);
+  else if (state.yearMode==='range') { const r=[state.yearFrom,state.yearTo].filter(Boolean); if(r.length) p.set('year', r.join('-')); }
+  if (state.rotations?.length) p.set('rotation', state.rotations.join(','));
+  if (state.statuses?.length) p.set('status', state.statuses.join(','));
+  if (state.completion) p.set('completion', state.completion);
+  const qs = p.toString();
   return `${location.origin}${location.pathname}${qs ? `?${qs}` : ''}`;
 }
 
@@ -527,32 +828,32 @@ function syncFilterStateToUrl() {
   history.replaceState({}, '', buildDashboardUrlFromState());
 }
 
-function setSelectValueIfPresent(id, value) {
-  if (!value) return;
-  const select = document.getElementById(id);
-  if ([...select.options].some(option => option.value === value)) {
-    select.value = value;
-  }
-}
-
 function applyFilterStateFromUrl() {
   isApplyingFilterState = true;
   try {
-    const params = new URLSearchParams(location.search);
-    document.getElementById('searchBox').value = params.get('q') || '';
-    setSelectValueIfPresent('fWilaya', params.get('wilaya') || '');
-    setSelectValueIfPresent('fYear', params.get('year') || '');
-    setSelectValueIfPresent('fSemester', params.get('rotation') || '');
-    setSelectValueIfPresent('fStatus', params.get('status') || '');
-    setSelectValueIfPresent('fCompletion', params.get('completion') || '');
-  } finally {
-    isApplyingFilterState = false;
-  }
+    const p = new URLSearchParams(location.search);
+    filterState.q = p.get('q') || '';
+    document.getElementById('searchBox').value = filterState.q;
+
+    const w = p.get('wilaya') || '';
+    filterState.wilayas = w ? w.split(',').map(s=>s.trim()).filter(Boolean) : [];
+
+    const y = p.get('year') || '';
+    if (!y) { filterState.yearMode='all'; }
+    else if (/^\d{4}-\d{4}$/.test(y)) { filterState.yearMode='range'; const [a,b]=y.split('-'); filterState.yearFrom=a; filterState.yearTo=b; }
+    else { filterState.yearMode='single'; filterState.yearSingle=y; }
+
+    const rot = p.get('rotation') || '';
+    filterState.rotations = rot ? rot.split(',').map(s=>s.trim()).filter(Boolean) : [];
+    const st = p.get('status') || '';
+    filterState.statuses = st ? st.split(',').map(s=>s.trim()).filter(Boolean) : [];
+    filterState.completion = p.get('completion') || '';
+    document.getElementById('fCompletion').value = filterState.completion;
+  } finally { isApplyingFilterState = false; }
 }
 
 function copyFilteredDashboardLink() {
-  const url = buildDashboardUrlFromState();
-  navigator.clipboard.writeText(url).then(() => notify('Filtered dashboard link copied!', 'success'));
+  navigator.clipboard.writeText(buildDashboardUrlFromState()).then(() => notify('Filtered dashboard link copied!', 'success'));
 }
 
 function getMissing(row) {
@@ -579,35 +880,38 @@ function renderStats() {
     <div class="stat"><div class="stat-label">With Quiz_Tbl</div><div class="stat-val">${hasQuizTbl}</div><div class="stat-sub">${total-hasQuizTbl} missing</div></div>`;
 }
 
+// ── Populate filter dropdowns ─────────────────────────────────────────────────
 function populateFilters() {
-  const fill=(id,vals)=>{
-    const sel=document.getElementById(id);
-    while(sel.options.length>1)sel.remove(1);
-    vals.forEach(v=>{if(v){const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);}});
-  };
-  fill('fWilaya',[...new Set(sheetData.map(r=>cell(r,'Wilaya')))].filter(Boolean).sort());
-  fill('fYear',[...new Set(sheetData.map(r=>cell(r,'Year')))].filter(Boolean).sort());
-  fill('fSemester',[...new Set(sheetData.map(r=>cell(r,'Rotation')))].filter(Boolean).sort());
-  const statusValues = [...new Set(sheetData.map(r => deriveStatusForRow(r)).filter(Boolean))];
-  fill('fStatus', EXAM_STATUS_OPTIONS.filter(status => statusValues.includes(status)));
+  const wilayas  = [...new Set(sheetData.map(r=>cell(r,'Wilaya')))].filter(Boolean).sort();
+  const years    = [...new Set(sheetData.map(r=>cell(r,'Year')))].filter(Boolean).sort();
+  const rots     = [...new Set(sheetData.map(r=>cell(r,'Rotation')))].filter(Boolean).sort();
+  const svs      = [...new Set(sheetData.map(r=>deriveStatusForRow(r)).filter(Boolean))];
+  const statuses = EXAM_STATUS_OPTIONS.filter(s => svs.includes(s));
+
+  multiSelectControls['fd-wilaya']   = buildMultiSelect('fd-wilaya',  'Wilaya',   () => filterState.wilayas,   v => { filterState.wilayas=v; },   () => wilayas);
+  multiSelectControls['fd-rotation'] = buildMultiSelect('fd-rotation', 'Rotation', () => filterState.rotations, v => { filterState.rotations=v; }, () => rots);
+  multiSelectControls['fd-status']   = buildMultiSelect('fd-status',   'Status',   () => filterState.statuses,  v => { filterState.statuses=v; },  () => statuses);
+  yearFilterControl = buildYearFilter('fd-year', () => years);
 }
 
+// ── Filtered rows (reads filterState) ─────────────────────────────────────────
 function getFiltered() {
-  const q  = document.getElementById('searchBox').value.toLowerCase();
-  const fw = document.getElementById('fWilaya').value;
-  const fy = document.getElementById('fYear').value;
-  const fs = document.getElementById('fSemester').value;
-  const fst= document.getElementById('fStatus').value;
-  const fc = document.getElementById('fCompletion').value;
-  return sheetData.filter(r=>{
-    if(q&&!(`${cell(r,'Wilaya')} ${cell(r,'Module')} ${cell(r,'Rotation')} ${cell(r,'Level')}`).toLowerCase().includes(q))return false;
-    if(fw&&cell(r,'Wilaya')!==fw)return false;
-    if(fy&&cell(r,'Year')!==fy)return false;
-    if(fs&&cell(r,'Rotation')!==fs)return false;
-    if(fst&&deriveStatusForRow(r)!==fst)return false;
-    const miss=getMissing(r);
-    if(fc==='missing'&&miss.length===0)return false;
-    if(fc==='complete'&&miss.length>0)return false;
+  const { q, wilayas, yearMode, yearSingle, yearFrom, yearTo, rotations, statuses, completion } = filterState;
+  const ql = q.toLowerCase();
+  return sheetData.filter(r => {
+    if (ql && !(`${cell(r,'Wilaya')} ${cell(r,'Module')} ${cell(r,'Rotation')} ${cell(r,'Level')}`).toLowerCase().includes(ql)) return false;
+    if (wilayas.length   && !wilayas.includes(cell(r,'Wilaya')))     return false;
+    const yr = String(cell(r,'Year') || '');
+    if (yearMode==='single' && yearSingle && yr !== yearSingle)       return false;
+    if (yearMode==='range') {
+      if (yearFrom && yr < yearFrom) return false;
+      if (yearTo   && yr > yearTo)   return false;
+    }
+    if (rotations.length && !rotations.includes(cell(r,'Rotation'))) return false;
+    if (statuses.length  && !statuses.includes(deriveStatusForRow(r))) return false;
+    const miss = getMissing(r);
+    if (completion==='missing'  && miss.length===0) return false;
+    if (completion==='complete' && miss.length>0)   return false;
     return true;
   });
 }
@@ -638,15 +942,67 @@ function wilayaBadge(w){
   return`<span class="badge ${c}">${w}</span>`;
 }
 
-function renderTable(){
+// ── Sorting ───────────────────────────────────────────────────────────────────
+function setSort(col) {
+  sortState.dir = sortState.col === col && sortState.dir === 'asc' ? 'desc' : 'asc';
+  sortState.col = col;
+  renderTable();
+}
+
+function getSortVal(r, col) {
+  if (col === 'Status')  return deriveStatusForRow(r);
+  if (col === 'nQst')    { const t=parseTags(r); return t.nQst != null ? Number(t.nQst) : -1; }
+  if (col === 'Missing') { const t=parseTags(r); return t.missingPos?.length ?? t.missingQsts ?? -1; }
+  return String(cell(r, col) || '').toLowerCase();
+}
+
+function sortRows(rows) {
+  if (!sortState.col) return rows;
+  return rows.slice().sort((a, b) => {
+    const va = getSortVal(a, sortState.col), vb = getSortVal(b, sortState.col);
+    const cmp = (typeof va === 'number' && typeof vb === 'number') ? va - vb : String(va).localeCompare(String(vb));
+    return sortState.dir === 'asc' ? cmp : -cmp;
+  });
+}
+
+// ── Table header (with sort indicators) ───────────────────────────────────────
+function renderTableHeader() {
+  const thead = document.querySelector('thead tr');
+  if (!thead) return;
+  const cols = [
+    { key:'Wilaya',   label:'Wilaya' },
+    { key:'Year',     label:'Year' },
+    { key:'Rotation', label:'Rotation' },
+    { key:'Module',   label:'Module' },
+    { key:'Status',   label:'Status' },
+    { key:null,       label:'OrigPDF' },
+    { key:null,       label:'Quiz_Tbl' },
+    { key:'nQst',     label:'N° Qst' },
+    { key:'Missing',  label:'Missing' },
+    { key:null,       label:'' },
+  ];
+  thead.innerHTML = cols.map(c => {
+    if (!c.key) return `<th>${c.label}</th>`;
+    const active = sortState.col === c.key;
+    const arrow  = active ? (sortState.dir==='asc' ? '↑' : '↓') : '↕';
+    return `<th class="sortable${active?' sort-active':''}" onclick="setSort('${c.key}')">${c.label} <i class="sort-icon">${arrow}</i></th>`;
+  }).join('');
+}
+
+// ── Render table rows ─────────────────────────────────────────────────────────
+function renderTable() {
   syncFilterStateToUrl();
-  const rows=getFiltered();
-  document.getElementById('rowCount').textContent=rows.length+' rows';
-  const tbody=document.getElementById('tableBody');
-  if(!rows.length){tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:2rem;">No rows match filters</td></tr>`;return;}
-  tbody.innerHTML=rows.map(r=>{
+  const rows = sortRows(getFiltered());
+  document.getElementById('rowCount').textContent = rows.length + ' rows';
+  renderTableHeader();
+  const tbody = document.getElementById('tableBody');
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:2rem;">No rows match filters</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => {
     const missing  = getMissing(r);
-    const comp     = missing.length===0;
+    const comp     = missing.length === 0;
     const status   = deriveStatusForRow(r);
     const drive    = cell(r,'OrigPDF');
     const quiz     = cell(r,'Quiz_Tbl');
@@ -655,12 +1011,12 @@ function renderTable(){
     const missingCount = (tagsR.missingPos?.length != null) ? tagsR.missingPos.length : (tagsR.missingQsts ?? null);
     const missingQstsLabel = (missingCount != null)
       ? (missingCount > 0
-        ? `<span style="font-size:12px;color:var(--amber-text);font-weight:500;">${missingCount}</span>`
-        : `<span style="font-size:11px;color:var(--green-text)">0</span>`)
+          ? `<span style="font-size:12px;color:var(--amber-text);font-weight:500;">${missingCount}</span>`
+          : `<span style="font-size:11px;color:var(--green-text)">0</span>`)
       : '<span class="empty-val">—</span>';
-    const idx      = sheetData.indexOf(r);
-    const examId   = cell(r,'ID_Exams') || r._rowIndex;
-    return`<tr class="${comp?'complete':'has-missing'}" onclick="location.href='/exam?id='+encodeURIComponent('${examId}')" style="cursor:pointer;">
+    const idx    = sheetData.indexOf(r);
+    const examId = cell(r,'ID_Exams') || r._rowIndex;
+    return `<tr class="${comp?'complete':'has-missing'}" onclick="location.href='/exam?id='+encodeURIComponent('${examId}')" style="cursor:pointer;">
       <td>${wilayaBadge(cell(r,'Wilaya'))}</td>
       <td>${cell(r,'Year')}</td>
       <td>${cell(r,'Rotation')||'<span class="empty-val">—</span>'}</td>
