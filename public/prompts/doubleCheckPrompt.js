@@ -474,6 +474,31 @@ ${json1}
 JSON2 — SECOND MODELE DE DIGITISATION
 ${json2}
 
+══════════════════════════════════════════════════════
+ETAPE OBLIGATOIRE AVANT TOUT CLASSEMENT — PRE-FILTRE
+══════════════════════════════════════════════════════
+Pour chaque divergence detectee entre JSON1 et JSON2, tu dois executer ce pre-filtre avant
+d'ouvrir la taxonomie et avant d'attribuer un code :
+
+  NORMALISE les deux valeurs mentalement :
+    (a) Supprime tout point final de phrase dans les deux textes.
+    (b) Ignore la casse initiale (majuscule vs minuscule en debut de proposition).
+    (c) Normalise les espaces multiples et les espaces avant ponctuation.
+    (d) Remplace tout tiret separateur (- / – / —) par un tiret neutre si son role est
+        purement syntaxique (liaison, separateur de phrase) et non mathematique ou clinique.
+    (e) Ignore les variantes cosmetiques d'accent sur majuscules et les ligatures cosmetiques.
+
+  → Si les deux textes sont IDENTIQUES apres normalisation :
+      DISCARD — ne pas ajouter au rapport, ne pas attribuer de code.
+  → Si une difference reelle subsiste apres normalisation :
+      Continuer vers la taxonomie ci-dessous pour classer la divergence.
+
+  Exemples de discards obligatoires :
+    "migration par creation d'un pseudopode" vs "migration par creation d'un pseudopode."
+    → point final supprime → textes identiques → DISCARD (PROP_DIVERGE interdit).
+    "neutrophile – matrice extracellulaire" vs "neutrophile - matrice extracellulaire"
+    → tiret separateur non clinique → textes equivalents → DISCARD (SYMBOL interdit).
+
 ${injectTaxonomy()}
 
 ══════════════════════════════════════════════════════
