@@ -606,13 +606,10 @@ function renderTable(){
       <td>${cell(r,'Rotation')||'<span class="empty-val">—</span>'}</td>
       <td style="max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${cell(r,'Module')}">${cell(r,'Module')}</td>
       <td onclick="event.stopPropagation()">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          ${getStatusBadgeHtml(status)}
-          <select class="status-select ${isSavingStatus ? 'status-saving' : ''}" onchange="updateRowStatus(${idx}, this.value, event)" ${isSavingStatus ? 'disabled' : ''}>
-            <option value="">Empty</option>
-            ${statusSelectOptions}
-          </select>
-        </div>
+        <select class="status-select ${isSavingStatus ? 'status-saving' : ''}" onchange="updateRowStatus(${idx}, this.value, event)" ${isSavingStatus ? 'disabled' : ''}>
+          <option value="">Empty</option>
+          ${statusSelectOptions}
+        </select>
       </td>
       <td>${drive?`<div class="link-cell"><a href="${drive}" target="_blank" onclick="event.stopPropagation()">Drive ↗</a></div>`:'<span class="empty-val">—</span>'}</td>
       <td>${quiz?`<div class="link-cell"><a href="${quiz}" target="_blank" onclick="event.stopPropagation()">Quiz ↗</a></div>`:'<span class="empty-val">—</span>'}</td>
