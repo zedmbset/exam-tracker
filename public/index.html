@@ -62,6 +62,10 @@
   .table-actions { display: inline-flex; align-items: center; gap: 6px; }
   .status-select { min-width: 130px; padding: 5px 8px; border: 0.5px solid var(--border2); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 12px; }
   .status-select.status-saving { border-color: var(--amber-border); background: var(--amber-bg); color: var(--amber-text); }
+  .status-select.status-completed { border-color: var(--green-border); background: var(--green-bg); color: var(--green-text); }
+  .status-select.status-in-progress { border-color: var(--blue-border); background: var(--blue-bg); color: var(--blue-text); }
+  .status-select.status-pending { border-color: var(--amber-border); background: var(--amber-bg); color: var(--amber-text); }
+  .status-select.status-not-started { border-color: var(--red-border); background: var(--red-bg); color: var(--red-text); }
 
   /* Table */
   .table-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
@@ -569,6 +573,15 @@ function getAvailableStatusOptions() {
   return [...EXAM_STATUS_OPTIONS, ...extras];
 }
 
+function getStatusSelectClass(status) {
+  const lower = String(status || '').trim().toLowerCase();
+  if (lower.includes('completed')) return 'status-completed';
+  if (lower.includes('progress')) return 'status-in-progress';
+  if (lower.includes('pending')) return 'status-pending';
+  if (lower.includes('not started')) return 'status-not-started';
+  return '';
+}
+
 function wilayaBadge(w){
   if(!w)return'';
   const c=w.toLowerCase().includes('stf')?'badge-purple':w.toLowerCase().includes('msila')?'badge-blue':'badge-gray';
@@ -606,10 +619,10 @@ function renderTable(){
       <td>${cell(r,'Rotation')||'<span class="empty-val">—</span>'}</td>
       <td style="max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${cell(r,'Module')}">${cell(r,'Module')}</td>
       <td onclick="event.stopPropagation()">
-        <select class="status-select ${isSavingStatus ? 'status-saving' : ''}" onchange="updateRowStatus(${idx}, this.value, event)" ${isSavingStatus ? 'disabled' : ''}>
-          <option value="">Empty</option>
-          ${statusSelectOptions}
-        </select>
+          <select class="status-select ${getStatusSelectClass(status)} ${isSavingStatus ? 'status-saving' : ''}" onchange="updateRowStatus(${idx}, this.value, event)" ${isSavingStatus ? 'disabled' : ''}>
+            <option value="">Empty</option>
+            ${statusSelectOptions}
+          </select>
       </td>
       <td>${drive?`<div class="link-cell"><a href="${drive}" target="_blank" onclick="event.stopPropagation()">Drive ↗</a></div>`:'<span class="empty-val">—</span>'}</td>
       <td>${quiz?`<div class="link-cell"><a href="${quiz}" target="_blank" onclick="event.stopPropagation()">Quiz ↗</a></div>`:'<span class="empty-val">—</span>'}</td>
