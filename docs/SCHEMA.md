@@ -23,15 +23,55 @@ Each exam is one row in the `Exams_Tracking` tab. The current app expects 20 col
 | M | 12 | OrigPDF | Original exam PDF Drive URL |
 | N | 13 | AffichagePDF | Affichage PDF Drive URL |
 | O | 14 | Quiz_Tbl | Final Excel table Drive URL |
-| P | 15 | Membre | Assigned member email |
+| P | 15 | Membre | JSON history of member participation by Gmail and step activity |
 | Q | 16 | Tags | JSON metadata |
 | R | 17 | Quiz_Link | MBset quiz URL |
 | S | 18 | Admin_Report | Generated Admin PDF URL |
 | T | 19 | Public_Report | Generated Public PDF URL |
 
+## Membre History JSON Shape
+
+Stored in column `P` (`Membre`).
+
+```json
+{
+  "version": 1,
+  "participants": [
+    {
+      "email": "member1@gmail.com",
+      "name": "Member One",
+      "steps": {
+        "Step 1": {
+          "count": 2,
+          "firstAt": "2026-04-12T10:00:00.000Z",
+          "lastAt": "2026-04-12T10:05:00.000Z"
+        },
+        "Step 3": {
+          "count": 1,
+          "firstAt": "2026-04-12T11:30:00.000Z",
+          "lastAt": "2026-04-12T11:30:00.000Z"
+        }
+      },
+      "timeline": [
+        { "step": "Step 1", "at": "2026-04-12T10:00:00.000Z" },
+        { "step": "Step 1", "at": "2026-04-12T10:05:00.000Z" },
+        { "step": "Step 3", "at": "2026-04-12T11:30:00.000Z" }
+      ]
+    }
+  ],
+  "updatedAt": "2026-04-12T11:30:00.000Z"
+}
+```
+
+Notes:
+- each Gmail appears once in `participants`
+- each save increments the related step `count`
+- `timeline` keeps every save event for that member
+- legacy rows that still contain a plain email are read safely and upgraded on the next save
+
 ## Tags JSON Shape
 
-Stored in column `P` (`Tags`).
+Stored in column `Q` (`Tags`).
 
 ```json
 {

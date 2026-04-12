@@ -269,7 +269,7 @@ Commonly pruned columns:
 - `period`: exam period. Example: `P1`
 - `rotation`: rotation. Example: `R3`
 - `examDate`: displayed exam date. Example: `10/9/2025`
-- `membre`: member/admin responsible for the row
+- `membre`: readable summary derived from the `Membre` history cell, showing each participant Gmail and the steps they saved
 - `status`: workflow status in the sheet
 - `pdfUrl`: Google Drive URL of the original exam PDF
 - `affichagePdfUrl`: Google Drive URL of the affichage PDF when uploaded
@@ -314,7 +314,7 @@ Example current exam context:
   period: "P1",
   rotation: "R3",
   examDate: "10/9/2025",
-  membre: "zeddrivepro@gmail.com",
+  membre: "zeddrivepro@gmail.com (Step 1, Step 3)",
   status: "Completed",
   pdfUrl: "https://drive.google.com/...",
   affichagePdfUrl: "https://drive.google.com/...",

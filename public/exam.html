@@ -782,6 +782,137 @@
       function cell(row, n) { const i = colIdx(n); return i >= 0 ? row.cells[i] || "" : ""; }
       function setCell(row, n, v) { const i = colIdx(n); if (i >= 0) { while (row.cells.length <= i) row.cells.push(""); row.cells[i] = v; } }
 
+      function parseMemberHistoryValue(value) {
+        const raw = String(value || "").trim();
+        if (!raw) {
+          return { version: 1, participants: [], updatedAt: "" };
+        }
+
+        if (!(raw.startsWith("{") || raw.startsWith("["))) {
+          return {
+            version: 1,
+            participants: [{ email: raw, name: "", steps: {}, timeline: [] }],
+            updatedAt: "",
+          };
+        }
+
+        try {
+          const parsed = JSON.parse(raw);
+          const sourceParticipants = Array.isArray(parsed)
+            ? parsed
+            : Array.isArray(parsed?.participants)
+              ? parsed.participants
+              : [];
+          const participants = sourceParticipants
+            .map(item => {
+              const email = String(item?.email || "").trim();
+              if (!email) return null;
+              const steps = {};
+              const sourceSteps = item?.steps && typeof item.steps === "object" ? item.steps : {};
+              Object.entries(sourceSteps).forEach(([stepName, stepValue]) => {
+                if (!stepName) return;
+                if (stepValue && typeof stepValue === "object") {
+                  const count = Math.max(1, parseInt(stepValue.count, 10) || 1);
+                  steps[stepName] = {
+                    count,
+                    firstAt: String(stepValue.firstAt || stepValue.lastAt || ""),
+                    lastAt: String(stepValue.lastAt || stepValue.firstAt || ""),
+                  };
+                } else {
+                  steps[stepName] = { count: 1, firstAt: "", lastAt: "" };
+                }
+              });
+              const timeline = Array.isArray(item?.timeline)
+                ? item.timeline
+                    .map(entry => ({
+                      step: String(entry?.step || "").trim(),
+                      at: String(entry?.at || "").trim(),
+                    }))
+                    .filter(entry => entry.step)
+                : [];
+              return {
+                email,
+                name: String(item?.name || "").trim(),
+                steps,
+                timeline,
+              };
+            })
+            .filter(Boolean);
+
+          return {
+            version: 1,
+            participants,
+            updatedAt: String(parsed?.updatedAt || ""),
+          };
+        } catch (e) {
+          return {
+            version: 1,
+            participants: [{ email: raw, name: "", steps: {}, timeline: [] }],
+            updatedAt: "",
+          };
+        }
+      }
+
+      function formatMemberHistorySummary(value) {
+        const history = parseMemberHistoryValue(value);
+        if (!history.participants.length) return "";
+
+        const stepOrder = {
+          "Step 1": 1,
+          "Step 3": 3,
+          "Step 4": 4,
+          "Admin report": 5,
+          "Public report": 6,
+        };
+
+        return history.participants.map(participant => {
+          const stepLabels = Object.entries(participant.steps || {})
+            .sort((a, b) => (stepOrder[a[0]] || 99) - (stepOrder[b[0]] || 99) || a[0].localeCompare(b[0]))
+            .map(([stepName, stepInfo]) => {
+              const count = Math.max(1, parseInt(stepInfo?.count, 10) || 1);
+              return count > 1 ? `${stepName} x${count}` : stepName;
+            });
+          return stepLabels.length
+            ? `${participant.email} (${stepLabels.join(", ")})`
+            : participant.email;
+        }).join(" | ");
+      }
+
+      function recordMemberActivity(row, email, stepName, name = "") {
+        const cleanEmail = String(email || "").trim();
+        const cleanStepName = String(stepName || "").trim();
+        if (!cleanEmail || !cleanStepName) return;
+
+        const history = parseMemberHistoryValue(cell(row, "Membre"));
+        const now = new Date().toISOString();
+        let participant = history.participants.find(item => item.email.toLowerCase() === cleanEmail.toLowerCase());
+
+        if (!participant) {
+          participant = {
+            email: cleanEmail,
+            name: String(name || "").trim(),
+            steps: {},
+            timeline: [],
+          };
+          history.participants.push(participant);
+        } else if (!participant.name && name) {
+          participant.name = String(name).trim();
+        }
+
+        const currentStep = participant.steps[cleanStepName] || { count: 0, firstAt: "", lastAt: "" };
+        const nextCount = Math.max(0, parseInt(currentStep.count, 10) || 0) + 1;
+        participant.steps[cleanStepName] = {
+          count: nextCount,
+          firstAt: currentStep.firstAt || now,
+          lastAt: now,
+        };
+        participant.timeline = Array.isArray(participant.timeline) ? participant.timeline : [];
+        participant.timeline.push({ step: cleanStepName, at: now });
+        history.updatedAt = now;
+
+        setCell(row, "Membre", JSON.stringify(history));
+      }
+
       function parseSubcategoriesValue(value) {
         if (Array.isArray(value)) return value;
         if (typeof value === "string") {
@@ -1583,7 +1714,7 @@
           { label: "Period",    value: cell(row, "Period") },
           { label: "Module",    value: cell(row, "Module") },
           { label: "Exam Date", value: cell(row, "ExamDate") || cell(row, "Exam Date") },
-          { label: "Member",    value: cell(row, "Membre") },
+          { label: "Member",    value: formatMemberHistorySummary(cell(row, "Membre")) },
           { label: "Status",    value: null, html: statusHtml },
           { label: "ID",        value: cell(row, "ID_Exams") },
         ];
@@ -2140,7 +2271,7 @@
           period: cell(activeRow, "Period") || "",
           rotation: cell(activeRow, "Rotation") || "",
           examDate: cell(activeRow, "ExamDate") || cell(activeRow, "Exam Date") || "-",
-          membre: cell(activeRow, "Membre") || googleUser?.email || "-",
+          membre: formatMemberHistorySummary(cell(activeRow, "Membre")) || googleUser?.email || "-",
           status: cell(activeRow, "Status") || "-",
           pdfUrl: cell(activeRow, "OrigPDF") || "",
           affichagePdfUrl: cell(activeRow, "AffichagePDF") || "",
@@ -2262,7 +2393,7 @@
         const btn = document.getElementById("saveStep1Btn");
         btn.textContent = "Saving..."; btn.disabled = true;
 
-        if (googleUser?.email) setCell(activeRow, "Membre", googleUser.email);
+        if (googleUser?.email) recordMemberActivity(activeRow, googleUser.email, "Step 1", googleUser.name);
 
         const hasCTVal   = document.getElementById("tags_hasCT")?.checked   || false;
         const hasCasVal  = document.getElementById("tags_hasCas")?.checked  || false;
@@ -2380,7 +2511,7 @@
         const quizLink = (document.getElementById("field_Quiz_Link")?.value || "").trim();
         setCell(activeRow, "Quiz_Link", quizLink);
 
-        if (googleUser?.email) setCell(activeRow, "Membre", googleUser.email);
+        if (googleUser?.email) recordMemberActivity(activeRow, googleUser.email, "Step 4", googleUser.name);
 
         try {
           await writeSheet();
@@ -2577,7 +2708,7 @@
         btn.textContent = "Uploading...";
         btn.disabled = true;
 
-        if (googleUser?.email) setCell(activeRow, "Membre", googleUser.email);
+        if (googleUser?.email) recordMemberActivity(activeRow, googleUser.email, "Step 3", googleUser.name);
 
         const hasCTVal = document.getElementById("tags_hasCT")?.checked || parseTags(activeRow).hasCT || false;
         const nQstVal = parseInt(document.getElementById("tags_nQst")?.value || "") || parseTags(activeRow).nQst || 0;
@@ -2713,7 +2844,7 @@
             rotation: cell(activeRow, "Rotation"),
             period: cell(activeRow, "Period"),
             examDate: cell(activeRow, "ExamDate") || cell(activeRow, "Exam Date") || "-",
-            member: cell(activeRow, "Membre") || googleUser?.email || "",
+            member: formatMemberHistorySummary(cell(activeRow, "Membre")) || googleUser?.email || "",
             status: cell(activeRow, "Status"),
             pdfUrl: cell(activeRow, "OrigPDF"),
             affichagePdfUrl: cell(activeRow, "AffichagePDF"),
@@ -2737,7 +2868,7 @@
         if (btn) { btn.innerHTML = "Generating..."; btn.disabled = true; }
 
         try {
-          if (googleUser?.email) setCell(activeRow, "Membre", googleUser.email);
+          if (googleUser?.email) recordMemberActivity(activeRow, googleUser.email, type === "admin" ? "Admin report" : "Public report", googleUser.name);
           const r = await fetch(`${API}/api/report-pdf`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
