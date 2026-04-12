@@ -71,6 +71,11 @@ const TAXONOMY = {
         "Ne jamais signaler la typographie francaise autour des signes ': ; ? !'.",
         "Ne jamais signaler un espace avant ou apres un symbole si le sens reste strictement identique.",
         "Ne jamais modifier si les deux JSON ont le meme symbole.",
+        "Ne jamais signaler une difference de type de tiret (trait d'union '-' vs tiret demi-cadrat '–' vs tiret cadratin '—')" +
+        " si le tiret joue uniquement un role separateur ou de liaison dans la phrase et ne porte pas de valeur mathematique ou clinique" +
+        " (ex: 'neutrophile – matrice' vs 'neutrophile - matrice' → SILENT FIX, ne pas signaler)." +
+        " Seul cas reportable : le tiret represente un signe moins ou une plage de valeurs cliniques (ex: '3-5 g/dL' vs '3–5 g/dL'" +
+        " dans un contexte de valeur biologique).",
       ],
     },
     {
@@ -126,6 +131,11 @@ const TAXONOMY = {
       never: [
         "INTERDICTION ABSOLUE : ne jamais trancher par logique medicale.",
         "Ne pas signaler si les deux JSON sont identiques sur ce champ.",
+        "REGLE ANTI-BANAL : avant de signaler une PROP_DIVERGE, verifier que les deux textes" +
+        " restent differents apres avoir ignore tous les elements de la liste SILENT FIX" +
+        " (point final, casse initiale, espaces, ponctuation cosmetique, variantes typographiques)." +
+        " Si la seule difference visible est un point final, une majuscule initiale ou un espace cosmétique" +
+        " → NE PAS SIGNALER. Appliquer le SILENT FIX mentalement et ignorer entierement cette divergence.",
       ],
       howToReport:
         "Reference : [Num].[champ]  ex: 12.d\n" +
@@ -500,13 +510,25 @@ REGLE 1 — DIVERGENCE = SEUL CRITERE DE SIGNALEMENT
   ✗ INTERDIT : corriger par logique medicale.
   ✗ INTERDIT : signaler une valeur partagee par les deux JSON.
 
-REGLE 1B — NORMALISATION MENTALE AVANT SIGNALEMENT
-  Avant de decider qu'une divergence est reportable, neutralise mentalement :
-  - les espaces avant ': ; ? !'
-  - les espaces doubles
-  - la presence/absence d'un point final
-  - les variantes d'accent/casse ne changeant pas le mot
-  - les variantes typographiques sans changement de sens
+REGLE 1B — PRE-FILTRE OBLIGATOIRE AVANT TOUT SIGNALEMENT
+  ⚠ ETAPE OBLIGATOIRE : avant de classer une divergence, applique ce test a chaque paire de valeurs :
+
+  NORMALISE mentalement les deux textes :
+    (a) supprime tout point final de phrase
+    (b) ignore la casse initiale (majuscule/minuscule en debut)
+    (c) normalise les espaces multiples et les espaces avant ponctuation
+    (d) remplace tout type de tiret separateur (- / – / —) par un tiret neutre si role non mathematique
+    (e) ignore les variantes d'accent sur majuscules (Etat / État) et les ligatures cosmetiques
+  → Si les deux textes sont IDENTIQUES apres normalisation : NE RIEN SIGNALER. Passe a la divergence suivante.
+  → Si une difference reelle subsiste : classer dans la taxonomie.
+
+  EXEMPLE CONCRET : JSON1 = "La migration par creation d'un pseudopode" /
+                    JSON2 = "La migration par creation d'un pseudopode."
+  → apres suppression du point final les deux textes sont identiques → NE PAS SIGNALER (PROP_DIVERGE interdit ici).
+
+  EXEMPLE CONCRET : JSON1 = "adherence neutrophile [-] matrice" / JSON2 = "adherence neutrophile [–] matrice"
+  → le tiret joue un role separateur sans valeur clinique → NE PAS SIGNALER (SYMBOL interdit ici).
+
   Si le sens reste strictement identique apres cette normalisation, ne rien signaler.
 
 REGLE 2 — JSONF
@@ -656,6 +678,27 @@ JSON FINAL :
 ]
 \`\`\`
 FORMAT OBLIGATOIRE DU RETOUR FINAL : La reponse finale est invalide si elle ne contient pas exactement cet unique bloc \`\`\`text\`\`\`, si ce bloc ne commence pas exactement par "VALIDATION PASSED", si la ligne "JSON FINAL :" est absente, si le tableau JSON final n'est pas un tableau JSON pur, si tu utilises un objet racine comme {"questions":[...]}, ou si tu ajoutes du texte hors du bloc de code.
+
+══════════════════════════════════════════════════════
+FILTRE QUALITE FINAL — RELECTURE OBLIGATOIRE DU RAPPORT
+══════════════════════════════════════════════════════
+Avant de soumettre le rapport, relis chaque ligne du tableau et applique ce test :
+
+  Q1 : Cette divergence necessite-t-elle qu'un humain ouvre le PDF pour trancher ?
+       → Si NON → SUPPRIMER cette ligne du rapport.
+
+  Q2 : Apres normalisation (REGLE 1B), la difference disparait-elle entierement ?
+       → Si OUI → SUPPRIMER cette ligne du rapport.
+
+  Q3 : S'agit-il d'une PROP_DIVERGE dont la seule difference visible est un point final, une casse initiale ou un espace cosmetique ?
+       → Si OUI → SUPPRIMER cette ligne. C'est un SILENT FIX, pas une divergence.
+
+  Q4 : S'agit-il d'un SYMBOL dont la seule difference est un type de tiret non clinique (separateur de phrase) ?
+       → Si OUI → SUPPRIMER cette ligne. C'est un SILENT FIX, pas une divergence.
+
+STANDARD PROFESSIONNEL : un rapport de qualite contient UNIQUEMENT des lignes qui bloquent la verification humaine.
+Moins de lignes mais plus importantes = meilleur rapport.
+Un rapport domine par des micro-differences cosmetiques est invalide selon REGLE 8.
 
 ⛔ INTERDICTIONS ABSOLUES
 - JAMAIS de TSV. JAMAIS de VALIDATION PASSED/FAILED.
