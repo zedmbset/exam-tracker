@@ -1433,44 +1433,50 @@ function updateIdentityBtn() {
 
 function showIdentityModal(callback, required) {
   const modal = document.getElementById('identityModal');
-  const input = document.getElementById('identityInput');
-  const confirmBtn = document.getElementById('identityConfirmBtn');
-  const cancelBtn  = document.getElementById('identityCancelBtn');
+
+  // Clone all three interactive elements to wipe any stale listeners
+  let inputEl = document.getElementById('identityInput');
+  const newInput = inputEl.cloneNode(true);
+  inputEl.parentNode.replaceChild(newInput, inputEl);
+  const input = newInput;
+
+  let confirmBtnEl = document.getElementById('identityConfirmBtn');
+  const newConfirm = confirmBtnEl.cloneNode(true);
+  confirmBtnEl.parentNode.replaceChild(newConfirm, confirmBtnEl);
+  const confirmBtn = newConfirm;
+
+  let cancelBtnEl = document.getElementById('identityCancelBtn');
+  const newCancel = cancelBtnEl.cloneNode(true);
+  cancelBtnEl.parentNode.replaceChild(newCancel, cancelBtnEl);
+  const cancelBtn = newCancel;
+
   input.value = getIdentity();
   modal.classList.remove('hidden');
   setTimeout(() => input.focus(), 60);
 
   function close(proceed) {
     modal.classList.add('hidden');
-    confirmBtn.replaceWith(confirmBtn.cloneNode(true));
-    cancelBtn.replaceWith(cancelBtn.cloneNode(true));
     if (proceed && callback) callback();
   }
 
-  document.getElementById('identityConfirmBtn').addEventListener('click', () => {
+  confirmBtn.addEventListener('click', () => {
     const v = input.value.trim();
     if (!v) { input.focus(); input.style.borderColor = 'var(--red-border)'; return; }
     input.style.borderColor = '';
     setIdentity(v);
     close(true);
   });
-  document.getElementById('identityCancelBtn').addEventListener('click', () => {
+  cancelBtn.addEventListener('click', () => {
     if (required) { notify('Please set your identity before saving.', 'error'); }
     close(false);
   });
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('identityConfirmBtn').click();
-    if (e.key === 'Escape') document.getElementById('identityCancelBtn').click();
+    if (e.key === 'Enter') confirmBtn.click();
+    if (e.key === 'Escape') cancelBtn.click();
   });
 }
 
 function changeIdentity() { showIdentityModal(null, false); }
-
-// Ensure identity is set, then run callback
-function ensureIdentity(callback) {
-  if (getIdentity()) { callback(); return; }
-  showIdentityModal(callback, true);
-}
 
 // ── Membre stamp ──────────────────────────────────────────────────────────────
 function buildMembreStamp() {
