@@ -270,7 +270,7 @@ Commonly pruned columns:
 - `rotation`: rotation. Example: `R3`
 - `examDate`: displayed exam date. Example: `10/9/2025`
 - `membre`: readable summary derived from the `Membre` history cell, showing each participant Gmail and the steps they saved
-- `status`: workflow status in the sheet
+- `status`: auto-maintained workflow status in the sheet. Values: `✅ Completed`, `🕒 Pending`, `🆕 New Exam`, `✖️ Missing`, or empty for future/undated exams
 - `pdfUrl`: Google Drive URL of the original exam PDF
 - `affichagePdfUrl`: Google Drive URL of the affichage PDF when uploaded
 - `csvUrl`: Google Drive URL of the final CSV
@@ -315,7 +315,7 @@ Example current exam context:
   rotation: "R3",
   examDate: "10/9/2025",
   membre: "zeddrivepro@gmail.com (Step 1, Step 3)",
-  status: "Completed",
+  status: "✅ Completed",
   pdfUrl: "https://drive.google.com/...",
   affichagePdfUrl: "https://drive.google.com/...",
   csvUrl: "https://drive.google.com/...",

@@ -295,7 +295,11 @@ const COLS = {
   Module:6, Start:7, End:8, ExamDate:9, Status:10,
   OrigPDF:11, Quiz_Tbl:12, Membre:13, Tags:14, Quiz_Link:15,
 };
-const EXAM_STATUS_OPTIONS  = ['✅ Completed','In Progress','Pending','Not Started'];
+const STATUS_COMPLETED = '✅ Completed';
+const STATUS_PENDING = '🕒 Pending';
+const STATUS_NEW_EXAM = '🆕 New Exam';
+const STATUS_MISSING = '✖️ Missing';
+const EXAM_STATUS_OPTIONS  = [STATUS_COMPLETED, STATUS_PENDING, STATUS_NEW_EXAM, STATUS_MISSING];
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
 function toDateInputValue(str) {
@@ -312,6 +316,70 @@ function toDateInputValue(str) {
   const d = new Date(str);
   if (!isNaN(d)) return d.toISOString().slice(0, 10);
   return '';
+}
+
+function parseDateOnly(value) {
+  const iso = toDateInputValue(value);
+  if (!iso) return null;
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function getTodayDateOnly() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function isPresent(value) {
+  return String(value || '').trim() !== '';
+}
+
+function getRawExamDate(row) {
+  return cell(row, 'ExamDate') || cell(row, 'Exam Date') || '';
+}
+
+function deriveStatusForRow(row) {
+  if (isPresent(cell(row, 'Quiz_Tbl'))) return STATUS_COMPLETED;
+
+  const examDate = parseDateOnly(getRawExamDate(row));
+  if (!examDate) return '';
+
+  const today = getTodayDateOnly();
+  if (examDate > today) return '';
+
+  if (isPresent(cell(row, 'OrigPDF'))) return STATUS_PENDING;
+
+  const ageDays = Math.floor((today - examDate) / 86400000);
+  return ageDays <= 15 ? STATUS_NEW_EXAM : STATUS_MISSING;
+}
+
+function syncDerivedStatus(row) {
+  const nextStatus = deriveStatusForRow(row);
+  const currentStatus = String(cell(row, 'Status') || '').trim();
+  if (currentStatus === nextStatus) return false;
+  setCell(row, 'Status', nextStatus);
+  return true;
+}
+
+async function syncDerivedStatusesInBackground(rows) {
+  if (!rows.length) return;
+
+  setSyncStatus('syncing', `Syncing ${rows.length} status${rows.length === 1 ? '' : 'es'}...`);
+  let updatedCount = 0;
+
+  for (const row of rows) {
+    try {
+      await writeRowToSheet(row);
+      updatedCount += 1;
+    } catch (error) {
+      console.error('Failed to sync derived status', row?._rowIndex, error);
+    }
+  }
+
+  setSyncStatus('synced', 'Synced');
+  if (updatedCount > 0) {
+    notify(`Auto-updated ${updatedCount} status${updatedCount === 1 ? '' : 'es'}`, 'info');
+  }
 }
 
 // ── Annotations parser/serializer ────────────────────────────────────────────
@@ -367,7 +435,6 @@ let headerRow    = 1;
 let activeRowIdx = null;
 let pendingFile  = null;
 let isApplyingFilterState = false;
-const savingStatusRows = new Set();
 
 // ── Boot ────────────────────────────────────────────────────────────────────
 async function boot() {
@@ -392,8 +459,10 @@ async function loadSheet() {
       while (r.length < headers.length) r.push('');
       return { _rowIndex: hi + 2 + i, cells: r };
     });
+    const rowsNeedingStatusSync = sheetData.filter(syncDerivedStatus);
     showDashboard();
-    setSyncStatus('synced','Synced');
+    if (rowsNeedingStatusSync.length) syncDerivedStatusesInBackground(rowsNeedingStatusSync);
+    else setSyncStatus('synced','Synced');
     notify('Data loaded — ' + sheetData.length + ' rows', 'success');
   } catch(e) {
     setSyncStatus('error','Error');
@@ -489,7 +558,6 @@ function copyFilteredDashboardLink() {
 function getMissing(row) {
   const tags = parseTags(row);
   const m=[];
-  if (!cell(row,'Status'))                              m.push('Status');
   if (!cell(row,'OrigPDF'))                             m.push('OrigPDF');
   if (!cell(row,'Quiz_Tbl'))                            m.push('Quiz_Tbl');
   if (!tags.nQst)                                       m.push('N° Qst');
@@ -500,7 +568,7 @@ function isComplete(row){ return getMissing(row).length===0; }
 // ── Stats & filters ──────────────────────────────────────────────────────────
 function renderStats() {
   const total   = sheetData.length;
-  const done    = sheetData.filter(r=>cell(r,'Status').includes('Completed')).length;
+  const done    = sheetData.filter(r => deriveStatusForRow(r) === STATUS_COMPLETED).length;
   const hasOrigPDF = sheetData.filter(r=>cell(r,'OrigPDF')).length;
   const hasQuizTbl = sheetData.filter(r=>cell(r,'Quiz_Tbl')).length;
   const pct     = total?Math.round(done/total*100):0;
@@ -520,10 +588,8 @@ function populateFilters() {
   fill('fWilaya',[...new Set(sheetData.map(r=>cell(r,'Wilaya')))].filter(Boolean).sort());
   fill('fYear',[...new Set(sheetData.map(r=>cell(r,'Year')))].filter(Boolean).sort());
   fill('fSemester',[...new Set(sheetData.map(r=>cell(r,'Rotation')))].filter(Boolean).sort());
-  const statusValues = [...new Set(sheetData.map(r => String(cell(r,'Status') || '').trim()).filter(Boolean))];
-  const orderedStatuses = EXAM_STATUS_OPTIONS.filter(status => statusValues.includes(status));
-  const extraStatuses = statusValues.filter(status => !EXAM_STATUS_OPTIONS.includes(status)).sort();
-  fill('fStatus', [...orderedStatuses, ...extraStatuses]);
+  const statusValues = [...new Set(sheetData.map(r => deriveStatusForRow(r)).filter(Boolean))];
+  fill('fStatus', EXAM_STATUS_OPTIONS.filter(status => statusValues.includes(status)));
 }
 
 function getFiltered() {
@@ -538,7 +604,7 @@ function getFiltered() {
     if(fw&&cell(r,'Wilaya')!==fw)return false;
     if(fy&&cell(r,'Year')!==fy)return false;
     if(fs&&cell(r,'Rotation')!==fs)return false;
-    if(fst&&cell(r,'Status')!==fst)return false;
+    if(fst&&deriveStatusForRow(r)!==fst)return false;
     const miss=getMissing(r);
     if(fc==='missing'&&miss.length===0)return false;
     if(fc==='complete'&&miss.length>0)return false;
@@ -557,29 +623,13 @@ function escapeHtml(value) {
 
 function getStatusBadgeHtml(status) {
   const cleanStatus = String(status || '').trim();
-  if (!cleanStatus) return `<span class="badge badge-red">Empty</span>`;
-  const lower = cleanStatus.toLowerCase();
+  if (!cleanStatus) return `<span class="badge badge-gray">Empty</span>`;
   let klass = 'badge-gray';
-  if (lower.includes('completed')) klass = 'badge-green';
-  else if (lower.includes('progress')) klass = 'badge-blue';
-  else if (lower.includes('pending')) klass = 'badge-amber';
-  else if (lower.includes('not started')) klass = 'badge-red';
+  if (cleanStatus === STATUS_COMPLETED) klass = 'badge-green';
+  else if (cleanStatus === STATUS_PENDING) klass = 'badge-amber';
+  else if (cleanStatus === STATUS_NEW_EXAM) klass = 'badge-blue';
+  else if (cleanStatus === STATUS_MISSING) klass = 'badge-red';
   return `<span class="badge ${klass}">${escapeHtml(cleanStatus)}</span>`;
-}
-
-function getAvailableStatusOptions() {
-  const currentValues = [...new Set(sheetData.map(r => String(cell(r,'Status') || '').trim()).filter(Boolean))];
-  const extras = currentValues.filter(status => !EXAM_STATUS_OPTIONS.includes(status)).sort();
-  return [...EXAM_STATUS_OPTIONS, ...extras];
-}
-
-function getStatusSelectClass(status) {
-  const lower = String(status || '').trim().toLowerCase();
-  if (lower.includes('completed')) return 'status-completed';
-  if (lower.includes('progress')) return 'status-in-progress';
-  if (lower.includes('pending')) return 'status-pending';
-  if (lower.includes('not started')) return 'status-not-started';
-  return '';
 }
 
 function wilayaBadge(w){
@@ -594,11 +644,10 @@ function renderTable(){
   document.getElementById('rowCount').textContent=rows.length+' rows';
   const tbody=document.getElementById('tableBody');
   if(!rows.length){tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:2rem;">No rows match filters</td></tr>`;return;}
-  const statusOptions = getAvailableStatusOptions();
   tbody.innerHTML=rows.map(r=>{
     const missing  = getMissing(r);
     const comp     = missing.length===0;
-    const status   = String(cell(r,'Status') || '').trim();
+    const status   = deriveStatusForRow(r);
     const drive    = cell(r,'OrigPDF');
     const quiz     = cell(r,'Quiz_Tbl');
     const tagsR    = parseTags(r);
@@ -611,19 +660,12 @@ function renderTable(){
       : '<span class="empty-val">—</span>';
     const idx      = sheetData.indexOf(r);
     const examId   = cell(r,'ID_Exams') || r._rowIndex;
-    const isSavingStatus = savingStatusRows.has(r._rowIndex);
-    const statusSelectOptions = statusOptions.map(option => `<option value="${escapeHtml(option)}" ${option===status?'selected':''}>${escapeHtml(option)}</option>`).join('');
     return`<tr class="${comp?'complete':'has-missing'}" onclick="location.href='/exam?id='+encodeURIComponent('${examId}')" style="cursor:pointer;">
       <td>${wilayaBadge(cell(r,'Wilaya'))}</td>
       <td>${cell(r,'Year')}</td>
       <td>${cell(r,'Rotation')||'<span class="empty-val">—</span>'}</td>
       <td style="max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${cell(r,'Module')}">${cell(r,'Module')}</td>
-      <td onclick="event.stopPropagation()">
-          <select class="status-select ${getStatusSelectClass(status)} ${isSavingStatus ? 'status-saving' : ''}" onchange="updateRowStatus(${idx}, this.value, event)" ${isSavingStatus ? 'disabled' : ''}>
-            <option value="">Empty</option>
-            ${statusSelectOptions}
-          </select>
-      </td>
+      <td>${getStatusBadgeHtml(status)}</td>
       <td>${drive?`<div class="link-cell"><a href="${drive}" target="_blank" onclick="event.stopPropagation()">Drive ↗</a></div>`:'<span class="empty-val">—</span>'}</td>
       <td>${quiz?`<div class="link-cell"><a href="${quiz}" target="_blank" onclick="event.stopPropagation()">Quiz ↗</a></div>`:'<span class="empty-val">—</span>'}</td>
       <td style="text-align:center;">${nqst||'<span class="empty-val">—</span>'}</td>
@@ -652,6 +694,7 @@ function shareExam(id, e) {
 }
 // ── Fill modal ───────────────────────────────────────────────────────────────
 async function writeRowToSheet(row){
+  syncDerivedStatus(row);
   const r=await fetch(`${API}/api/sheet/${row._rowIndex}`,{
     method:'PUT',
     headers:{'Content-Type':'application/json'},
@@ -659,31 +702,6 @@ async function writeRowToSheet(row){
   });
   const d=await r.json();
   if(d.error)throw new Error(d.error);
-}
-
-async function updateRowStatus(idx, nextStatus, e){
-  if (e) e.stopPropagation();
-  const row = sheetData[idx];
-  if (!row) return;
-  const previousStatus = cell(row,'Status');
-  if (String(previousStatus || '') === String(nextStatus || '')) return;
-
-  setCell(row,'Status',nextStatus);
-  savingStatusRows.add(row._rowIndex);
-  renderStats();
-  renderTable();
-
-  try {
-    await writeRowToSheet(row);
-    notify('Status updated successfully', 'success');
-  } catch (err) {
-    setCell(row,'Status',previousStatus);
-    notify('Status update failed: ' + err.message, 'error');
-  } finally {
-    savingStatusRows.delete(row._rowIndex);
-    renderStats();
-    renderTable();
-  }
 }
 
 function openFill(idx){
@@ -711,7 +729,7 @@ function openFill(idx){
     {label:'Level', val:cell(row,'Level')},
     {label:'Rotation', val:cell(row,'Rotation')},
     {label:'Module', val:cell(row,'Module')},
-    {label:'Status', val:cell(row,'Status')},
+    {label:'Status', val:deriveStatusForRow(row)},
   ].filter(c=>c.val);
   if(identChips.length){
     const chipsHtml = identChips.map(c=>`<div class="id-chip"><span class="id-chip-label">${c.label}</span><span class="id-chip-value">${c.val}</span></div>`).join('');
@@ -805,14 +823,6 @@ function openFill(idx){
   // ── Section 3: Tags / Metadata ────────────────────────────────────────────
   const tagsGrid = addSection('🏷️', 'Tags & Metadata');
   const rowTags = parseTags(row);
-
-  addRow(tagsGrid, `
-    <label>Status</label>
-    <select id="field_Status">
-      <option value="">Empty</option>
-      ${getAvailableStatusOptions().map(status => `<option value="${escapeHtml(status)}" ${status === cell(row,'Status') ? 'selected' : ''}>${escapeHtml(status)}</option>`).join('')}
-    </select>
-    <div class="field-hint">Workflow status stored directly in the sheet</div>`);
 
   const rawExamDate = cell(row,'ExamDate') || cell(row,'Exam Date') || '';
   const examDateVal = toDateInputValue(rawExamDate);
@@ -936,10 +946,6 @@ async function saveRow(){
   const examDateEl = document.getElementById('field_ExamDate');
   if(examDateEl && examDateEl.value) setCell(row,'ExamDate',examDateEl.value);
   else if (examDateEl && !examDateEl.value) setCell(row,'ExamDate','');
-
-  // Save real Status
-  const statusFieldEl = document.getElementById('field_Status');
-  if(statusFieldEl) setCell(row,'Status', statusFieldEl.value);
 
   // Save Quiz Link
   const quizLinkFieldEl = document.getElementById('field_Quiz_Link');

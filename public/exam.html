@@ -567,7 +567,11 @@
         Admin_Report: 18, Public_Report: 19,
       };
 
-      const EXAM_STATUS_OPTIONS = ["Completed", "In Progress", "Pending", "Not Started"];
+      const STATUS_COMPLETED = "✅ Completed";
+      const STATUS_PENDING = "🕒 Pending";
+      const STATUS_NEW_EXAM = "🆕 New Exam";
+      const STATUS_MISSING = "✖️ Missing";
+      const EXAM_STATUS_OPTIONS = [STATUS_COMPLETED, STATUS_PENDING, STATUS_NEW_EXAM, STATUS_MISSING];
 
       let sheetData = [];
       let headers = [];
@@ -730,7 +734,11 @@
           if (!found && !isNaN(Number(id))) found = sheetData.find(r => r._rowIndex === Number(id));
           if (!found) { showError("Exam not found", `No exam found with ID "${id}". The link may be invalid.`); return; }
           activeRow = found;
+          const needsStatusSync = syncDerivedStatus(activeRow);
           renderExam(found);
+          if (needsStatusSync) {
+            writeSheet().catch(error => console.error("Initial status sync failed", error));
+          }
         } catch (e) { showError("Connection error", e.message); }
       }
 
@@ -1183,7 +1191,6 @@
       function getMissing(row) {
         const tags = parseTags(row);
         const m = [];
-        if (!cell(row, "Status"))   m.push("Status");
         if (!cell(row, "OrigPDF"))  m.push("OrigPDF");
         if (!cell(row, "Quiz_Tbl")) m.push("Quiz_Tbl");
         if (!tags.nQst)             m.push("N° Qst");
@@ -1221,6 +1228,49 @@
         const d = new Date(str);
         if (!isNaN(d)) return d.toISOString().slice(0, 10);
         return "";
+      }
+
+      function parseDateOnly(value) {
+        const iso = toDateInputValue(value);
+        if (!iso) return null;
+        const [year, month, day] = iso.split("-").map(Number);
+        return new Date(year, month - 1, day);
+      }
+
+      function getTodayDateOnly() {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      }
+
+      function isPresent(value) {
+        return String(value || "").trim() !== "";
+      }
+
+      function getRawExamDate(row) {
+        return cell(row, "ExamDate") || cell(row, "Exam Date") || "";
+      }
+
+      function deriveStatusForRow(row) {
+        if (isPresent(cell(row, "Quiz_Tbl"))) return STATUS_COMPLETED;
+
+        const examDate = parseDateOnly(getRawExamDate(row));
+        if (!examDate) return "";
+
+        const today = getTodayDateOnly();
+        if (examDate > today) return "";
+
+        if (isPresent(cell(row, "OrigPDF"))) return STATUS_PENDING;
+
+        const ageDays = Math.floor((today - examDate) / 86400000);
+        return ageDays <= 15 ? STATUS_NEW_EXAM : STATUS_MISSING;
+      }
+
+      function syncDerivedStatus(row) {
+        const nextStatus = deriveStatusForRow(row);
+        const currentStatus = String(cell(row, "Status") || "").trim();
+        if (currentStatus === nextStatus) return false;
+        setCell(row, "Status", nextStatus);
+        return true;
       }
 
       function tsvToCsv(tsv) {
@@ -1667,6 +1717,7 @@
 
       // renderExam
       function renderExam(row) {
+        syncDerivedStatus(row);
         const missing  = getMissing(row);
         const module   = cell(row, "Module");
         const year     = cell(row, "Year");
@@ -1702,9 +1753,18 @@
 
       // Summary card
       function renderSummaryCard(row) {
-        const status = cell(row, "Status");
+        const status = deriveStatusForRow(row);
+        const statusClass = status === STATUS_COMPLETED
+          ? "badge-green"
+          : status === STATUS_PENDING
+            ? "badge-amber"
+            : status === STATUS_NEW_EXAM
+              ? "badge-blue"
+              : status === STATUS_MISSING
+                ? "badge-red"
+                : "badge-gray";
         const statusHtml = status
-          ? `<span class="badge ${status.includes("Completed") ? "badge-green" : "badge-amber"}" style="font-size:11px;">${status}</span>`
+          ? `<span class="badge ${statusClass}" style="font-size:11px;">${status}</span>`
           : `<span class="badge badge-red" style="font-size:11px;">No status</span>`;
         const items = [
           { label: "Wilaya",    value: cell(row, "Wilaya") },
@@ -2272,7 +2332,7 @@
           rotation: cell(activeRow, "Rotation") || "",
           examDate: cell(activeRow, "ExamDate") || cell(activeRow, "Exam Date") || "-",
           membre: formatMemberHistorySummary(cell(activeRow, "Membre")) || googleUser?.email || "-",
-          status: cell(activeRow, "Status") || "-",
+          status: deriveStatusForRow(activeRow) || "-",
           pdfUrl: cell(activeRow, "OrigPDF") || "",
           affichagePdfUrl: cell(activeRow, "AffichagePDF") || "",
           csvUrl: cell(activeRow, "Quiz_Tbl") || "",
@@ -2525,6 +2585,7 @@
 
       // Sheet write helper
       async function writeSheet() {
+        syncDerivedStatus(activeRow);
         const r = await fetch(`${API}/api/sheet/${activeRow._rowIndex}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -2845,7 +2906,7 @@
             period: cell(activeRow, "Period"),
             examDate: cell(activeRow, "ExamDate") || cell(activeRow, "Exam Date") || "-",
             member: formatMemberHistorySummary(cell(activeRow, "Membre")) || googleUser?.email || "",
-            status: cell(activeRow, "Status"),
+            status: deriveStatusForRow(activeRow),
             pdfUrl: cell(activeRow, "OrigPDF"),
             affichagePdfUrl: cell(activeRow, "AffichagePDF"),
             csvUrl: cell(activeRow, "Quiz_Tbl"),

@@ -19,7 +19,7 @@ Each exam is one row in the `Exams_Tracking` tab. The current app expects 20 col
 | I | 8 | Start | Work start date |
 | J | 9 | End | Work end date |
 | K | 10 | ExamDate | Real exam date |
-| L | 11 | Status | Workflow status |
+| L | 11 | Status | Auto-maintained workflow status derived from `ExamDate`, `OrigPDF`, and `Quiz_Tbl` |
 | M | 12 | OrigPDF | Original exam PDF Drive URL |
 | N | 13 | AffichagePDF | Affichage PDF Drive URL |
 | O | 14 | Quiz_Tbl | Final Excel table Drive URL |
@@ -222,12 +222,22 @@ Example for Résidanat:
 ## Completion Rules
 
 A row is treated as complete in the main workflow when these required items exist:
-- `Status`
 - `OrigPDF`
 - `Quiz_Tbl`
 - `Tags.nQst`
 
 `AffichagePDF` is optional and does not block completion.
+
+## Status Automation
+
+`Status` is written directly into the sheet, but it is fully derived by the app and should not be edited manually.
+
+Automatic rules:
+- `✅ Completed`: `Quiz_Tbl` exists
+- `🕒 Pending`: `OrigPDF` exists and `Quiz_Tbl` is still empty
+- `🆕 New Exam`: exam date is today/past, both `OrigPDF` and `Quiz_Tbl` are empty, and the exam is 0 to 15 days old
+- `✖️ Missing`: exam date is today/past, both `OrigPDF` and `Quiz_Tbl` are empty, and the exam is more than 15 days old
+- empty status: exam date is in the future, blank, or invalid
 
 ## Link Ownership
 
