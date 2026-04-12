@@ -59,6 +59,9 @@
   .filters input, .filters select { padding: 6px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 13px; }
   .filters input { flex: 1; min-width: 160px; }
   .row-count { font-size: 12px; color: var(--text3); margin-left: auto; }
+  .table-actions { display: inline-flex; align-items: center; gap: 6px; }
+  .status-select { min-width: 130px; padding: 5px 8px; border: 0.5px solid var(--border2); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 12px; }
+  .status-select.status-saving { border-color: var(--amber-border); background: var(--amber-bg); color: var(--amber-text); }
 
   /* Table */
   .table-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
@@ -97,9 +100,11 @@
   .btn-danger { border-color: var(--red-border); color: var(--red-text); }
   .btn-danger:hover { background: var(--red-bg); }
 
-  /* Share button */
+  /* Row action buttons */
   .share-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; border: 0.5px solid var(--border); background: transparent; color: var(--text3); cursor: pointer; transition: all 0.15s; }
   .share-btn:hover { background: var(--blue-bg); color: var(--blue-text); border-color: var(--blue-border); }
+  .edit-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; border: 0.5px solid var(--border); background: transparent; color: var(--text3); cursor: pointer; transition: all 0.15s; }
+  .edit-btn:hover { background: var(--purple-bg); color: var(--purple-text); border-color: var(--purple-border); }
 
   /* Modal */
   .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(3px); z-index: 200; align-items: flex-start; justify-content: center; padding: 32px 16px; overflow-y: auto; }
@@ -212,10 +217,14 @@
         <select id="fYear" onchange="renderTable()"><option value="">All years</option></select>
         <select id="fSemester" onchange="renderTable()"><option value="">All rotations</option></select>
         <select id="fStatus" onchange="renderTable()">
+          <option value="">All statuses</option>
+        </select>
+        <select id="fCompletion" onchange="renderTable()">
           <option value="">All rows</option>
           <option value="missing">Has missing fields</option>
           <option value="complete">Fully complete</option>
         </select>
+        <button class="btn btn-sm" onclick="copyFilteredDashboardLink()">Copy filtered link</button>
         <span class="row-count" id="rowCount"></span>
       </div>
       <div class="table-card">
@@ -353,6 +362,8 @@ let sheetTab     = 'Sheet1';
 let headerRow    = 1;
 let activeRowIdx = null;
 let pendingFile  = null;
+let isApplyingFilterState = false;
+const savingStatusRows = new Set();
 
 // ── Boot ────────────────────────────────────────────────────────────────────
 async function boot() {
@@ -393,6 +404,7 @@ function showDashboard() {
   document.getElementById('errorScreen').style.display   = 'none';
   document.getElementById('dashboard').style.display     = 'block';
   populateFilters();
+  applyFilterStateFromUrl();
   renderStats();
   renderTable();
 }
@@ -412,6 +424,62 @@ function parseTags(row) {
   const raw = cell(row, 'Tags');
   if (raw) { try { tags = JSON.parse(raw); } catch(e) { /* not JSON */ } }
   return tags;
+}
+
+function getCurrentFilterState() {
+  return {
+    q: document.getElementById('searchBox').value.trim(),
+    wilaya: document.getElementById('fWilaya').value,
+    year: document.getElementById('fYear').value,
+    rotation: document.getElementById('fSemester').value,
+    status: document.getElementById('fStatus').value,
+    completion: document.getElementById('fCompletion').value,
+  };
+}
+
+function buildDashboardUrlFromState(state = getCurrentFilterState()) {
+  const params = new URLSearchParams();
+  if (state.q) params.set('q', state.q);
+  if (state.wilaya) params.set('wilaya', state.wilaya);
+  if (state.year) params.set('year', state.year);
+  if (state.rotation) params.set('rotation', state.rotation);
+  if (state.status) params.set('status', state.status);
+  if (state.completion) params.set('completion', state.completion);
+  const qs = params.toString();
+  return `${location.origin}${location.pathname}${qs ? `?${qs}` : ''}`;
+}
+
+function syncFilterStateToUrl() {
+  if (isApplyingFilterState) return;
+  history.replaceState({}, '', buildDashboardUrlFromState());
+}
+
+function setSelectValueIfPresent(id, value) {
+  if (!value) return;
+  const select = document.getElementById(id);
+  if ([...select.options].some(option => option.value === value)) {
+    select.value = value;
+  }
+}
+
+function applyFilterStateFromUrl() {
+  isApplyingFilterState = true;
+  try {
+    const params = new URLSearchParams(location.search);
+    document.getElementById('searchBox').value = params.get('q') || '';
+    setSelectValueIfPresent('fWilaya', params.get('wilaya') || '');
+    setSelectValueIfPresent('fYear', params.get('year') || '');
+    setSelectValueIfPresent('fSemester', params.get('rotation') || '');
+    setSelectValueIfPresent('fStatus', params.get('status') || '');
+    setSelectValueIfPresent('fCompletion', params.get('completion') || '');
+  } finally {
+    isApplyingFilterState = false;
+  }
+}
+
+function copyFilteredDashboardLink() {
+  const url = buildDashboardUrlFromState();
+  navigator.clipboard.writeText(url).then(() => notify('Filtered dashboard link copied!', 'success'));
 }
 
 function getMissing(row) {
@@ -448,6 +516,10 @@ function populateFilters() {
   fill('fWilaya',[...new Set(sheetData.map(r=>cell(r,'Wilaya')))].filter(Boolean).sort());
   fill('fYear',[...new Set(sheetData.map(r=>cell(r,'Year')))].filter(Boolean).sort());
   fill('fSemester',[...new Set(sheetData.map(r=>cell(r,'Rotation')))].filter(Boolean).sort());
+  const statusValues = [...new Set(sheetData.map(r => String(cell(r,'Status') || '').trim()).filter(Boolean))];
+  const orderedStatuses = EXAM_STATUS_OPTIONS.filter(status => statusValues.includes(status));
+  const extraStatuses = statusValues.filter(status => !EXAM_STATUS_OPTIONS.includes(status)).sort();
+  fill('fStatus', [...orderedStatuses, ...extraStatuses]);
 }
 
 function getFiltered() {
@@ -456,16 +528,45 @@ function getFiltered() {
   const fy = document.getElementById('fYear').value;
   const fs = document.getElementById('fSemester').value;
   const fst= document.getElementById('fStatus').value;
+  const fc = document.getElementById('fCompletion').value;
   return sheetData.filter(r=>{
     if(q&&!(`${cell(r,'Wilaya')} ${cell(r,'Module')} ${cell(r,'Rotation')} ${cell(r,'Level')}`).toLowerCase().includes(q))return false;
     if(fw&&cell(r,'Wilaya')!==fw)return false;
     if(fy&&cell(r,'Year')!==fy)return false;
     if(fs&&cell(r,'Rotation')!==fs)return false;
+    if(fst&&cell(r,'Status')!==fst)return false;
     const miss=getMissing(r);
-    if(fst==='missing'&&miss.length===0)return false;
-    if(fst==='complete'&&miss.length>0)return false;
+    if(fc==='missing'&&miss.length===0)return false;
+    if(fc==='complete'&&miss.length>0)return false;
     return true;
   });
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getStatusBadgeHtml(status) {
+  const cleanStatus = String(status || '').trim();
+  if (!cleanStatus) return `<span class="badge badge-red">Empty</span>`;
+  const lower = cleanStatus.toLowerCase();
+  let klass = 'badge-gray';
+  if (lower.includes('completed')) klass = 'badge-green';
+  else if (lower.includes('progress')) klass = 'badge-blue';
+  else if (lower.includes('pending')) klass = 'badge-amber';
+  else if (lower.includes('not started')) klass = 'badge-red';
+  return `<span class="badge ${klass}">${escapeHtml(cleanStatus)}</span>`;
+}
+
+function getAvailableStatusOptions() {
+  const currentValues = [...new Set(sheetData.map(r => String(cell(r,'Status') || '').trim()).filter(Boolean))];
+  const extras = currentValues.filter(status => !EXAM_STATUS_OPTIONS.includes(status)).sort();
+  return [...EXAM_STATUS_OPTIONS, ...extras];
 }
 
 function wilayaBadge(w){
@@ -475,14 +576,16 @@ function wilayaBadge(w){
 }
 
 function renderTable(){
+  syncFilterStateToUrl();
   const rows=getFiltered();
   document.getElementById('rowCount').textContent=rows.length+' rows';
   const tbody=document.getElementById('tableBody');
   if(!rows.length){tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:2rem;">No rows match filters</td></tr>`;return;}
+  const statusOptions = getAvailableStatusOptions();
   tbody.innerHTML=rows.map(r=>{
     const missing  = getMissing(r);
     const comp     = missing.length===0;
-    const status   = cell(r,'Status');
+    const status   = String(cell(r,'Status') || '').trim();
     const drive    = cell(r,'OrigPDF');
     const quiz     = cell(r,'Quiz_Tbl');
     const tagsR    = parseTags(r);
@@ -495,20 +598,35 @@ function renderTable(){
       : '<span class="empty-val">—</span>';
     const idx      = sheetData.indexOf(r);
     const examId   = cell(r,'ID_Exams') || r._rowIndex;
+    const isSavingStatus = savingStatusRows.has(r._rowIndex);
+    const statusSelectOptions = statusOptions.map(option => `<option value="${escapeHtml(option)}" ${option===status?'selected':''}>${escapeHtml(option)}</option>`).join('');
     return`<tr class="${comp?'complete':'has-missing'}" onclick="location.href='/exam?id='+encodeURIComponent('${examId}')" style="cursor:pointer;">
       <td>${wilayaBadge(cell(r,'Wilaya'))}</td>
       <td>${cell(r,'Year')}</td>
       <td>${cell(r,'Rotation')||'<span class="empty-val">—</span>'}</td>
       <td style="max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${cell(r,'Module')}">${cell(r,'Module')}</td>
-      <td>${status?`<span class="badge badge-green">done</span>`:`<span class="badge badge-red">empty</span>`}</td>
+      <td onclick="event.stopPropagation()">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          ${getStatusBadgeHtml(status)}
+          <select class="status-select ${isSavingStatus ? 'status-saving' : ''}" onchange="updateRowStatus(${idx}, this.value, event)" ${isSavingStatus ? 'disabled' : ''}>
+            <option value="">Empty</option>
+            ${statusSelectOptions}
+          </select>
+        </div>
+      </td>
       <td>${drive?`<div class="link-cell"><a href="${drive}" target="_blank" onclick="event.stopPropagation()">Drive ↗</a></div>`:'<span class="empty-val">—</span>'}</td>
       <td>${quiz?`<div class="link-cell"><a href="${quiz}" target="_blank" onclick="event.stopPropagation()">Quiz ↗</a></div>`:'<span class="empty-val">—</span>'}</td>
       <td style="text-align:center;">${nqst||'<span class="empty-val">—</span>'}</td>
       <td style="text-align:center;">${missingQstsLabel}</td>
       <td onclick="event.stopPropagation()" style="text-align:center;padding:6px 8px;">
-        <button class="share-btn" onclick="shareExam('${examId}',event)" title="Copy share link">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        </button>
+        <div class="table-actions">
+          <button class="edit-btn" onclick="openFill(${idx});event.stopPropagation()" title="Edit row">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="share-btn" onclick="shareExam('${examId}',event)" title="Copy exam share link">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </div>
       </td>
     </tr>`;
   }).join('');
@@ -523,6 +641,41 @@ function shareExam(id, e) {
   navigator.clipboard.writeText(url).then(() => notify('Share link copied! 🔗', 'success'));
 }
 // ── Fill modal ───────────────────────────────────────────────────────────────
+async function writeRowToSheet(row){
+  const r=await fetch(`${API}/api/sheet/${row._rowIndex}`,{
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({cells:row.cells})
+  });
+  const d=await r.json();
+  if(d.error)throw new Error(d.error);
+}
+
+async function updateRowStatus(idx, nextStatus, e){
+  if (e) e.stopPropagation();
+  const row = sheetData[idx];
+  if (!row) return;
+  const previousStatus = cell(row,'Status');
+  if (String(previousStatus || '') === String(nextStatus || '')) return;
+
+  setCell(row,'Status',nextStatus);
+  savingStatusRows.add(row._rowIndex);
+  renderStats();
+  renderTable();
+
+  try {
+    await writeRowToSheet(row);
+    notify('Status updated successfully', 'success');
+  } catch (err) {
+    setCell(row,'Status',previousStatus);
+    notify('Status update failed: ' + err.message, 'error');
+  } finally {
+    savingStatusRows.delete(row._rowIndex);
+    renderStats();
+    renderTable();
+  }
+}
+
 function openFill(idx){
   activeRowIdx=idx; pendingFile=null;
   const row=sheetData[idx];
@@ -548,6 +701,7 @@ function openFill(idx){
     {label:'Level', val:cell(row,'Level')},
     {label:'Rotation', val:cell(row,'Rotation')},
     {label:'Module', val:cell(row,'Module')},
+    {label:'Status', val:cell(row,'Status')},
   ].filter(c=>c.val);
   if(identChips.length){
     const chipsHtml = identChips.map(c=>`<div class="id-chip"><span class="id-chip-label">${c.label}</span><span class="id-chip-value">${c.val}</span></div>`).join('');
@@ -641,6 +795,14 @@ function openFill(idx){
   // ── Section 3: Tags / Metadata ────────────────────────────────────────────
   const tagsGrid = addSection('🏷️', 'Tags & Metadata');
   const rowTags = parseTags(row);
+
+  addRow(tagsGrid, `
+    <label>Status</label>
+    <select id="field_Status">
+      <option value="">Empty</option>
+      ${getAvailableStatusOptions().map(status => `<option value="${escapeHtml(status)}" ${status === cell(row,'Status') ? 'selected' : ''}>${escapeHtml(status)}</option>`).join('')}
+    </select>
+    <div class="field-hint">Workflow status stored directly in the sheet</div>`);
 
   const rawExamDate = cell(row,'ExamDate') || cell(row,'Exam Date') || '';
   const examDateVal = toDateInputValue(rawExamDate);
@@ -763,6 +925,11 @@ async function saveRow(){
   // Save Exam Date
   const examDateEl = document.getElementById('field_ExamDate');
   if(examDateEl && examDateEl.value) setCell(row,'ExamDate',examDateEl.value);
+  else if (examDateEl && !examDateEl.value) setCell(row,'ExamDate','');
+
+  // Save real Status
+  const statusFieldEl = document.getElementById('field_Status');
+  if(statusFieldEl) setCell(row,'Status', statusFieldEl.value);
 
   // Save Quiz Link
   const quizLinkFieldEl = document.getElementById('field_Quiz_Link');
@@ -789,13 +956,7 @@ async function saveRow(){
   }
 
   try{
-    const r=await fetch(`${API}/api/sheet/${row._rowIndex}`,{
-      method:'PUT',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({cells:row.cells})
-    });
-    const d=await r.json();
-    if(d.error)throw new Error(d.error);
+    await writeRowToSheet(row);
     notify('Row saved successfully ✅','success');
   }catch(e){notify('Sheet write failed: '+e.message,'error');}
 
