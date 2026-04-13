@@ -81,8 +81,14 @@ N'extrais aucune question, ne produis aucun tableau "questions".
 
 CHECK 1 — COMPTAGE DES QUESTIONS
   Balaye le PDF en entier. Releve tous les numeros de questions presentes.
-  Compte attendu = ${data.nQst || "?"} declares - ${Array.isArray(data.missingPos) && data.missingPos.length > 0 ? data.missingPos.length : 0} manquantes declarees = ${(Number(data.nQst) || 0) - (Array.isArray(data.missingPos) ? data.missingPos.length : 0)} objets attendus.
-  Si le nombre de questions trouvees differe de plus de ${Array.isArray(data.missingPos) && data.missingPos.length > 0 ? "ce qui est explique par les positions manquantes declarees" : "1"} → CRITICAL.
+  nQst declare : ${data.nQst || "?"}
+  Positions manquantes declarees : ${Array.isArray(data.missingPos) && data.missingPos.length > 0 ? data.missingPos.join(", ") : "aucune"}
+  Objets attendus apres exclusion des manquantes : ${(Number(data.nQst) || 0) - (Array.isArray(data.missingPos) ? data.missingPos.length : 0)}
+  Regle de tolerance (stricte) :
+    - L'ecart entre le nombre de questions trouvees dans le PDF et le nQst declare doit etre explique
+      EXACTEMENT par les positions manquantes declarees. Aucune tolerance supplementaire.
+    - Si le nombre de questions trouvees differe du nombre declare d'une quantite non justifiee
+      par les positions manquantes → CRITICAL.
 
 CHECK 2 — CORRIGE TYPE
   Balaye les dernieres pages du PDF pour trouver une section CT (en-tete "Corrige Type", tableau de reponses, grille de bulles).
@@ -121,7 +127,7 @@ Un seul bloc \`\`\`json ... \`\`\` contenant cet objet — RIEN D'AUTRE :
   ],
   "instruction": "Corrigez les informations de l'examen (Etape 1) puis relancez la numerisation."
 }
-  → Liste toutes les verifications ayant echoue dans le tableau "checks" (y compris les WARNINGS).
+  → Liste uniquement les verifications CRITICAL dans le tableau "checks".
   → Ne jamais inclure un tableau "questions" aux cotes du bloc d'erreur.
   → Ne jamais continuer l'extraction si au moins un CRITICAL est signale.
 
@@ -524,9 +530,11 @@ ${data.hasComb ? "14. Chaque question d'association a un champ 'hint' non vide c
 SORTIE FINALE OBLIGATOIRE
 ══════════════════════════════════════════════════════
 - Un seul bloc \`\`\`json ... \`\`\`
-- L'objet JSON contient exactement deux cles de premier niveau : "questions" et "audit"
 - Aucun texte, titre, commentaire ni rapport en dehors du bloc JSON
-- Le second modele lira ce JSON avec le PDF pour produire son rapport de verification`;
+- CAS NORMAL (aucun CRITICAL) : l'objet JSON contient exactement deux cles de premier niveau : "questions" et "audit".
+  Le second modele lira ce JSON avec le PDF pour produire son rapport de verification.
+- CAS ERREUR (au moins un CRITICAL detecte) : l'objet JSON contient exactement trois cles de premier niveau : "error", "checks", "instruction".
+  Aucun tableau "questions". Aucun bloc "audit".`;
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
