@@ -65,7 +65,7 @@ const TAXONOMY = {
       qualifies: [
         "JSON1 dit 'b', JSON2 dit 'β' → JSONF = β",
         "JSON1 dit 'mm3', JSON2 dit 'mm³' → JSONF = mm³",
-        "JSON1 dit 'Natalite mortalite', JSON2 dit 'Natalite + mortalite' → JSONF = Natalite + mortalite",
+        "JSON1 dit 'Ca2+', JSON2 dit 'Ca²⁺' → JSONF = Ca²⁺",
       ],
       never: [
         "Ne jamais signaler la typographie francaise autour des signes ': ; ? !'.",
@@ -176,7 +176,7 @@ const TAXONOMY = {
         "Reference : [Num].[champ1]-[champ2]  ex: 7.d-e\n" +
         "JSON1 : [champ1]='texte complet' [champ2]='texte complet'\n" +
         "JSON2 : [champ1]='texte complet' [champ2]='texte complet'\n" +
-        "JSONF : [champ1]=[valeur correcte attendue] / [champ2]=[valeur correcte attendue] (remplir avec les valeurs finales correctes apres verification dans le PDF)",
+        "JSONF : [champ1]=??? / [champ2]=??? (la verification humaine verifie l'ordre dans le PDF puis remplace ??? par la valeur correcte)",
     },
     {
       code: "QCM_SHIFT",
@@ -263,9 +263,11 @@ const TAXONOMY = {
       mode: "INLINE_OR_BLOQUANT",
       description: "Valeur du champ 'hint' differente entre JSON1 et JSON2.",
       qualifies: [
-        'JSON1.hint = "A et B", JSON2.hint = "I et II"',
+        'JSON1.hint = "ABCD, ABCDE, ABCE, ACDE, BCDE", JSON2.hint = "ABCD, ABCDE, ABCE, BCDE, ACDE"',
       ],
-      never: [],
+      never: [
+        "Le format attendu est toujours base sur des lettres A-G separees par virgule, jamais des chiffres ni des chiffres romains.",
+      ],
       modeRule: "INLINE si un des deux est evidemment incorrect. BLOQUANT si les deux sont plausibles.",
     },
     {
@@ -428,7 +430,7 @@ CETTE ETAPE = RAPPORT DE COMPARAISON UNIQUEMENT.
 - Ton unique livrable est le bloc \`\`\`text\`\`\` du rapport de comparaison.
 - La reponse est INVALIDE si le REVIEW REPORT n'est pas entierement a l'interieur d'un unique bloc \`\`\`text\`\`\`.
 - La reponse est INVALIDE si tu ajoutes du texte avant ou apres ce bloc \`\`\`text\`\`\`.
-- Termine ta reponse apres la ligne "INSTRUCTION VERIFICATION HUMAINE". Rien d'autre apres.
+- Termine ta reponse apres la ligne "INSTRUCTION RETOUR MODELE". Rien d'autre apres.
 ⛔⛔⛔ FIN DES REGLES ABSOLUES ⛔⛔⛔
 
 Tu recois :
@@ -474,7 +476,21 @@ ${json1}
 JSON2 — SECOND MODELE DE DIGITISATION
 ${json2}
 
+${data.hasComb ? `══════════════════════════════════════════════════════
+QUESTIONS D'ASSOCIATION — INSTRUCTIONS SPECIFIQUES
 ══════════════════════════════════════════════════════
+Cet examen contient des questions d'association. Ces questions comportent les champs specifiques suivants :
+- \`hint\`    : combinaisons du tableau traduites en lettres A-G et jointes par ", " (ex: "ABCD, ABCDE, ABCE, ACDE, BCDE")
+- \`correct\` : lettres des propositions de la combinaison correcte (ex: "ACDE") — meme format qu'un QCM standard multi-reponses.
+- \`f\`, \`g\`  : present si la question comporte 6 ou 7 propositions — comparer comme toute proposition standard.
+
+Regles de comparaison pour ces champs :
+- Si \`hint\` est present dans un JSON mais absent dans l'autre → FIELD_MISSING.
+- Si \`hint\` differe entre les deux JSON → HINT_DIVERGE (jamais PROP_DIVERGE).
+- Les champs \`f\` et \`g\`, si presents, sont compares comme n'importe quelle proposition (PROP_DIVERGE, PROP_TRUNCATED, etc.).
+- Le champ \`correct\` pour une question d'association contient des lettres de propositions (ex: "ACDE") et se compare exactement comme un \`correct\` de QCM standard — aucun traitement special.
+
+` : ""}══════════════════════════════════════════════════════
 ETAPE OBLIGATOIRE AVANT TOUT CLASSEMENT — PRE-FILTRE
 ══════════════════════════════════════════════════════
 Pour chaque divergence detectee entre JSON1 et JSON2, tu dois executer ce pre-filtre avant
@@ -515,6 +531,9 @@ ETAPE 2 — COMPARAISON QUESTION PAR QUESTION
     Compare les champs : text | a | b | c | d | e | f | g | correct | hint | cas
     → Si identiques ou cosmetiquement equivalents : OK, ne rien signaler.
     → Si divergents : une ligne dans le tableau avec le code adequat.
+
+  REGLE CHAMP HINT : si le champ \`hint\` diverge entre JSON1 et JSON2, utiliser HINT_DIVERGE.
+  Ne jamais utiliser PROP_DIVERGE pour le champ \`hint\`.
 
   CHAMPS A IGNORER : categoryId, tagSuggere, year, tag, exp (derives — jamais auditer).
 
@@ -588,6 +607,9 @@ REGLE 3 — CHOISIR LE BON CODE POUR LES DIVERGENCES DE PROPOSITIONS
   ARBRE DE DECISION :
   1. Le champ .text ET plusieurs propositions divergent toutes ? → QCM_SHIFT (une seule ligne [Num].QCM)
   2. Exactement deux propositions consecutives echangees (meme texte, champs inverses) ? → PROP_SWAP ([Num].[champ1]-[champ2])
+  2B. Si 2–3 propositions ont un contenu legerement different, aucune n'est tronquee, et le champ .text n'est pas decale ?
+      → Appliquer le pre-filtre REGLE 1B sur chaque champ individuellement. Supprimer les micro-differences.
+        Ne signaler que les champs dont la difference survit a la normalisation (PROP_DIVERGE par champ).
   3. Meme texte, positions multiples ou non consecutives ? → PROP_ORDER ([Num].props)
   4. Proposition identique mais tronquee dans un JSON ? → PROP_TRUNCATED ([Num].[champ])
   5. Texte completement different sur un seul champ ? → PROP_DIVERGE ([Num].[champ])
@@ -636,6 +658,7 @@ REGLE 8 — PRIORISATION DU RAPPORT
   2. BLOQUANTS de correction / valeurs cliniques (CT_DIVERGE, CT_DRIFT, CAS_DIVERGE, DIGIT serieux, AUDIT_ONLY promu BLOQUANT)
   3. INLINE a forte valeur uniquement
   Si les BLOQUANTS structurels existent, les micro-lignes cosmetiques restantes doivent etre supprimees.
+  AUDIT_ONLY en mode INLINE : inclure en tier 3 uniquement si le champ impacte a une valeur clinique directe (chiffre, symbole, unite). Supprimer du rapport si le champ est purement textuel sans valeur clinique. Ne jamais laisser un AUDIT_ONLY INLINE gonfler le rapport sans valeur ajoutee pour la verification humaine.
 
 ══════════════════════════════════════════════════════
 FORMAT DE SORTIE — UN SEUL BLOC \`\`\`text\`\`\`
