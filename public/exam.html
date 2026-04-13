@@ -1925,22 +1925,28 @@
                 </label>
               </div>
               <div class="form-row">
-                <label>Has Clinical Cases (Cas cliniques)</label>
+                <label style="display:flex;align-items:center;gap:6px;">
+                  Has Clinical Cases (Cas cliniques)
+                  <button type="button" onclick="const d=document.getElementById('hint-cas');d.style.display=d.style.display==='none'?'block':'none';" style="width:16px;height:16px;border-radius:50%;border:1px solid var(--border2);background:var(--bg2);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;line-height:1;padding:0;flex-shrink:0;">?</button>
+                </label>
                 <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;background:var(--bg2);">
                   <input type="checkbox" id="tags_hasCas" ${tags.hasCas ? "checked" : ""} style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;"
                     onchange="refreshPromptText();this.nextElementSibling.textContent=this.checked?'Yes - has Cas cliniques':'No Cas cliniques'">
                   <span style="font-size:13px;color:var(--text);">${tags.hasCas ? "Yes - has Cas cliniques" : "No Cas cliniques"}</span>
                 </label>
-                <p style="font-size:11px;color:var(--text3);margin-top:4px;">A clinical case is a shared introductory text that applies to 2 or more consecutive QCMs.</p>
+                <div id="hint-cas" style="display:none;font-size:11px;color:var(--text3);margin-top:4px;">A clinical case is a shared introductory text that applies to 2 or more consecutive QCMs.</div>
               </div>
               <div class="form-row">
-                <label>Has Association / Combination questions</label>
+                <label style="display:flex;align-items:center;gap:6px;">
+                  Has Association / Combination questions
+                  <button type="button" onclick="const d=document.getElementById('hint-comb');d.style.display=d.style.display==='none'?'block':'none';" style="width:16px;height:16px;border-radius:50%;border:1px solid var(--border2);background:var(--bg2);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;line-height:1;padding:0;flex-shrink:0;">?</button>
+                </label>
                 <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;background:var(--bg2);">
                   <input type="checkbox" id="tags_hasComb" ${tags.hasComb ? "checked" : ""} style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;"
                     onchange="refreshPromptText();this.nextElementSibling.textContent=this.checked?'Yes - has association / combination questions':'No association questions'">
                   <span style="font-size:13px;color:var(--text);">${tags.hasComb ? "Yes - has association / combination questions" : "No association questions"}</span>
                 </label>
-                <p style="font-size:11px;color:var(--text3);margin-top:4px;">e.g. A&nbsp;-&nbsp;1+2 &nbsp;/&nbsp; B&nbsp;-&nbsp;1+3 &nbsp;/&nbsp; C&nbsp;-&nbsp;2+3+4 &nbsp;/&nbsp; D&nbsp;-&nbsp;1+2+3 &nbsp;/&nbsp; E&nbsp;-&nbsp;All correct</p>
+                <div id="hint-comb" style="display:none;font-size:11px;color:var(--text3);margin-top:4px;">e.g. A&nbsp;-&nbsp;1+2 &nbsp;/&nbsp; B&nbsp;-&nbsp;1+3 &nbsp;/&nbsp; C&nbsp;-&nbsp;2+3+4 &nbsp;/&nbsp; D&nbsp;-&nbsp;1+2+3 &nbsp;/&nbsp; E&nbsp;-&nbsp;All correct</div>
               </div>
               <div id="subcategorySection" class="form-row full" style="display:none;">
                 <label>Subcategories mapping</label>
