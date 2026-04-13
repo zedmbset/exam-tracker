@@ -606,10 +606,10 @@ REGLE 3 — CHOISIR LE BON CODE POUR LES DIVERGENCES DE PROPOSITIONS
 
   ARBRE DE DECISION :
   1. Le champ .text ET plusieurs propositions divergent toutes ? → QCM_SHIFT (une seule ligne [Num].QCM)
-  2. Exactement deux propositions consecutives echangees (meme texte, champs inverses) ? → PROP_SWAP ([Num].[champ1]-[champ2])
-  2B. Si 2–3 propositions ont un contenu legerement different, aucune n'est tronquee, et le champ .text n'est pas decale ?
+  1B. Si 2–3 propositions ont un contenu legerement different, aucune n'est tronquee, et le champ .text n'est pas decale ?
       → Appliquer le pre-filtre REGLE 1B sur chaque champ individuellement. Supprimer les micro-differences.
         Ne signaler que les champs dont la difference survit a la normalisation (PROP_DIVERGE par champ).
+  2. Exactement deux propositions consecutives echangees (meme texte, champs inverses) ? → PROP_SWAP ([Num].[champ1]-[champ2])
   3. Meme texte, positions multiples ou non consecutives ? → PROP_ORDER ([Num].props)
   4. Proposition identique mais tronquee dans un JSON ? → PROP_TRUNCATED ([Num].[champ])
   5. Texte completement different sur un seul champ ? → PROP_DIVERGE ([Num].[champ])
