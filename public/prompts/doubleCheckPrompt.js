@@ -656,9 +656,9 @@ REGLE 1B — PRE-FILTRE OBLIGATOIRE AVANT TOUT SIGNALEMENT
 REGLE 2 — JSONF
   SECTION A (textuelles) :
     → Si un des deux JSON est evidemment correct sans ambiguite et sans logique medicale (ex: β vs b) → JSONF = valeur correcte, INLINE.
-    → Si les deux sont plausibles → JSONF = "???", BLOQUANT.
+    → Si les deux sont plausibles → JSONF = "??? [SUGGESTION: ...]", BLOQUANT.
   SECTION B (structurelles) :
-    → JSONF = "???" toujours — la verification humaine tranche apres verification dans le PDF.
+    → JSONF = "??? [SUGGESTION: ...]" toujours — la verification humaine tranche apres verification dans le PDF.
 
 REGLE 2B — DIVERGENCES SERIEUSES UNIQUEMENT
   Tu dois privilegier :
@@ -695,10 +695,10 @@ REGLE 3 — CHOISIR LE BON CODE POUR LES DIVERGENCES DE PROPOSITIONS
 REGLE 4 — GROUPEMENT QCM_SHIFT : QUAND REGROUPER
   Si une question a son .text divergent ET au moins 3 propositions divergentes → UNE SEULE LIGNE.
   Reference = [Num].QCM
-  JSONF = reconstruction ligne par ligne avec ??? sur chaque champ divergent :
-    Text: ???
-    A: [valeur JSON2 si JSON1 tronque/decale, sinon ???]
-    B: ???
+  JSONF = reconstruction ligne par ligne avec ??? [SUGGESTION: ...] sur chaque champ divergent :
+    Text: ??? [SUGGESTION: decalage structurel — verifiez l'enonce de la question dans le PDF]
+    A: [valeur JSON2 si JSON1 tronque/decale, sinon ??? [SUGGESTION: verifiez la proposition A dans le PDF]]
+    B: ??? [SUGGESTION: verifiez la proposition B dans le PDF]
     ...
   Full Phrase = concatenation de toutes les raisons : "Decalage enonce + propositions decalees + champs manquants"
   ⚠ NE PAS emettre de lignes separees pour chaque champ quand QCM_SHIFT est utilise.
@@ -715,7 +715,7 @@ REGLE 5 — PROP_SWAP : FORMAT OBLIGATOIRE
   Reference = [Num].[champ1]-[champ2]  ex: 7.d-e
   JSON1 : [champ1]='texte complet D dans JSON1' / [champ2]='texte complet E dans JSON1'
   JSON2 : [champ1]='texte complet D dans JSON2' / [champ2]='texte complet E dans JSON2'
-  JSONF : [champ1]=??? / [champ2]=???  (la verification humaine verifie l'ordre dans le PDF)
+  JSONF : [champ1]=??? [SUGGESTION: JSON1 place [texteX] en [champ1], JSON2 l'inverse. Verifiez l'ordre imprime dans le PDF.] / [champ2]=??? [SUGGESTION: verifiez le texte de [champ2] dans le PDF.]
   ⚠ NE PAS emettre deux lignes PROP_DIVERGE separees quand PROP_SWAP est detecte.
 
 REGLE 6 — PROP_ORDER : FORMAT OBLIGATOIRE DE JSON1 ET JSON2
