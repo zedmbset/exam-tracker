@@ -140,7 +140,7 @@ Le marqueur [SWAP] et tes textes reconstruits (incertitudes) doivent alimenter l
 Chaque doute de lecture que tu as eu DOIT avoir une entree correspondante dans "audit.uncertainties".
 
 INTERDICTIONS SUR LES MARQUEURS ET INCERTITUDES :
-- Plus de balise [INCERTAIN] dans les valeurs textuelles.
+- Aucune balise d'incertitude entre crochets dans les valeurs textuelles.
 - Pas de liste des incertitudes en dehors du bloc audit JSON.
 - Pas de commentaire prose sur tes doutes.
 - Pas de [SWAP] en dehors de "correct", "hint" ou fin de "text".
