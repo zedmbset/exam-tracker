@@ -142,7 +142,7 @@ const TAXONOMY = {
         "Reference : [Num].[champ]  ex: 12.d\n" +
         "JSON1 : texte complet de la proposition dans JSON1\n" +
         "JSON2 : texte complet de la proposition dans JSON2\n" +
-        "JSONF : ??? (remplacer par la valeur finale correcte apres verification dans le PDF)",
+        "JSONF : [valeur proposee par le Modele 3, ou ??? si indecidable]",
       suggestion:
         "JSONF: propose la valeur la plus complete ou la plus coherente selon le cas :\n" +
         "  - Verbes opposes (Inhibe/Active) : ??? — les deux sont plausibles, impossible de trancher sans PDF.\n" +
@@ -165,7 +165,7 @@ const TAXONOMY = {
         "Reference : [Num].props\n" +
         "JSON1 : ordre JSON1 — a='debut...' b='debut...' c='debut...' d='debut...' e='debut...'\n" +
         "JSON2 : ordre JSON2 — a='debut...' b='debut...' c='debut...' d='debut...' e='debut...'\n" +
-        "JSONF : ??? (remplacer par l'ordre final correct apres verification dans le PDF)",
+        "JSONF : ??? (ordre visuel uniquement — verification PDF requise)",
       suggestion: "JSONF: ??? toujours — l'ordre correct ne peut etre determine que visuellement dans le PDF.\nMismatch Note: 1-2 phrases — decrit les propositions concernees et comment leurs positions different (ex: 'JSON1 place [texteX] en a et [texteY] en b. JSON2 les inverse. L'ordre d'impression dans le PDF est la seule reference.').",
     },
     {
@@ -184,7 +184,7 @@ const TAXONOMY = {
         "Reference : [Num].[champ1]-[champ2]  ex: 7.d-e\n" +
         "JSON1 : [champ1]='texte complet' [champ2]='texte complet'\n" +
         "JSON2 : [champ1]='texte complet' [champ2]='texte complet'\n" +
-        "JSONF : [champ1]=??? / [champ2]=??? (la verification humaine verifie l'ordre dans le PDF puis remplace ??? par la valeur correcte)",
+        "JSONF : [champ1]=[valeur proposee ou ???] / [champ2]=[valeur proposee ou ???]",
       suggestion: "JSONF: si les deux textes echanges suivent une progression logique ou alphabetique claire (ex: A avant B, posologie croissante), propose l'ordre coherent. Sinon ??? si les deux ordres sont egalement plausibles.\nMismatch Note: 1-2 phrases — nomme les deux champs et leurs textes dans chaque JSON (ex: 'JSON1 place [texteX] en d et [texteY] en e. JSON2 les inverse. L'ordre logique/alphabetique suggere [ordre] mais le PDF reste la reference finale.').",
     },
     {
@@ -232,7 +232,7 @@ const TAXONOMY = {
         "Reference : [Num].[champ]  ex: 12.b\n" +
         "JSON1 : texte tronque depuis JSON1\n" +
         "JSON2 : texte complet depuis JSON2\n" +
-        "JSONF : ??? (remplacer par le texte complet correct apres verification dans le PDF)",
+        "JSONF : [version non tronquee proposee — valider ou corriger dans le PDF]",
       suggestion: "JSONF: propose la version non tronquee (la plus longue). Si les deux versions semblent tronquees differemment, propose la plus longue des deux et signale que verification dans le PDF reste necessaire.\nMismatch Note: 1-2 phrases — identifie lequel est tronque et ou la coupure se produit (ex: 'JSON1 est tronque apres le mot [mot]. JSON2 contient la phrase complete. Verifiez la fin de la proposition dans le PDF.').",
     },
     {
