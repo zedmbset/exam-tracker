@@ -73,6 +73,71 @@ ${schemaNote}
 ${twoColumnWarning}
 
 ══════════════════════════════════════════════════════
+⛔ VERIFICATION PREALABLE — OBLIGATOIRE AVANT TOUTE EXTRACTION
+══════════════════════════════════════════════════════
+Avant de toucher la moindre question, execute ces 5 verifications dans l'ordre.
+Si une verification CRITICAL echoue → genere UNIQUEMENT le bloc d'erreur ci-dessous et ARRETE.
+N'extrais aucune question, ne produis aucun tableau "questions".
+
+CHECK 1 — COMPTAGE DES QUESTIONS
+  Balaye le PDF en entier. Releve tous les numeros de questions presentes.
+  Compte attendu = ${data.nQst || "?"} declares - ${Array.isArray(data.missingPos) && data.missingPos.length > 0 ? data.missingPos.length : 0} manquantes declarees = ${(Number(data.nQst) || 0) - (Array.isArray(data.missingPos) ? data.missingPos.length : 0)} objets attendus.
+  Si le nombre de questions trouvees differe de plus de ${Array.isArray(data.missingPos) && data.missingPos.length > 0 ? "ce qui est explique par les positions manquantes declarees" : "1"} → CRITICAL.
+
+CHECK 2 — CORRIGE TYPE
+  Balaye les dernieres pages du PDF pour trouver une section CT (en-tete "Corrige Type", tableau de reponses, grille de bulles).
+  ${data.hasCT ? "hasCT=OUI declare. Si AUCUN CT trouve → CRITICAL." : "hasCT=NON declare. Si un CT est clairement present → CRITICAL (risque d'hallucination de reponses)."}
+
+CHECK 3 — CAS CLINIQUES
+  Balaye le PDF pour trouver un cas clinique (paragraphe introductif partage par un groupe de questions).
+  ${data.hasCas ? "hasCas=OUI declare. Si aucun cas clinique detecte → WARNING." : "hasCas=NON declare. Si un cas clinique est present → WARNING."}
+
+CHECK 4 — QUESTIONS D'ASSOCIATION
+  Balaye le PDF pour trouver des questions avec items numerotes + tableau de combinaisons.
+  ${data.hasComb ? "hasComb=OUI declare. Si aucune question d'association detectee → WARNING." : "(Pas de verification necessaire — hasComb=NON.)"}
+
+CHECK 5 — POSITIONS MANQUANTES
+  ${Array.isArray(data.missingPos) && data.missingPos.length > 0
+    ? `Positions declarees manquantes : ${data.missingPos.join(", ")}. Si une de ces questions apparait dans le PDF → WARNING (le membre a peut-etre saisi les mauvaises positions manquantes).`
+    : "Aucune position manquante declaree — pas de verification necessaire."}
+
+DECISION APRES VERIFICATIONS :
+  → Si au moins un CHECK CRITICAL echoue : output UNIQUEMENT le bloc d'erreur JSON ci-dessous — pas de questions.
+  → Si uniquement des WARNINGS : log dans audit.summary.warnings, puis poursuis l'extraction normalement.
+  → Si tout passe : poursuis l'extraction normalement.
+
+FORMAT DU BLOC D'ERREUR (sortie exclusive si CRITICAL) :
+Un seul bloc \`\`\`json ... \`\`\` contenant cet objet — RIEN D'AUTRE :
+{
+  "error": "METADATA_MISMATCH",
+  "checks": [
+    {
+      "field": "<nQst | hasCT | hasCas | hasComb | missingPos>",
+      "declared": <valeur declaree>,
+      "detected": <valeur detectee dans le PDF>,
+      "severity": "CRITICAL",
+      "message": "<description claire de l'ecart en francais, avec instruction de correction pour l'utilisateur>"
+    }
+  ],
+  "instruction": "Corrigez les informations de l'examen (Etape 1) puis relancez la numerisation."
+}
+  → Liste toutes les verifications ayant echoue dans le tableau "checks" (y compris les WARNINGS).
+  → Ne jamais inclure un tableau "questions" aux cotes du bloc d'erreur.
+  → Ne jamais continuer l'extraction si au moins un CRITICAL est signale.
+
+FORMAT DES WARNINGS (si aucun CRITICAL) :
+  Ajoute un tableau "warnings" dans audit.summary :
+  "warnings": [
+    {
+      "field": "<hasCas | hasComb | isTwoColumn | missingPos>",
+      "declared": <valeur declaree>,
+      "detected": <valeur detectee dans le PDF>,
+      "message": "<description courte de l'ecart>"
+    }
+  ]
+  Si aucun warning : omets le tableau "warnings" de audit.summary.
+
+══════════════════════════════════════════════════════
 REGLES DE FIDELITE AU DOCUMENT
 ══════════════════════════════════════════════════════
 La fidelite au contenu medical prime toujours sur la normalisation cosmetique.
@@ -151,6 +216,7 @@ FORMAT DE SORTIE — OBJET JSON UNIQUE
 Produis UNIQUEMENT un bloc \`\`\`json ... \`\`\` contenant l'objet decrit ci-dessous.
 Aucun texte, titre, commentaire ni rapport en dehors du bloc JSON.
 Un seul bloc. Pas de deuxieme bloc.
+EXCEPTION : si une verification prealable CRITICAL a echoue, la sortie est le bloc d'erreur JSON decrit dans la section VERIFICATION PREALABLE — pas de tableau "questions", pas de bloc "audit".
 
 ──────────────────────────────────────────────────────
 STRUCTURE DE "questions"  (tableau d'objets)
@@ -292,10 +358,19 @@ L'objet "audit" est obligatoire meme si tout est propre (les tableaux seront alo
     "criticalRiskCount" : <entier>,
     "highRiskCount"     : <entier>,
     "mediumRiskCount"   : <entier>,
-    "lowRiskCount"      : <entier>
+    "lowRiskCount"      : <entier>,
+    "warnings"          : [ /* omis si aucun warning — voir schema ci-dessous */ ]
   },
   "uncertainties" : [ /* voir schema ci-dessous */ ],
   "cleanings"     : [ /* voir schema ci-dessous */ ]
+}
+
+Schema d'un objet "warnings" (dans audit.summary.warnings) :
+{
+  "field"    : "<hasCas | hasComb | isTwoColumn | missingPos>",
+  "declared" : <valeur declaree dans le contexte>,
+  "detected" : <valeur detectee dans le PDF>,
+  "message"  : "<description courte de l'ecart>"
 }
 
 ━━━━ "uncertainties" — un objet par incertitude de lecture ou [SWAP] pose ━━━━
@@ -427,6 +502,7 @@ LETTRES CT IMPOSSIBLES
 AUTO-VERIFICATION AVANT SORTIE
 ══════════════════════════════════════════════════════
 Avant d'ecrire le JSON, verifie mentalement :
+0. Si une verification prealable CRITICAL a echoue, la sortie est un bloc error JSON — pas de tableau "questions". Les verifications suivantes ne s'appliquent qu'a la sortie normale.
 1. Nombre d'objets dans "questions" = ${data.nQst || "?"} declares - questions manquantes declarees.
    Si different : verifie si tu as oublie une question ou fusionne deux questions.
 2. Aucun champ "correct" ne contient une deduction medicale personnelle.
