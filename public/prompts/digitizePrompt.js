@@ -125,7 +125,7 @@ MARQUEURS D'INCERTITUDE
 ══════════════════════════════════════════════════════
 INCERTITUDES DE LECTURE (SANS MARQUEUR TEXTUEL)
   → Pour tout mot, symbole, chiffre, formule ou expression difficile a lire avec certitude.
-  → NE METS PLUS de balise [INCERTAIN: ...] dans le texte.
+  → N'insere JAMAIS de balise d'incertitude entre crochets dans le texte d'un champ.
   → Ecris ta meilleure reconstruction medicalement plausible DIRECTEMENT dans le champ JSON (ex: "120 mg/dL", "hypertension").
   → Documente OBLIGATOIREMENT cette incertitude dans le bloc "audit.uncertainties" avec un riskScore.
   → Si une question est entierement illisible et irrecuperable : saute-la sans creer d'objet.
@@ -442,7 +442,7 @@ Avant d'ecrire le JSON, verifie mentalement :
 12. Chaque champ "exp" contient le template anglais exact avec la valeur "correct" interpolee.
 ${data.isTwoColumn ? "13. L'ordre des questions respecte la lecture colonne-gauche-puis-colonne-droite." : ""}
 ${data.hasComb ? "14. Chaque question d'association a un champ 'hint' non vide contenant uniquement des lettres A-G separees par virgule." : ""}
-15. Aucune valeur dans aucun champ ne contient la balise [INCERTAIN: ...] — cette balise est interdite.
+15. Aucune valeur dans aucun champ ne contient de balise d'incertitude entre crochets — toutes ces balises sont interdites dans les valeurs textuelles.
 
 ══════════════════════════════════════════════════════
 SORTIE FINALE OBLIGATOIRE
