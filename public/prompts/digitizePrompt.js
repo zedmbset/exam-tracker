@@ -169,8 +169,8 @@ Schema d'un objet question :
   "c"               : "texte proposition C sans son prefixe lettre",
   "d"               : "texte proposition D sans son prefixe lettre",
   "e"               : "texte proposition E sans son prefixe lettre",
-  "f"               : "texte proposition F — uniquement questions d'association",
-  "g"               : "texte proposition G — uniquement questions d'association",
+  "f"               : "texte proposition F — utilise quand la question comporte 6 propositions ou plus (quel que soit le type de question)",
+  "g"               : "texte proposition G — utilise quand la question comporte 7 propositions (quel que soit le type de question)",
   "correct"         : "lettres CT sans separateur ex: 'ACD', ou [SWAP:...] si suspect, ou omis si absent",
   "exp"             : "Based on official course support (official pdf course) the right answer is \\"<correct>\\" please generate explanation based on those right answers (propositions) — ou omis si correct absent",
   "hint"            : "combinaisons d'association traduites en lettres A-G — ou omis",
@@ -189,13 +189,14 @@ Regles specifiques par champ :
                Copie les lettres exactement telles qu'elles apparaissent dans le CT, meme ordre.
                Plusieurs reponses : lettres sans separateur ex: "ACD".
                Si CT absent/illisible pour cette question : omets le champ.
-               Si decalage CT suspect : [INCERTAIN: decalage CT suspect] et omets la valeur.`
+               Si decalage CT suspect : omets le champ "correct" pour les questions affectees. Documente dans audit.uncertainties avec type "SWAP", riskLevel "CRITICAL", description "Decalage CT suspecte — position N".`
     : `Omis pour toutes les questions — jamais remplir depuis tes connaissances medicales.`}
 - "exp"      : derive de "correct". Omis si "correct" est absent.
                Template intentionnellement en anglais — ne pas traduire.
                Remplace <correct> par la valeur exacte du champ "correct".
-- "hint"     : uniquement pour questions d'association. Traduis combinaisons source → lettres A-G.
-               Exemple : si PDF dit "1 et 3" et 1→A, 3→C → ecris "A et C".
+- "hint"     : uniquement pour questions d'association. Traduis CHAQUE combinaison du tableau en lettres A-G en utilisant la correspondance item→lettre, puis joins toutes les combinaisons avec ", ".
+               Exemple : tableau A(1,2,3,4) B(1,2,3,4,5) C(1,2,3,5) D(1,3,4,5) E(2,3,4,5) → hint = "ABCD, ABCDE, ABCE, ACDE, BCDE".
+               Ne jamais stocker les lettres de combinaison (A, B, C, D, E) seules — toujours traduire les items numerotes.
 - "categoryId" : obligatoire pour chaque question.
                ${data.isComposedExam
                  ? 'Examen compose — attribue le categoryId exact du sous-module dont la plage contient le numero de question.'
@@ -204,16 +205,69 @@ Regles specifiques par champ :
                ${isResidanat
                  ? 'Pour Résidanat : remplace <tagSuggere> par la valeur reelle de "tagSuggere".'
                  : 'Pour Externat : utilise periode et annee fournies dans le contexte.'}
-- "f", "g"   : omis si aucune question d'association dans l'examen.
+- "f", "g"   : omis si la question comporte 5 propositions ou moins.
 - "hint"     : omis si aucune question d'association dans l'examen.
 - "tagSuggere" : omis si examen non mappe (pas de subcategories definies).
+
+${data.hasComb ? `
+══════════════════════════════════════════════════════
+QUESTIONS D'ASSOCIATION — REGLES SPECIFIQUES
+══════════════════════════════════════════════════════
+Une question d'association contient deux parties :
+  1. Un corps de question ("text") suivi de N enonces numerotes (1 a 7 maximum).
+  2. Un tableau de combinaisons en bas : A(…) B(…) C(…) D(…) E(…).
+     Chaque combinaison liste les numeros des enonces inclus dans cette reponse.
+
+CORRESPONDANCE ITEM → LETTRE (toujours dans cet ordre) :
+  enonce 1 → champ "a" → lettre A
+  enonce 2 → champ "b" → lettre B
+  enonce 3 → champ "c" → lettre C
+  enonce 4 → champ "d" → lettre D
+  enonce 5 → champ "e" → lettre E
+  enonce 6 → champ "f" → lettre F  (seulement si 6 enonces ou plus)
+  enonce 7 → champ "g" → lettre G  (seulement si 7 enonces)
+
+CHAMP "hint" — tableau de combinaisons traduit :
+  Traduis CHAQUE combinaison du tableau en remplacant les numeros par les lettres
+  correspondantes (A=1, B=2, C=3, D=4, E=5, F=6, G=7).
+  Joins toutes les combinaisons converties avec ", ".
+  Exemple :
+    Tableau PDF : A(1,2,3,4)  B(1,2,3,4,5)  C(1,2,3,5)  D(1,3,4,5)  E(2,3,4,5)
+    → hint = "ABCD, ABCDE, ABCE, ACDE, BCDE"
+  ⚠ Ne stocke JAMAIS les lettres de combinaison (A, B, C, D, E) seules dans "hint".
+    Toujours traduire les numeros d'items.
+
+CHAMP "correct" — combinaison correcte traduite en propositions :
+  Ne stocke PAS la lettre de la combinaison marquee dans le CT (ex: "D").
+  Traduis les numeros d'items de cette combinaison en lettres de propositions.
+  Exemple : CT marque D, D=(1,3,4,5) → correct = "ACDE" (items 1→A, 3→C, 4→D, 5→E).
+
+EXEMPLE JSON COMPLET D'UNE QUESTION D'ASSOCIATION :
+{
+  "num": 14,
+  "text": "La toxicologie environnementale s'interesse a :",
+  "a": "Le devenir des contaminants chimiques dans l'environnement ;",
+  "b": "Les interactions entre les contaminants biologiques dans l'environnement ;",
+  "c": "Les interactions entre les contaminants chimiques dans l'environnement ;",
+  "d": "Les effets sur la biodiversite ;",
+  "e": "Les perturbations des ecosystemes.",
+  "hint": "ABCD, ABCDE, ABCE, ACDE, BCDE",
+  "correct": "ACDE"
+}
+
+AUTO-VERIFICATION ASSOCIATION :
+  → Chaque question d'association doit avoir un champ "hint" non vide.
+  → Le champ "hint" contient uniquement des lettres A-G et des virgules/espaces.
+  → Le champ "correct" contient uniquement des lettres A-G sans separateur.
+  → Le nombre de lettres dans "correct" correspond au nombre d'items de la combinaison marquee.
+` : ""}
 
 ${data.isTwoColumn ? `
 EXAMEN DEUX COLONNES — REGLES STRICTES
 - Lis integralement la colonne gauche du haut vers le bas AVANT de commencer la colonne droite.
 - Ne melange jamais une ligne de la colonne gauche avec une ligne de la colonne droite.
-- Si une question semble continuer d'une colonne vers l'autre : [INCERTAIN: continuite inter-colonnes ?] dans "text".
-- Si l'ordre numerique est incohérent avec la lecture visuelle : [INCERTAIN: ordre inter-colonnes suspect] dans "text".
+- Si une question semble continuer d'une colonne vers l'autre : ecris ta meilleure reconstruction dans "text" et documente dans audit.uncertainties avec riskLevel "HIGH", description "Continuite inter-colonnes incertaine — zone de jonction entre colonnes".
+- Si l'ordre numerique est incohérent avec la lecture visuelle : conserve l'ordre visuel imprime et documente dans audit.uncertainties avec riskLevel "HIGH", description "Ordre inter-colonnes suspect — numerotation incoherente avec la position visuelle".
 - Verifie que chaque question de la colonne droite ne fait pas partie d'un cas clinique initie dans la colonne gauche.
 ` : `
 EXAMEN COLONNE UNIQUE
@@ -273,7 +327,7 @@ Grille de riskScore pour "uncertainties" :
 {
   "qNum"        : <entier ou null si correction globale>,
   "field"       : "<nom du champ JSON modifie>",
-  "cleaningType": "CASE_FIX" | "SPACE_FIX" | "HYPHEN_FIX" | "PREFIX_REMOVED" | "SYMBOL_ENCODING_FIX" | "OTHER_AUTHORIZED",
+  "cleaningType": "CASE_FIX" | "SPACE_FIX" | "HYPHEN_FIX" | "OCR_FIX" | "NOISE_REMOVED" | "PREFIX_REMOVED" | "SYMBOL_ENCODING_FIX" | "OTHER_AUTHORIZED",
   "before"      : "texte original tel qu'extrait du PDF avant correction",
   "after"       : "texte apres correction",
   "ruleApplied" : "citation exacte et courte de la regle du prompt qui autorise ce nettoyage",
@@ -308,6 +362,67 @@ IMPORTANT : Ne documente PAS les remplissages de champs derives (categoryId, yea
 tagSuggere). Ces valeurs sont des derivations du contexte, pas des nettoyages du PDF.
 Ne documente PAS les absences normales de champs optionnels.
 
+${data.hasCT ? `
+══════════════════════════════════════════════════════
+CORRIGE TYPE — LOCALISATION ET FORMATS
+══════════════════════════════════════════════════════
+Le Corrige Type (CT) apparait TOUJOURS a la FIN du PDF, apres toutes les questions.
+Signaux qui identifient la section CT :
+  - Un en-tete "Corrige Type", "Corrige-Type", "Correction", "Reponses" en haut de page.
+  - Un tableau ou une grille listant des numeros de questions avec des lettres de reponse.
+  - Une page separee (parfois intitulee "page 1/1") apres le corps de l'examen.
+⚠ OBLIGATOIRE : Parcours le PDF jusqu'a la derniere page avant d'extraire les valeurs CT.
+  Ne tente jamais d'extraire le CT depuis le corps de l'examen.
+
+FORMAT A — Tableau imprime (format le plus courant, lecture directe)
+  Apparence : un tableau propre avec colonnes "N°" et "Reponse" ou "Alternatives".
+  Chaque ligne : numero de question | une ou plusieurs lettres capitales (A–E ou combinaisons).
+  Valeurs valides : D, B, ABE, ACDE, ABCDE.
+  Regle : copie les lettres exactement telles qu'imprimees, sans separateur entre plusieurs lettres.
+
+FORMAT B — Grille a cocher / OMR (format a plus haut risque de lecture)
+  Apparence : grille ou chaque question a 5 colonnes labellisees A B C D E.
+  Chaque colonne contient une petite case carree.
+  Case cochee/barree (✕, asterisque epais, marque pleine) = cette lettre est correcte.
+  Case vide ou non marquee = cette lettre n'est PAS correcte.
+  Regle : identifie chaque case marquee et enregistre la lettre correspondante.
+          Joins les lettres en ordre alphabetique sans separateur.
+  Exemple : A=vide, B=marque, C=vide, D=marque, E=vide → correct = "BD".
+  ⚠ RISQUE ELEVE : les grilles a cocher sont frequemment mal lues par l'OCR.
+    → Documente CHAQUE reponse extraite d'une grille dans audit.uncertainties
+      avec riskLevel "HIGH" et description "Reponse extraite d'une grille a cocher — risque de lecture erronee".
+    → Exception : si la marque est claire, non ambigue et isolee → riskLevel "MEDIUM".
+
+COLONNES ALTERNATIVES (Format A uniquement)
+  Certains tableaux CT ont deux colonnes de reponse : "Alternative 1" et "Alternative 2".
+  Cela signifie que deux ensembles de reponses sont acceptes pour cette question.
+  Regle : stocke TOUJOURS l'alternative avec le PLUS GRAND nombre de lettres correctes dans "correct".
+  Exemples :
+    Alt1 = "BD"  (2 lettres), Alt2 = "B"   (1 lettre)  → correct = "BD"
+    Alt1 = "AC"  (2 lettres), Alt2 = "ACD" (3 lettres) → correct = "ACD"
+  Documente l'alternative ecartee dans audit.uncertainties :
+    type: "INCERTAIN", riskLevel: "MEDIUM",
+    description: "CT fournit deux alternatives — Alt1=[x] Alt2=[y] — retenu: [choix]"
+
+DETECTION DU DECALAGE CT
+  Un decalage CT se produit quand les reponses sont decalees d'une question a l'autre.
+  Signaux d'alerte a surveiller :
+    - La derniere question de l'examen n'a pas d'entree CT, mais une reponse supplementaire apparait.
+    - La reponse pour la question N dans le CT semble appartenir visuellement a la question N+1.
+    - Le nombre total de reponses CT differe du nombre total de questions.
+  Si un de ces signaux est detecte : omets le champ "correct" pour TOUTES les questions affectees.
+  Documente chaque position concernee dans audit.uncertainties :
+    type: "SWAP", riskLevel: "CRITICAL", description: "Decalage CT suspecte — position N"
+
+LETTRES CT IMPOSSIBLES
+  Si le CT contient une lettre qui n'a pas de proposition correspondante (ex: "F" pour une question
+  a 5 choix, ou un chiffre au lieu d'une lettre) :
+    - Ne copie PAS la valeur invalide dans "correct".
+    - Omets le champ "correct" pour cette question.
+    - Documente dans audit.uncertainties : riskLevel: "CRITICAL",
+      description: "CT contient une lettre invalide pour cette question: [valeur]"
+` : ""}
+
 ══════════════════════════════════════════════════════
 AUTO-VERIFICATION AVANT SORTIE
 ══════════════════════════════════════════════════════
@@ -326,6 +441,8 @@ Avant d'ecrire le JSON, verifie mentalement :
 11. Chaque champ "tag" contient exactement 4 elements dans le bon ordre.
 12. Chaque champ "exp" contient le template anglais exact avec la valeur "correct" interpolee.
 ${data.isTwoColumn ? "13. L'ordre des questions respecte la lecture colonne-gauche-puis-colonne-droite." : ""}
+${data.hasComb ? "14. Chaque question d'association a un champ 'hint' non vide contenant uniquement des lettres A-G separees par virgule." : ""}
+15. Aucune valeur dans aucun champ ne contient la balise [INCERTAIN: ...] — cette balise est interdite.
 
 ══════════════════════════════════════════════════════
 SORTIE FINALE OBLIGATOIRE
