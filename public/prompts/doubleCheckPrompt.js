@@ -185,7 +185,7 @@ const TAXONOMY = {
         "JSON1 : [champ1]='texte complet' [champ2]='texte complet'\n" +
         "JSON2 : [champ1]='texte complet' [champ2]='texte complet'\n" +
         "JSONF : [champ1]=??? / [champ2]=??? (la verification humaine verifie l'ordre dans le PDF puis remplace ??? par la valeur correcte)",
-      suggestion: "JSONF: [champ1]=??? / [champ2]=??? toujours — l'ordre des deux propositions echangees ne peut etre confirme que visuellement dans le PDF.\nMismatch Note: 1-2 phrases — nomme les deux champs et leurs textes dans chaque JSON (ex: 'JSON1 place [texteX] en d et [texteY] en e. JSON2 les inverse. L'ordre d'impression dans le PDF est la seule reference.').",
+      suggestion: "JSONF: si les deux textes echanges suivent une progression logique ou alphabetique claire (ex: A avant B, posologie croissante), propose l'ordre coherent. Sinon ??? si les deux ordres sont egalement plausibles.\nMismatch Note: 1-2 phrases — nomme les deux champs et leurs textes dans chaque JSON (ex: 'JSON1 place [texteX] en d et [texteY] en e. JSON2 les inverse. L'ordre logique/alphabetique suggere [ordre] mais le PDF reste la reference finale.').",
     },
     {
       code: "QCM_SHIFT",
@@ -205,14 +205,14 @@ const TAXONOMY = {
         "Type : QCM_SHIFT | [autres codes si applicable, ex: FIELD_MISSING]\n" +
         "JSON1 : reconstruction complete du QCM depuis JSON1 (text + a + b + c + d + e)\n" +
         "JSON2 : reconstruction complete du QCM depuis JSON2 (text + a + b + c + d + e)\n" +
-        "JSONF : reconstruction ligne par ligne, ??? sur chaque champ divergent :\n" +
-        "  Text: ???\n" +
-        "  A: ???\n" +
-        "  B: ???\n" +
-        "  C: ???\n" +
-        "  D: ???\n" +
-        "  E: ???\n" +
-        "(remplacer chaque ??? par la valeur correcte apres verification dans le PDF)\n" +
+        "JSONF : reconstruction ligne par ligne avec la meilleure valeur proposee ou ??? par champ :\n" +
+        "  Text: [valeur proposee ou ???]\n" +
+        "  A: [valeur proposee ou ???]\n" +
+        "  B: [valeur proposee ou ???]\n" +
+        "  C: [valeur proposee ou ???]\n" +
+        "  D: [valeur proposee ou ???]\n" +
+        "  E: [valeur proposee ou ???]\n" +
+        "(le verificateur valide chaque valeur proposee ou remplace ??? par la valeur correcte du PDF)\n" +
         "Mismatch Note : liste toutes les raisons individuelles separees par ' + '",
       suggestion: "JSONF champ par champ: propose la reconstruction la plus coherente en prioritisant le JSON dont l'enonce correspond mieux a la zone correcte du PDF. ??? sur chaque champ ou les deux JSON divergent egalement.\nMismatch Note: 1-2 phrases — explique la nature du decalage (ex: 'JSON1 a capture l'enonce correct mais JSON2 contient les options en titre. Decalage structurel probable — l'un des modeles a capture la mauvaise zone du PDF.').",
     },
@@ -258,7 +258,7 @@ const TAXONOMY = {
       never: [
         "Ne corriger qu'apres verification humaine.",
       ],
-      suggestion: "JSONF: ??? toujours — le decalage CT necessite une verification visuelle du PDF pour chaque question concernee.\nMismatch Note: 1-2 phrases — decrit les questions concernees et le decalage observe (ex: 'JSON1 assigne ACD a Q5 et B a Q6. JSON2 fait l'inverse. Decalage CT probable entre ces deux questions.').",
+      suggestion: "JSONF: si un alignement de majorite est visible dans le CT (ex: JSON1 et JSON2 concordent sur Q5 mais pas Q6 dans le contexte global), propose la valeur alignee avec la majorite des CT. ??? si les deux alignements sont egalement plausibles ou si plusieurs questions sont impactees.\nMismatch Note: 1-2 phrases — decrit les questions concernees et le decalage observe (ex: 'JSON1 assigne ACD a Q5 et B a Q6. JSON2 fait l'inverse. Decalage CT probable entre ces deux questions.').",
     },
     {
       code: "CT_SPACING",
@@ -345,7 +345,7 @@ const TAXONOMY = {
         "Ne pas laisser en INLINE une incertitude HIGH ou CRITICAL qui touche 'correct', 'cas' ou la structure du QCM.",
       ],
       modeRule: "BLOQUANT si le champ impacte est 'correct', 'cas', une valeur clinique ou la structure du QCM. INLINE sinon.",
-      suggestion: "JSONF: ??? si BLOQUANT — l'incertitude de lecture signalke dans l'audit ne peut etre resolue que par consultation directe du PDF.\nMismatch Note: 1-2 phrases — decrit l'incertitude signalee par le modele (ex: 'JSON2 a signale une incertitude CRITICAL sur le champ correct de Q43. La valeur reconstruite [reconstructed] est peut-etre incorrecte. Verifiez ce champ directement dans le PDF.').",
+      suggestion: "JSONF: ne pas modifier — cette ligne signale une incertitude d'audit uniquement. JSONF reste la valeur issue du JSON le plus fiable sur ce champ (ou vide si aucune valeur n'est disponible). Aucune reconstruction n'est attendue.\nMismatch Note: 1-2 phrases — decrit l'incertitude signalee par le modele et le champ concerne (ex: 'JSON2 a signale une incertitude CRITICAL sur le champ correct de Q43. La valeur reconstruite [reconstructed] est peut-etre incorrecte. Verifiez ce champ directement dans le PDF.').",
     },
   ],
 
@@ -718,7 +718,7 @@ REGLE 5 — PROP_SWAP : FORMAT OBLIGATOIRE
   Reference = [Num].[champ1]-[champ2]  ex: 7.d-e
   JSON1 : [champ1]='texte complet D dans JSON1' / [champ2]='texte complet E dans JSON1'
   JSON2 : [champ1]='texte complet D dans JSON2' / [champ2]='texte complet E dans JSON2'
-  JSONF : [champ1]=??? / [champ2]=???
+  JSONF : [champ1]=[valeur proposee ou ???] / [champ2]=[valeur proposee ou ???]
   ⚠ NE PAS emettre deux lignes PROP_DIVERGE separees quand PROP_SWAP est detecte.
 
 REGLE 6 — PROP_ORDER : FORMAT OBLIGATOIRE DE JSON1 ET JSON2
