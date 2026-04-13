@@ -57,6 +57,7 @@ const TAXONOMY = {
         "Ne jamais trancher par logique medicale — la verification humaine tranche dans le PDF.",
       ],
       modeRule: "INLINE si un des deux est evidemment une coquille OCR sans ambiguite. BLOQUANT si les deux valeurs sont plausibles, cliniquement significatives ou modifient une mesure.",
+      suggestion: "Identifie les deux valeurs et leur contexte clinique. JSONF: ??? [SUGGESTION: JSON1 a [valeur1], JSON2 a [valeur2]. Les deux valeurs sont cliniquement plausibles — verifiez le chiffre exact imprime dans le PDF.]",
     },
     {
       code: "SYMBOL",
@@ -142,6 +143,11 @@ const TAXONOMY = {
         "JSON1 : texte complet de la proposition dans JSON1\n" +
         "JSON2 : texte complet de la proposition dans JSON2\n" +
         "JSONF : ??? (remplacer par la valeur finale correcte apres verification dans le PDF)",
+      suggestion:
+        "Identifie la nature de l'ecart et formule la SUGGESTION selon le cas :\n" +
+        "  - Verbes opposes (Inhibe/Active, Augmente/Diminue) : SUGGESTION: opposition de sens — un seul verbe peut etre correct. Cherchez le verbe exact dans le PDF.\n" +
+        "  - Une version plus longue/precise : SUGGESTION: JSON2 est plus precis — verifiez si le PDF contient le terme supplementaire [terme].\n" +
+        "  - Contenus incompatibles : SUGGESTION: contenus incompatibles — une seule version correspond au PDF. Verifiez quelle proposition est imprimee a cette position.",
     },
     {
       code: "PROP_ORDER",
@@ -159,6 +165,7 @@ const TAXONOMY = {
         "JSON1 : ordre JSON1 — a='debut...' b='debut...' c='debut...' d='debut...' e='debut...'\n" +
         "JSON2 : ordre JSON2 — a='debut...' b='debut...' c='debut...' d='debut...' e='debut...'\n" +
         "JSONF : ??? (remplacer par l'ordre final correct apres verification dans le PDF)",
+      suggestion: "JSONF: ??? [SUGGESTION: JSON1 et JSON2 ont les memes propositions dans des ordres differents. Verifiez l'ordre visuel imprime dans le PDF — c'est la seule reference.]",
     },
     {
       code: "PROP_SWAP",
@@ -177,6 +184,7 @@ const TAXONOMY = {
         "JSON1 : [champ1]='texte complet' [champ2]='texte complet'\n" +
         "JSON2 : [champ1]='texte complet' [champ2]='texte complet'\n" +
         "JSONF : [champ1]=??? / [champ2]=??? (la verification humaine verifie l'ordre dans le PDF puis remplace ??? par la valeur correcte)",
+      suggestion: "Nomme les deux champs concernes et leurs textes. JSONF: [champ1]=??? / [champ2]=??? [SUGGESTION: JSON1 place [texteX] en [champ1] et [texteY] en [champ2]. JSON2 les inverse. Verifiez l'ordre d'impression dans le PDF.]",
     },
     {
       code: "QCM_SHIFT",
@@ -205,6 +213,7 @@ const TAXONOMY = {
         "  E: ???\n" +
         "(remplacer chaque ??? par la valeur correcte apres verification dans le PDF)\n" +
         "Full Phrase : liste toutes les raisons individuelles separees par ' + '",
+      suggestion: "JSONF (chaque champ divergent): ??? [SUGGESTION: decalage structurel — l'un des modeles a probablement capture la mauvaise zone du PDF. Verifiez l'enonce de la question [Num] dans le PDF et identifiez lequel des deux JSON est aligne.]",
     },
     {
       code: "PROP_TRUNCATED",
@@ -223,6 +232,7 @@ const TAXONOMY = {
         "JSON1 : texte tronque depuis JSON1\n" +
         "JSON2 : texte complet depuis JSON2\n" +
         "JSONF : ??? (remplacer par le texte complet correct apres verification dans le PDF)",
+      suggestion: "Identifie lequel est tronque. JSONF: ??? [SUGGESTION: JSON2 semble complet — JSON1 est tronque. Verifiez la fin de la proposition dans le PDF et utilisez la version complete.]",
     },
     {
       code: "CT_DIVERGE",
@@ -235,6 +245,7 @@ const TAXONOMY = {
       never: [
         "Ne jamais trancher par logique medicale.",
       ],
+      suggestion: "Identifie les lettres qui different. JSONF: ??? [SUGGESTION: JSON1 a '[lettres1]', JSON2 a '[lettres2]'. Cherchez dans le CT si la case [lettre_differente] est cochee/imprimee pour cette question.]",
     },
     {
       code: "CT_DRIFT",
@@ -246,6 +257,7 @@ const TAXONOMY = {
       never: [
         "Ne corriger qu'apres verification humaine.",
       ],
+      suggestion: "JSONF: ??? [SUGGESTION: decalage CT probable — les reponses des questions adjacentes semblent echangees. Verifiez la section CT du PDF pour les questions concernees.]",
     },
     {
       code: "CT_SPACING",
@@ -269,6 +281,7 @@ const TAXONOMY = {
         "Le format attendu est toujours base sur des lettres A-G separees par virgule, jamais des chiffres ni des chiffres romains.",
       ],
       modeRule: "INLINE si un des deux est evidemment incorrect. BLOQUANT si les deux sont plausibles.",
+      suggestion: "JSONF: ??? [SUGGESTION: les tables de combinaisons different. Verifiez la ligne de combinaisons imprimee sous la question [Num] dans le PDF.]",
     },
     {
       code: "SWAP_DIVERGE",
@@ -280,6 +293,7 @@ const TAXONOMY = {
       never: [
         "Ne pas signaler si les deux JSON ont le meme marqueur [SWAP].",
       ],
+      suggestion: "JSONF: ??? [SUGGESTION: un modele doute de l'ordre des propositions pour cette question. Verifiez l'ordre visuel d'impression dans le PDF.]",
     },
     {
       code: "CAS_DIVERGE",
@@ -289,6 +303,7 @@ const TAXONOMY = {
         "JSON1 a 'cas' renseigne pour Q12, JSON2 ne l'a pas.",
       ],
       never: [],
+      suggestion: "JSONF: ??? [SUGGESTION: un modele n'a pas detecte le cas clinique. Verifiez si le texte introductif avant la question [Num] est bien un cas partage ou s'il appartient a une seule question.]",
     },
     {
       code: "ROW_COUNT",
@@ -300,6 +315,7 @@ const TAXONOMY = {
       never: [
         "Ne pas signaler si l'ecart est explique par les questions declarees manquantes.",
       ],
+      suggestion: "JSONF: ??? [SUGGESTION: nombre de questions different. Verifiez si une question a ete sautee ou fusionnee par l'un des modeles.]",
     },
     {
       code: "FIELD_MISSING",
@@ -312,6 +328,7 @@ const TAXONOMY = {
       never: [
         "Ne pas signaler les champs derives (categoryId, year, tag, exp) — derivations du contexte.",
       ],
+      suggestion: "Adapte selon le champ manquant. Si 'correct' : JSONF: ??? [SUGGESTION: le champ 'correct' est absent dans [JSON1/JSON2]. Cherchez la reponse CT pour la question [Num] dans le Corrige Type.] Sinon : JSONF: ??? [SUGGESTION: le champ [champ] est absent dans [JSON1/JSON2]. Verifiez si la proposition [champ] existe dans le PDF pour cette question.]",
     },
     {
       code: "AUDIT_ONLY",
@@ -327,6 +344,7 @@ const TAXONOMY = {
         "Ne pas laisser en INLINE une incertitude HIGH ou CRITICAL qui touche 'correct', 'cas' ou la structure du QCM.",
       ],
       modeRule: "BLOQUANT si le champ impacte est 'correct', 'cas', une valeur clinique ou la structure du QCM. INLINE sinon.",
+      suggestion: "JSONF: ??? [SUGGESTION: un modele a signale une incertitude de lecture sur ce champ. Verifiez [field] de la question [Num] directement dans le PDF — la valeur reconstruite [reconstructed] peut etre incorrecte.]",
     },
   ],
 
@@ -371,6 +389,10 @@ function injectTaxonomy() {
     if (entry.howToReport) lines.push(`  Comment reporter : ${entry.howToReport}`);
     lines.push("  Ne jamais signaler :");
     for (const n of entry.never) lines.push(`    ✗ ${n}`);
+    if (entry.suggestion) {
+      lines.push("  Suggestion BLOQUANT :");
+      for (const l of entry.suggestion.split("\n")) lines.push(`    ${l}`);
+    }
     lines.push("");
   }
 
@@ -389,6 +411,10 @@ function injectTaxonomy() {
     if (entry.never.length > 0) {
       lines.push("  Ne jamais signaler :");
       for (const n of entry.never) lines.push(`    ✗ ${n}`);
+    }
+    if (entry.suggestion) {
+      lines.push("  Suggestion BLOQUANT :");
+      for (const l of entry.suggestion.split("\n")) lines.push(`    ${l}`);
     }
     lines.push("");
   }
@@ -518,8 +544,60 @@ d'ouvrir la taxonomie et avant d'attribuer un code :
 ${injectTaxonomy()}
 
 ══════════════════════════════════════════════════════
+FORMAT DES SUGGESTIONS BLOQUANT
+══════════════════════════════════════════════════════
+Pour chaque ligne BLOQUANT du tableau, le champ JSONF doit contenir :
+  ??? [SUGGESTION: <raisonnement factuel court diriges vers le PDF>]
+
+Regles absolues pour les SUGGESTIONS :
+- La SUGGESTION est un aide au raisonnement, PAS une reponse finale.
+- Elle doit toujours orienter le verificateur humain vers le PDF.
+- Elle ne doit jamais affirmer quelle valeur est correcte.
+- La verification humaine remplace l'INTEGRALITE de "??? [SUGGESTION: ...]" par la valeur correcte trouvee dans le PDF.
+- La suggestion est automatiquement jetee quand le JSONF est mis a jour.
+- Pour les lignes INLINE : JSONF est directement rempli — pas de SUGGESTION.
+
+══════════════════════════════════════════════════════
 PROCEDURE DE COMPARAISON
 ══════════════════════════════════════════════════════
+
+ETAPE 0 — COHERENCE METADATA
+  Execute ces verifications avant tout comptage ou comparaison.
+  Les verifications ratees produisent une ligne globale dans le tableau.
+
+  CHECK CT (hasCT = ${data.hasCT ? "OUI" : "NON"}) :
+  ${data.hasCT
+    ? `hasCT = OUI declare.
+    Si les deux JSON ont ZERO question avec un champ 'correct' :
+      Reference=global | Type=FIELD_MISSING | JSON1=aucun champ 'correct' | JSON2=aucun champ 'correct'
+      JSONF: ??? [SUGGESTION: relancez la numerisation si le CT est bien present — les deux modeles ont manque la section CT du PDF.]
+      Full Phrase: hasCT declare OUI mais aucun champ 'correct' extrait par les deux modeles. Verifiez si le CT est bien present dans le PDF ou corrigez hasCT en NON.`
+    : `hasCT = NON declare.
+    Si les deux JSON ont AU MOINS UNE question avec un champ 'correct' :
+      Reference=global | Type=FIELD_MISSING | JSON1=champs 'correct' presents | JSON2=champs 'correct' presents
+      JSONF: ??? [SUGGESTION: verifiez que le PDF ne contient pas un CT. Si CT absent, les valeurs 'correct' doivent etre supprimees du JSON final.]
+      Full Phrase: hasCT declare NON mais les deux modeles ont rempli des champs 'correct'. Risque de deduction medicale non autorisee.`}
+
+  CHECK CAS (hasCas = ${data.hasCas ? "OUI" : "NON"}) :
+  ${data.hasCas
+    ? `hasCas = OUI declare.
+    Si les deux JSON ont ZERO champ 'cas' :
+      Reference=global | Type=CAS_DIVERGE | JSON1=aucun champ 'cas' | JSON2=aucun champ 'cas'
+      JSONF: ??? [SUGGESTION: relancez la numerisation si le cas clinique est bien present dans le PDF.]
+      Full Phrase: hasCas declare OUI mais aucun champ 'cas' extrait. Verifiez si le cas clinique est bien present dans le PDF ou corrigez hasCas en NON.`
+    : "(hasCas=NON — pas de verification necessaire.)"}
+
+  CHECK ASSOCIATIONS (hasComb = ${data.hasComb ? "OUI" : "NON"}) :
+  ${data.hasComb
+    ? `hasComb = OUI declare.
+    Si les deux JSON ont ZERO question avec un champ 'hint' :
+      Reference=global | Type=FIELD_MISSING | JSON1=aucun champ 'hint' | JSON2=aucun champ 'hint'
+      JSONF: ??? [SUGGESTION: les deux modeles n'ont pas detecte de questions d'association. Verifiez le format dans le PDF.]
+      Full Phrase: hasComb declare OUI mais aucun champ 'hint' extrait. Verifiez si les questions d'association sont presentes dans le PDF ou corrigez hasComb.`
+    : "(hasComb=NON — pas de verification necessaire.)"}
+
+  → Si toutes les verifications ETAPE 0 passent : ne rien ajouter au tableau. Passer a ETAPE 1.
+  → Si une verification echoue : ajouter la ligne globale au tableau AVANT toutes les autres.
 
 ETAPE 1 — COMPTAGE
   Compare le nombre d'objets dans JSON1.questions et JSON2.questions.
@@ -689,14 +767,15 @@ COLONNES :
                                          CAS_DIVERGE | ROW_COUNT | FIELD_MISSING | AUDIT_ONLY
 - JSON1            : valeur dans JSON1 pour ce champ. Pour QCM_SHIFT : reconstruction complete (Text / A / B / C / D / E). Pour SPELL : mot divergent entre [crochets].
 - JSON2            : valeur dans JSON2 pour ce champ. Pour QCM_SHIFT : reconstruction complete. Pour SPELL : mot divergent entre [crochets].
-- JSONF            : valeur correcte si INLINE et evidente | "???" si BLOQUANT ou ambiguite.
-                     Pour QCM_SHIFT : reconstruction ligne par ligne avec ??? sur chaque champ divergent.
+- JSONF            : valeur correcte si INLINE et evidente | "??? [SUGGESTION: ...]" si BLOQUANT.
+                     Pour QCM_SHIFT : reconstruction ligne par ligne avec ??? [SUGGESTION: ...] sur chaque champ divergent.
                      Pour SPELL : phrase complete avec le mot corrige entre [crochets].
-                     Pour PROP_SWAP : [champ1]=??? / [champ2]=???
+                     Pour PROP_SWAP : [champ1]=??? [SUGGESTION: ...] / [champ2]=??? [SUGGESTION: ...]
 - Full Phrase      : contexte — phrase complete depuis le JSON le plus complet, ou description de l'ecart. Pour QCM_SHIFT : liste toutes les raisons separees par " + ".
 
 REGLE CRITIQUE JSONF POUR PROP_DIVERGE / PROP_TRUNCATED / PROP_SWAP / PROP_ORDER / QCM_SHIFT / CT_DIVERGE / CT_DRIFT :
-→ JSONF = "???" (ou reconstruction avec ???) tant que la verification PDF n'a pas ete faite.
+→ JSONF = "??? [SUGGESTION: ...]" (ou reconstruction avec ???) tant que la verification PDF n'a pas ete faite.
+→ La SUGGESTION oriente le verificateur humain ; elle ne remplace jamais la lecture du PDF.
 → Une fois le rapport complete, JSONF devient la source de verite finale pour ces types.
 
 Termine par :
@@ -705,6 +784,8 @@ TOTAL DIVERGENCES       : [nombre total]
 QUESTIONS CONCORDANTES  : [nombre de questions identiques sur tous les champs]
 QUESTIONS DIVERGENTES   : [nombre de questions avec au moins une divergence]
 BLOQUANTS               : [nombre de lignes ou JSONF contient encore "???"]
+SUGGESTIONS FOURNIES    : [nombre de lignes BLOQUANT contenant une SUGGESTION dans JSONF]
+VERIFICATIONS METADATA  : [CONFORME si ETAPE 0 passe sans anomalie / ANOMALIE + nombre de lignes globales ajoutees sinon]
 INSTRUCTION VERIFICATION HUMAINE : Les lignes INLINE ont deja un JSONF final. Pour chaque ligne BLOQUANT, verifiez dans le PDF puis remplacez tous les "???" dans JSONF par la valeur correcte. Ensuite, renvoyez ce REVIEW REPORT complete au meme troisieme modele dans la meme conversation pour obtenir VALIDATION PASSED + le JSON final.
 INSTRUCTION RETOUR MODELE : Quand ce REVIEW REPORT complet est renvoye dans la meme conversation avec tous les JSONF finalises, applique JSONF strictement puis retourne exactement un seul bloc de code \`\`\`text et rien d'autre. Dans cet unique bloc, mets d'abord le resume de validation ci-dessous, puis une ligne exacte "JSON FINAL :", puis le tableau JSON final des questions. N'enveloppe jamais ce tableau dans un objet. N'ajoute aucun texte hors de cet unique bloc de code.
 MODELE EXACT DE L'UNIQUE BLOC \`\`\`text\`\`\` FINAL :
@@ -753,7 +834,19 @@ Un rapport domine par des micro-differences cosmetiques est invalide selon REGLE
 - JAMAIS de correction par logique medicale.
 - JAMAIS de signalement d'une valeur partagee par les deux JSON.
 - JAMAIS de texte libre en dehors du bloc \`\`\`text\`\`\`.
-- Ta reponse se termine apres INSTRUCTION RETOUR MODELE.`;
+- Ta reponse se termine apres INSTRUCTION RETOUR MODELE.
+
+══════════════════════════════════════════════════════
+AUTO-VERIFICATION DU RAPPORT AVANT SOUMISSION
+══════════════════════════════════════════════════════
+Avant de soumettre ton rapport, verifie ces points :
+1. Chaque ligne BLOQUANT du tableau contient "???" suivi d'une SUGGESTION dans le champ JSONF.
+   Aucune ligne BLOQUANT ne laisse JSONF vide ou a "???" seul sans guidance.
+2. Les lignes INLINE ont un JSONF directement rempli (sans SUGGESTION).
+3. Le pied du rapport contient les 6 lignes : TOTAL DIVERGENCES, QUESTIONS CONCORDANTES, QUESTIONS DIVERGENTES, BLOQUANTS, SUGGESTIONS FOURNIES, VERIFICATIONS METADATA.
+4. VERIFICATIONS METADATA reflete correctement le resultat de l'ETAPE 0.
+5. SUGGESTIONS FOURNIES compte exactement le nombre de lignes BLOQUANT ayant une SUGGESTION dans JSONF.
+Si un point echoue, corrige avant de retourner le rapport.`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
