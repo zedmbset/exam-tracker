@@ -2,6 +2,8 @@
 
 A web-based dashboard for tracking medical exam data. Uses Google Sheets as the database and Google Drive for PDF storage.
 
+This file is the practical technical reference for the application.
+
 ## Project Structure
 
 ```
@@ -13,7 +15,7 @@ exam-tracker/ (repo root)
 ├── SCHEMA.md              # Full database schema with column groups and tags
 ├── DEPLOYMENT_GUIDE.md    # Setup and deployment instructions
 ├── .gitignore             # Excludes .env, node_modules, attached_assets
-├── replit.md              # This file
+├── PROJECT_OVERVIEW.md    # Main high-level project summary
 └── public/
     ├── index.html         # Main dashboard (stats, filters, table)
     └── exam.html          # Exam detail page (fill fields, upload PDF, Google sign-in, inline help)

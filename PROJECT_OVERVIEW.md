@@ -15,6 +15,15 @@ A Node.js/Express web application for tracking the digitization progress of exam
 - `reports/` - PDF report generation logic (admin and public reports)
 - `docs/` - Project documentation and data schemas
 
+## AI Working Preferences
+- Project-specific AI chat instructions are stored in `docs/AI_CHAT_INSTRUCTIONS.md`
+- Update that file whenever a preference should persist across future chats
+
+## Documentation Entry Point
+- Start reading project documentation from `docs/INDEX.md`
+- Use that file as the table of contents for all important docs
+- For a deeper technical reference, see `docs/TECHNICAL_OVERVIEW.md`
+
 ## Key API Routes
 - `GET /api/sheet` - Read all rows from Google Sheet
 - `PUT /api/sheet/:rowIndex` - Write one row to Google Sheet
