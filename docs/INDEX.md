@@ -26,6 +26,12 @@ This file describes the purpose of every important documentation file in the pro
 | `docs/REPORT_PDF_ARCHITECTURE.md` | PDF report generation architecture |
 | `docs/AI_CHAT_INSTRUCTIONS.md` | Persistent AI working preferences for this project |
 
+## Documentation Rules
+
+- `replit.md` is kept as the Replit-facing memory file.
+- `docs/TECHNICAL_OVERVIEW.md` is the active deep technical reference.
+- Do not reintroduce `docs/replit.md` as a separate technical source.
+
 ## Key Design Notes
 
 - The backend is a **secure proxy** — no Google credentials are ever sent to the browser
