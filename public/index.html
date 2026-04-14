@@ -929,8 +929,12 @@ function populateFilters() {
 function getFiltered() {
   const { q, wilayas, yearMode, yearSingle, yearFrom, yearTo, rotations, statuses, completion } = filterState;
   const ql = q.toLowerCase();
+  const qTokens = ql.split(/\s+/).filter(Boolean);
   return sheetData.filter(r => {
-    if (ql && !(`${cell(r,'Wilaya')} ${cell(r,'Module')} ${cell(r,'Rotation')} ${cell(r,'Level')}`).toLowerCase().includes(ql)) return false;
+    if (qTokens.length) {
+      const haystack = `${cell(r,'Wilaya')} ${cell(r,'Module')} ${cell(r,'Rotation')} ${cell(r,'Level')}`.toLowerCase();
+      if (!qTokens.every(token => haystack.includes(token))) return false;
+    }
     if (wilayas.length   && !wilayas.includes(cell(r,'Wilaya')))     return false;
     const yr = String(cell(r,'Year') || '');
     if (yearMode==='single' && yearSingle && yr !== yearSingle)       return false;
