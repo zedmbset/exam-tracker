@@ -457,7 +457,7 @@ CETTE ETAPE = RAPPORT DE COMPARAISON UNIQUEMENT.
 - Ton unique livrable est le bloc \`\`\`text\`\`\` du rapport de comparaison.
 - La reponse est INVALIDE si le REVIEW REPORT n'est pas entierement a l'interieur d'un unique bloc \`\`\`text\`\`\`.
 - La reponse est INVALIDE si tu ajoutes du texte avant ou apres ce bloc \`\`\`text\`\`\`.
-- Termine ta reponse apres la ligne "INSTRUCTION RETOUR MODELE". Rien d'autre apres.
+- Termine ta reponse apres la section "CONTRAT TOUR SUIVANT MODELE". Rien d'autre apres.
 ⛔⛔⛔ FIN DES REGLES ABSOLUES ⛔⛔⛔
 
 Tu recois :
@@ -783,14 +783,23 @@ REGLE CRITIQUE JSONF POUR PROP_DIVERGE / PROP_TRUNCATED / PROP_SWAP / PROP_ORDER
 
 Termine par :
 ---
+VALIDATION STATE
 TOTAL DIVERGENCES       : [nombre total]
 QUESTIONS CONCORDANTES  : [nombre de questions identiques sur tous les champs]
 QUESTIONS DIVERGENTES   : [nombre de questions avec au moins une divergence]
-BLOQUANTS               : [nombre de lignes ou JSONF contient encore "???"]
+BLOQUANTS               : [nombre de lignes BLOQUANT]
 JSONF PROPOSES          : [nombre de lignes BLOQUANT ou le Modele 3 a propose une valeur dans JSONF au lieu de ???]
 VERIFICATIONS METADATA  : [CONFORME si ETAPE 0 passe sans anomalie / ANOMALIE + nombre de lignes globales ajoutees sinon]
-INSTRUCTION VERIFICATION HUMAINE : Les lignes INLINE ont deja un JSONF final. Pour les lignes BLOQUANT avec un JSONF propose, validez la valeur ou remplacez-la par la valeur correcte du PDF. Pour les lignes BLOQUANT avec ???, verifiez dans le PDF et remplacez ??? par la valeur correcte. Ensuite, renvoyez ce REVIEW REPORT complete au meme troisieme modele dans la meme conversation pour obtenir VALIDATION PASSED + le JSON final.
-INSTRUCTION RETOUR MODELE : Quand ce REVIEW REPORT complet est renvoye dans la meme conversation avec tous les JSONF finalises, applique JSONF strictement puis retourne exactement un seul bloc de code \`\`\`text et rien d'autre. Dans cet unique bloc, mets d'abord le resume de validation ci-dessous, puis une ligne exacte "JSON FINAL :", puis le tableau JSON final des questions. N'enveloppe jamais ce tableau dans un objet. N'ajoute aucun texte hors de cet unique bloc de code.
+ETAT FINALISATION       : [PRET POUR FINALISATION si aucun ??? ne reste dans JSONF / BLOQUE - ??? RESTANTS sinon]
+CONTRAT TOUR SUIVANT MODELE
+Si ce REVIEW REPORT te revient dans la meme conversation avec au moins un ??? restant dans JSONF, ou un JSONF vide sur une ligne BLOQUANT, retourne exactement un unique bloc \`\`\`text\`\`\` et rien d'autre selon ce modele :
+\`\`\`text
+VALIDATION FAILED
+Raison              : REVIEW REPORT incomplet
+Blocage             : JSONF contient encore des ??? ou une ligne BLOQUANT sans valeur finale
+Action attendue     : finaliser toutes les valeurs JSONF avant de redemander le JSON final
+\`\`\`
+Si ce REVIEW REPORT te revient dans la meme conversation avec toutes les lignes BLOQUANT finalisees dans JSONF (aucun ??? restant), ignore JSON1 et JSON2 comme sources de verite finales, applique JSONF strictement, puis retourne exactement un seul bloc de code \`\`\`text\`\`\` et rien d'autre. Dans cet unique bloc, mets d'abord le resume de validation ci-dessous, puis une ligne exacte "JSON FINAL :", puis le tableau JSON final des questions. N'enveloppe jamais ce tableau dans un objet. N'ajoute aucun texte hors de cet unique bloc de code.
 MODELE EXACT DE L'UNIQUE BLOC \`\`\`text\`\`\` FINAL :
 \`\`\`text
 VALIDATION PASSED
@@ -837,7 +846,7 @@ Un rapport domine par des micro-differences cosmetiques est invalide selon REGLE
 - JAMAIS de correction par logique medicale.
 - JAMAIS de signalement d'une valeur partagee par les deux JSON.
 - JAMAIS de texte libre en dehors du bloc \`\`\`text\`\`\`.
-- Ta reponse se termine apres INSTRUCTION RETOUR MODELE.
+- Ta reponse se termine apres CONTRAT TOUR SUIVANT MODELE.
 
 ══════════════════════════════════════════════════════
 AUTO-VERIFICATION DU RAPPORT AVANT SOUMISSION
@@ -847,9 +856,10 @@ Avant de soumettre ton rapport, verifie ces points :
    Aucune ligne BLOQUANT ne laisse JSONF vide. "[SUGGESTION: ...]" est interdit dans JSONF.
 2. Chaque ligne BLOQUANT a une Mismatch Note non vide (1-2 phrases expliquant la divergence).
 3. Les lignes INLINE ont un JSONF directement rempli (valeur correcte, pas ???).
-4. Le pied du rapport contient les 6 lignes : TOTAL DIVERGENCES, QUESTIONS CONCORDANTES, QUESTIONS DIVERGENTES, BLOQUANTS, JSONF PROPOSES, VERIFICATIONS METADATA.
-5. VERIFICATIONS METADATA reflete correctement le resultat de l'ETAPE 0.
-6. JSONF PROPOSES compte exactement le nombre de lignes BLOQUANT ou le Modele 3 a propose une valeur (non ???) dans JSONF.
+4. Le pied du rapport contient la section VALIDATION STATE avec les 7 lignes : TOTAL DIVERGENCES, QUESTIONS CONCORDANTES, QUESTIONS DIVERGENTES, BLOQUANTS, JSONF PROPOSES, VERIFICATIONS METADATA, ETAT FINALISATION.
+5. ETAT FINALISATION vaut "PRET POUR FINALISATION" seulement s'il ne reste aucun ??? dans JSONF, sinon "BLOQUE - ??? RESTANTS".
+6. VERIFICATIONS METADATA reflete correctement le resultat de l'ETAPE 0.
+7. JSONF PROPOSES compte exactement le nombre de lignes BLOQUANT ou le Modele 3 a propose une valeur (non ???) dans JSONF.
 Si un point echoue, corrige avant de retourner le rapport.`;
 }
 

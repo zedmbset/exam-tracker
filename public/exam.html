@@ -2030,12 +2030,11 @@
 
           <!-- Phase 3 : Comparison prompt (hidden until generated) -->
           <div id="dcPhase3" style="display:none;">
-            <div class="dc-divider"><span>Paste this prompt into a THIRD neutral AI to generate the review report, then send the corrected report back to that same AI</span></div>
             <div class="dc-phase">
               <div class="dc-phase-header">
                 <span class="dc-phase-badge" style="background:linear-gradient(135deg,#10b981,#059669);">3</span>
                 <div>
-                  <div class="dc-phase-title">Review report prompt — copy into a third AI model</div>
+                  <div class="dc-phase-title">Review report prompt — copy into a third AI model <button type="button" class="help-btn" aria-label="Review prompt help" data-help="Check the PDF outside the app. Edit only JSONF inside the review report. Keep the same conversation with the same third AI. When every ??? is resolved, send the full completed report back to that same AI. Paste only the final AI output containing VALIDATION PASSED and JSON FINAL in Step 3.">?</button></div>
                   <div class="dc-phase-sub">No PDF attachment needed. The third AI compares both JSONs, returns a review report with JSONF proposals, then waits for the corrected report to produce VALIDATION PASSED + the final JSON.</div>
                 </div>
                 <button class="copy-btn" id="copyDcBtn" onclick="dcCopyCheckPrompt()" style="margin-left:auto;flex-shrink:0;">
@@ -2043,18 +2042,6 @@
                 </button>
               </div>
               <div class="prompt-text" id="dcCheckPromptText" style="margin-top:10px;"></div>
-            </div>
-            <div class="dc-divider" style="margin-top:14px;">
-              <span>Human review happens outside the app: fix JSONF in the report, send it back to the SAME third AI, then paste only the final AI output below in Step 3</span>
-            </div>
-            <div class="instruction-box" style="margin-top:12px;">
-              <strong>Workflow after the report:</strong>
-              <ul>
-                <li>Check the PDF and resolve every <code>???</code> directly inside <code>JSONF</code>.</li>
-                <li>Send the completed report back to the same third AI in the same conversation.</li>
-                <li>Wait for <code>VALIDATION PASSED</code> and the final JSON array.</li>
-                <li>Paste only that final AI output in Step 3 below.</li>
-              </ul>
             </div>
           </div>`;
 
