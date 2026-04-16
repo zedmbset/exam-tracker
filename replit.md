@@ -11,7 +11,7 @@ A Node.js/Express web application for tracking the digitization progress of exam
 
 ## Architecture
 - `server.js` - Main Express server and all API routes
-- `public/` - Static frontend files (index.html, exam.html, prompts/ JS modules)
+- `public/` - Static frontend files (index.html, exam.html, availability.html, prompts/ JS modules)
 - `reports/` - PDF report generation logic (admin and public reports)
 - `docs/` - Project documentation and data schemas
 

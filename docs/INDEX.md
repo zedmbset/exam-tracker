@@ -24,6 +24,7 @@ This file describes the purpose of every important documentation file in the pro
 | `docs/PROMPT_EDITING_RULES.md` | Rules for editing the AI digitization prompts |
 | `docs/SUBCATEGORY_UI_GUIDE.md` | Guide for the subcategory mapping UI |
 | `docs/REPORT_PDF_ARCHITECTURE.md` | PDF report generation architecture |
+| `docs/AVAILABILITY_DASHBOARD.md` | Availability overview page (`/availability.html`) — layout, filters, completion rule, column resolution |
 | `docs/AI_CHAT_INSTRUCTIONS.md` | Persistent AI working preferences for this project |
 
 ## Key Design Notes
