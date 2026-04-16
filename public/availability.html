@@ -53,6 +53,31 @@
     cursor: pointer;
     min-width: 140px;
   }
+  .export-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.3);
+    background: #22c55e;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-left: 4px;
+    transition: background 0.15s, opacity 0.15s;
+  }
+  .export-btn:hover { background: #16a34a; }
+  .export-btn:disabled { opacity: 0.6; cursor: wait; }
+
+  /* Export rendering wrapper — used only during capture */
+  .export-render {
+    background: linear-gradient(135deg, #1e3a8a 0%, #4c1d95 100%);
+    padding: 28px;
+    width: 1280px;
+  }
+  .export-render .title-banner { margin-bottom: 22px; }
 
   /* Title banner */
   .title-banner {
@@ -220,6 +245,7 @@
 
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </head>
 <body>
 <div class="page">
@@ -233,6 +259,10 @@
       <select id="fYear" onchange="onFilterChange()"></select>
       <label for="fWilaya">Wilaya</label>
       <select id="fWilaya" onchange="onFilterChange()"></select>
+      <button type="button" id="exportBtn" class="export-btn" onclick="exportAsImage()" title="Exporter en image PNG">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span id="exportBtnText">Exporter</span>
+      </button>
     </div>
   </div>
 
@@ -488,6 +518,76 @@ function renderCard(level, scope) {
       <div class="card-title">${level.label}</div>
       ${body}
     </div>`;
+}
+
+async function exportAsImage() {
+  const btn = document.getElementById('exportBtn');
+  const btnText = document.getElementById('exportBtnText');
+  if (typeof html2canvas !== 'function') {
+    alert('Le module d\'export n\'a pas pu être chargé. Vérifiez votre connexion internet.');
+    return;
+  }
+  const year = document.getElementById('fYear').value || 'all';
+  const wilaya = document.getElementById('fWilaya').value || 'all';
+  const titleEl = document.getElementById('pageTitle');
+  const grid = document.getElementById('cardsGrid');
+  if (!grid || grid.style.display === 'none') return;
+
+  btn.disabled = true;
+  const originalText = btnText.textContent;
+  btnText.textContent = 'Export…';
+
+  // Build an off-screen wrapper that mirrors the on-screen layout including
+  // the gradient background and title banner.
+  const wrap = document.createElement('div');
+  wrap.className = 'export-render';
+  wrap.style.position = 'fixed';
+  wrap.style.left = '-10000px';
+  wrap.style.top = '0';
+
+  const banner = document.createElement('div');
+  banner.className = 'title-banner';
+  const h1 = document.createElement('h1');
+  h1.textContent = titleEl.textContent;
+  banner.appendChild(h1);
+
+  const gridClone = grid.cloneNode(true);
+  gridClone.style.display = '';
+
+  wrap.appendChild(banner);
+  wrap.appendChild(gridClone);
+  document.body.appendChild(wrap);
+
+  try {
+    const canvas = await html2canvas(wrap, {
+      backgroundColor: null,
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      windowWidth: wrap.scrollWidth,
+      windowHeight: wrap.scrollHeight,
+    });
+    const safe = s => String(s).replace(/[^a-zA-Z0-9_-]+/g, '-');
+    const filename = `qcm-disponibles_${safe(year)}_${safe(wilaya)}.png`;
+    canvas.toBlob(blob => {
+      if (!blob) { alert('Échec de la génération de l\'image.'); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, 'image/png');
+  } catch (err) {
+    console.error('Export failed:', err);
+    alert('Échec de l\'export: ' + (err && err.message ? err.message : err));
+  } finally {
+    document.body.removeChild(wrap);
+    btn.disabled = false;
+    btnText.textContent = originalText;
+  }
 }
 
 function escapeHtml(s) {
