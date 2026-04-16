@@ -633,6 +633,8 @@ async function renderExportCanvas(opts) {
     // while the cloned layout is mounted, so we can later slice the rendered
     // canvas between rows for multi-page PDFs.
     const wrapRect = wrap.getBoundingClientRect();
+    const bannerRect = banner.getBoundingClientRect();
+    const bannerHeightCss = bannerRect.bottom - wrapRect.top;
     const rowMap = new Map();
     gridClone.querySelectorAll('.card').forEach(c => {
       const r = c.getBoundingClientRect();
@@ -659,7 +661,8 @@ async function renderExportCanvas(opts) {
     const rowCuts = rowCutsCss
       .map(v => Math.round(v * scale))
       .filter(v => v > 0 && v < canvas.height);
-    return { canvas, rowCuts };
+    const bannerHeightPx = Math.max(1, Math.round(bannerHeightCss * scale));
+    return { canvas, rowCuts, bannerHeightPx };
   } finally {
     document.body.removeChild(wrap);
   }
@@ -757,6 +760,7 @@ async function exportAsPdf() {
     if (!rendered) return;
     let canvas = rendered.canvas;
     let rowCuts = rendered.rowCuts;
+    let bannerHeightPx = rendered.bannerHeightPx;
 
     // Auto: pick orientation based on captured canvas aspect ratio. When the
     // content is taller than wide, re-render the grid as 2 columns so it fits
@@ -768,7 +772,7 @@ async function exportAsPdf() {
       } else {
         orientation = 'portrait';
         const narrow = await renderExportCanvas({ cols: 2, scale: 2 });
-        if (narrow) { canvas = narrow.canvas; rowCuts = narrow.rowCuts; }
+        if (narrow) { canvas = narrow.canvas; rowCuts = narrow.rowCuts; bannerHeightPx = narrow.bannerHeightPx; }
       }
     }
 
@@ -795,12 +799,29 @@ async function exportAsPdf() {
       pdf.addImage(dataUrl, 'JPEG', x, y, imgW, imgH, undefined, 'FAST');
     } else {
       // Multi-page: slice vertically. Prefer breaking at row midpoints.
-      const sliceMaxPx = Math.floor(maxH / mmPerPx);
+      // Page 1 already contains the banner at the top of the canvas. For
+      // subsequent pages we prepend a cropped copy of the banner so the
+      // heading is repeated on every page.
+      const bannerMM = bannerHeightPx * mmPerPx;
+      const bannerCanvas = document.createElement('canvas');
+      bannerCanvas.width = canvas.width;
+      bannerCanvas.height = bannerHeightPx;
+      bannerCanvas.getContext('2d').drawImage(
+        canvas, 0, 0, canvas.width, bannerHeightPx,
+        0, 0, canvas.width, bannerHeightPx
+      );
+      const bannerDataUrl = bannerCanvas.toDataURL('image/jpeg', 0.92);
+
+      const sliceMaxPxFirst = Math.floor(maxH / mmPerPx);
+      const sliceMaxPxRest = Math.max(1, Math.floor((maxH - bannerMM) / mmPerPx));
       const sortedCuts = rowCuts.slice().sort((a, b) => a - b);
+
+      // First, compute all page splits so we can show "Page N / M".
+      const splits = [];
       let startY = 0;
-      let first = true;
       let guard = 0;
-      while (startY < canvas.height && guard++ < 200) {
+      while (startY < canvas.height && guard++ < 400) {
+        const sliceMaxPx = splits.length === 0 ? sliceMaxPxFirst : sliceMaxPxRest;
         const remaining = canvas.height - startY;
         let endY;
         if (remaining <= sliceMaxPx) {
@@ -814,20 +835,39 @@ async function exportAsPdf() {
           }
           endY = best > 0 ? best : target;
         }
-        const sliceH = endY - startY;
+        if (endY <= startY) endY = Math.min(canvas.height, startY + sliceMaxPx);
+        splits.push({ startY, endY });
+        startY = endY;
+      }
+      const totalPages = splits.length;
+
+      splits.forEach((p, idx) => {
+        const isFirst = idx === 0;
+        const sliceH = p.endY - p.startY;
         const slice = document.createElement('canvas');
         slice.width = canvas.width;
         slice.height = sliceH;
-        const sctx = slice.getContext('2d');
-        sctx.drawImage(canvas, 0, startY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        slice.getContext('2d').drawImage(
+          canvas, 0, p.startY, canvas.width, sliceH,
+          0, 0, canvas.width, sliceH
+        );
         const dataUrl = slice.toDataURL('image/jpeg', 0.92);
         const imgW = maxW;
         const imgH = sliceH * mmPerPx;
-        if (!first) pdf.addPage(prefs.format, orientation);
-        pdf.addImage(dataUrl, 'JPEG', margin, margin, imgW, imgH, undefined, 'FAST');
-        first = false;
-        startY = endY;
-      }
+        if (!isFirst) pdf.addPage(prefs.format, orientation);
+        if (isFirst) {
+          pdf.addImage(dataUrl, 'JPEG', margin, margin, imgW, imgH, undefined, 'FAST');
+        } else {
+          pdf.addImage(bannerDataUrl, 'JPEG', margin, margin, imgW, bannerMM, undefined, 'FAST');
+          pdf.addImage(dataUrl, 'JPEG', margin, margin + bannerMM, imgW, imgH, undefined, 'FAST');
+        }
+        // Page footer: "Page N / M"
+        try {
+          pdf.setFontSize(9);
+          pdf.setTextColor(120);
+          pdf.text(`Page ${idx + 1} / ${totalPages}`, pageW - margin, pageH - margin / 2, { align: 'right' });
+        } catch (e) { /* footer is best-effort */ }
+      });
     }
     pdf.save(`qcm-disponibles_${safeName(year)}_${safeName(wilaya)}.pdf`);
   } catch (err) {
