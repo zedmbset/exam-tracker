@@ -266,6 +266,16 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span id="exportBtnText">PNG</span>
       </button>
+      <label for="pdfPageSize">Format</label>
+      <select id="pdfPageSize" onchange="onPdfPrefsChange()" title="Format de page PDF">
+        <option value="a4">A4</option>
+        <option value="letter">Letter</option>
+      </select>
+      <label for="pdfOrientation">Orient.</label>
+      <select id="pdfOrientation" onchange="onPdfPrefsChange()" title="Orientation PDF">
+        <option value="landscape">Paysage</option>
+        <option value="portrait">Portrait</option>
+      </select>
       <button type="button" id="exportPdfBtn" class="export-btn pdf" onclick="exportAsPdf()" title="Exporter en PDF">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span id="exportPdfBtnText">PDF</span>
@@ -568,6 +578,32 @@ async function renderExportCanvas() {
 
 function safeName(s) { return String(s).replace(/[^a-zA-Z0-9_-]+/g, '-'); }
 
+const PDF_PREFS_KEY = 'availability.pdfPrefs';
+const PDF_FORMATS = ['a4', 'letter'];
+const PDF_ORIENTATIONS = ['landscape', 'portrait'];
+
+function getPdfPrefs() {
+  let stored = {};
+  try { stored = JSON.parse(localStorage.getItem(PDF_PREFS_KEY) || '{}') || {}; } catch (e) { stored = {}; }
+  const format = PDF_FORMATS.includes(stored.format) ? stored.format : 'a4';
+  const orientation = PDF_ORIENTATIONS.includes(stored.orientation) ? stored.orientation : 'landscape';
+  return { format, orientation };
+}
+
+function onPdfPrefsChange() {
+  const format = document.getElementById('pdfPageSize').value;
+  const orientation = document.getElementById('pdfOrientation').value;
+  try { localStorage.setItem(PDF_PREFS_KEY, JSON.stringify({ format, orientation })); } catch (e) {}
+}
+
+function initPdfPrefsUI() {
+  const prefs = getPdfPrefs();
+  const sizeEl = document.getElementById('pdfPageSize');
+  const orEl = document.getElementById('pdfOrientation');
+  if (sizeEl) sizeEl.value = prefs.format;
+  if (orEl) orEl.value = prefs.orientation;
+}
+
 async function exportAsImage() {
   const btn = document.getElementById('exportBtn');
   const btnText = document.getElementById('exportBtnText');
@@ -627,7 +663,8 @@ async function exportAsPdf() {
 
     // A4 landscape: 297mm x 210mm. Fit canvas into the page preserving
     // aspect ratio so the six-card grid lands on a single page.
-    const pdf = new jsPDFCtor({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const prefs = getPdfPrefs();
+    const pdf = new jsPDFCtor({ orientation: prefs.orientation, unit: 'mm', format: prefs.format });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
     const margin = 8;
@@ -657,6 +694,7 @@ function escapeHtml(s) {
   }[ch]));
 }
 
+initPdfPrefsUI();
 loadData();
 </script>
 </body>
