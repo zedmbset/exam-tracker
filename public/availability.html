@@ -70,6 +70,8 @@
   }
   .export-btn:hover { background: #16a34a; }
   .export-btn:disabled { opacity: 0.6; cursor: wait; }
+  .export-btn.pdf { background: #dc2626; }
+  .export-btn.pdf:hover { background: #b91c1c; }
 
   /* Export rendering wrapper — used only during capture */
   .export-render {
@@ -246,6 +248,7 @@
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 </head>
 <body>
 <div class="page">
@@ -261,7 +264,11 @@
       <select id="fWilaya" onchange="onFilterChange()"></select>
       <button type="button" id="exportBtn" class="export-btn" onclick="exportAsImage()" title="Exporter en image PNG">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span id="exportBtnText">Exporter</span>
+        <span id="exportBtnText">PNG</span>
+      </button>
+      <button type="button" id="exportPdfBtn" class="export-btn pdf" onclick="exportAsPdf()" title="Exporter en PDF">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span id="exportPdfBtnText">PDF</span>
       </button>
     </div>
   </div>
@@ -520,25 +527,11 @@ function renderCard(level, scope) {
     </div>`;
 }
 
-async function exportAsImage() {
-  const btn = document.getElementById('exportBtn');
-  const btnText = document.getElementById('exportBtnText');
-  if (typeof html2canvas !== 'function') {
-    alert('Le module d\'export n\'a pas pu être chargé. Vérifiez votre connexion internet.');
-    return;
-  }
-  const year = document.getElementById('fYear').value || 'all';
-  const wilaya = document.getElementById('fWilaya').value || 'all';
+async function renderExportCanvas() {
   const titleEl = document.getElementById('pageTitle');
   const grid = document.getElementById('cardsGrid');
-  if (!grid || grid.style.display === 'none') return;
+  if (!grid || grid.style.display === 'none') return null;
 
-  btn.disabled = true;
-  const originalText = btnText.textContent;
-  btnText.textContent = 'Export…';
-
-  // Build an off-screen wrapper that mirrors the on-screen layout including
-  // the gradient background and title banner.
   const wrap = document.createElement('div');
   wrap.className = 'export-render';
   wrap.style.position = 'fixed';
@@ -567,8 +560,32 @@ async function exportAsImage() {
       windowWidth: wrap.scrollWidth,
       windowHeight: wrap.scrollHeight,
     });
-    const safe = s => String(s).replace(/[^a-zA-Z0-9_-]+/g, '-');
-    const filename = `qcm-disponibles_${safe(year)}_${safe(wilaya)}.png`;
+    return canvas;
+  } finally {
+    document.body.removeChild(wrap);
+  }
+}
+
+function safeName(s) { return String(s).replace(/[^a-zA-Z0-9_-]+/g, '-'); }
+
+async function exportAsImage() {
+  const btn = document.getElementById('exportBtn');
+  const btnText = document.getElementById('exportBtnText');
+  if (typeof html2canvas !== 'function') {
+    alert('Le module d\'export n\'a pas pu être chargé. Vérifiez votre connexion internet.');
+    return;
+  }
+  const year = document.getElementById('fYear').value || 'all';
+  const wilaya = document.getElementById('fWilaya').value || 'all';
+
+  btn.disabled = true;
+  const originalText = btnText.textContent;
+  btnText.textContent = 'Export…';
+
+  try {
+    const canvas = await renderExportCanvas();
+    if (!canvas) return;
+    const filename = `qcm-disponibles_${safeName(year)}_${safeName(wilaya)}.png`;
     canvas.toBlob(blob => {
       if (!blob) { alert('Échec de la génération de l\'image.'); return; }
       const url = URL.createObjectURL(blob);
@@ -584,7 +601,51 @@ async function exportAsImage() {
     console.error('Export failed:', err);
     alert('Échec de l\'export: ' + (err && err.message ? err.message : err));
   } finally {
-    document.body.removeChild(wrap);
+    btn.disabled = false;
+    btnText.textContent = originalText;
+  }
+}
+
+async function exportAsPdf() {
+  const btn = document.getElementById('exportPdfBtn');
+  const btnText = document.getElementById('exportPdfBtnText');
+  const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+  if (typeof html2canvas !== 'function' || typeof jsPDFCtor !== 'function') {
+    alert('Le module d\'export PDF n\'a pas pu être chargé. Vérifiez votre connexion internet.');
+    return;
+  }
+  const year = document.getElementById('fYear').value || 'all';
+  const wilaya = document.getElementById('fWilaya').value || 'all';
+
+  btn.disabled = true;
+  const originalText = btnText.textContent;
+  btnText.textContent = 'Export…';
+
+  try {
+    const canvas = await renderExportCanvas();
+    if (!canvas) return;
+
+    // A4 landscape: 297mm x 210mm. Fit canvas into the page preserving
+    // aspect ratio so the six-card grid lands on a single page.
+    const pdf = new jsPDFCtor({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 8;
+    const maxW = pageW - margin * 2;
+    const maxH = pageH - margin * 2;
+    const ratio = canvas.width / canvas.height;
+    let imgW = maxW;
+    let imgH = imgW / ratio;
+    if (imgH > maxH) { imgH = maxH; imgW = imgH * ratio; }
+    const x = (pageW - imgW) / 2;
+    const y = (pageH - imgH) / 2;
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    pdf.addImage(dataUrl, 'JPEG', x, y, imgW, imgH, undefined, 'FAST');
+    pdf.save(`qcm-disponibles_${safeName(year)}_${safeName(wilaya)}.pdf`);
+  } catch (err) {
+    console.error('PDF export failed:', err);
+    alert('Échec de l\'export PDF: ' + (err && err.message ? err.message : err));
+  } finally {
     btn.disabled = false;
     btnText.textContent = originalText;
   }
