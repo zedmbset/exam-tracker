@@ -269,6 +269,11 @@
         <option value="2">2×</option>
         <option value="3">3×</option>
       </select>
+      <label for="fPngBg">Fond PNG</label>
+      <select id="fPngBg" onchange="onPngBgChange()" title="Fond de l'export PNG">
+        <option value="gradient">Dégradé</option>
+        <option value="transparent">Transparent</option>
+      </select>
       <button type="button" id="exportBtn" class="export-btn" onclick="exportAsImage()" title="Exporter en image PNG">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span id="exportBtnText">PNG</span>
@@ -569,8 +574,33 @@ function onPngScaleChange() {
   if (sel) writePngScale(sel.value);
 }
 
+const PNG_BG_KEY = 'availability.pngBg';
+const PNG_BG_ALLOWED = ['gradient', 'transparent'];
+const PNG_BG_DEFAULT = 'gradient';
+
+function readPngBg() {
+  try {
+    const v = localStorage.getItem(PNG_BG_KEY);
+    if (PNG_BG_ALLOWED.includes(v)) return v;
+  } catch (e) {}
+  return PNG_BG_DEFAULT;
+}
+function writePngBg(v) {
+  if (!PNG_BG_ALLOWED.includes(v)) return;
+  try { localStorage.setItem(PNG_BG_KEY, v); } catch (e) {}
+}
+function initPngBgSelect() {
+  const sel = document.getElementById('fPngBg');
+  if (sel) sel.value = readPngBg();
+}
+function onPngBgChange() {
+  const sel = document.getElementById('fPngBg');
+  if (sel) writePngBg(sel.value);
+}
+
 async function renderExportCanvas(opts) {
   const scale = (opts && Number(opts.scale)) || 2;
+  const transparent = !!(opts && opts.transparent);
   const titleEl = document.getElementById('pageTitle');
   const grid = document.getElementById('cardsGrid');
   if (!grid || grid.style.display === 'none') return null;
@@ -578,6 +608,9 @@ async function renderExportCanvas(opts) {
   const wrap = document.createElement('div');
   wrap.className = 'export-render';
   if (opts && opts.cols === 2) wrap.classList.add('cols-2');
+  if (transparent) {
+    wrap.style.background = 'transparent';
+  }
   wrap.style.position = 'fixed';
   wrap.style.left = '-10000px';
   wrap.style.top = '0';
@@ -654,9 +687,12 @@ async function exportAsImage() {
 
   try {
     const scale = Number(readPngScale());
-    const canvas = await renderExportCanvas({ scale });
+    const bg = readPngBg();
+    const transparent = bg === 'transparent';
+    const canvas = await renderExportCanvas({ scale, transparent });
     if (!canvas) return;
-    const filename = `qcm-disponibles_${safeName(year)}_${safeName(wilaya)}_${scale}x.png`;
+    const bgSuffix = transparent ? '_transparent' : '';
+    const filename = `qcm-disponibles_${safeName(year)}_${safeName(wilaya)}_${scale}x${bgSuffix}.png`;
     canvas.toBlob(blob => {
       if (!blob) { alert('Échec de la génération de l\'image.'); return; }
       const url = URL.createObjectURL(blob);
@@ -745,6 +781,7 @@ function escapeHtml(s) {
 
 initPdfPrefsUI();
 initPngScaleSelect();
+initPngBgSelect();
 loadData();
 </script>
 </body>
