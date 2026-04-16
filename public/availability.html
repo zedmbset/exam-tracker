@@ -629,6 +629,25 @@ async function renderExportCanvas(opts) {
   document.body.appendChild(wrap);
 
   try {
+    // Measure row break positions (midpoints between consecutive card rows)
+    // while the cloned layout is mounted, so we can later slice the rendered
+    // canvas between rows for multi-page PDFs.
+    const wrapRect = wrap.getBoundingClientRect();
+    const rowMap = new Map();
+    gridClone.querySelectorAll('.card').forEach(c => {
+      const r = c.getBoundingClientRect();
+      const topKey = Math.round(r.top - wrapRect.top);
+      const bottom = r.bottom - wrapRect.top;
+      const existing = rowMap.get(topKey);
+      if (!existing) rowMap.set(topKey, { top: r.top - wrapRect.top, bottom });
+      else existing.bottom = Math.max(existing.bottom, bottom);
+    });
+    const sortedRows = Array.from(rowMap.values()).sort((a, b) => a.top - b.top);
+    const rowCutsCss = [];
+    for (let i = 0; i < sortedRows.length - 1; i++) {
+      rowCutsCss.push((sortedRows[i].bottom + sortedRows[i + 1].top) / 2);
+    }
+
     const canvas = await html2canvas(wrap, {
       backgroundColor: null,
       scale: scale,
@@ -637,7 +656,10 @@ async function renderExportCanvas(opts) {
       windowWidth: wrap.scrollWidth,
       windowHeight: wrap.scrollHeight,
     });
-    return canvas;
+    const rowCuts = rowCutsCss
+      .map(v => Math.round(v * scale))
+      .filter(v => v > 0 && v < canvas.height);
+    return { canvas, rowCuts };
   } finally {
     document.body.removeChild(wrap);
   }
@@ -689,8 +711,9 @@ async function exportAsImage() {
     const scale = Number(readPngScale());
     const bg = readPngBg();
     const transparent = bg === 'transparent';
-    const canvas = await renderExportCanvas({ scale, transparent });
-    if (!canvas) return;
+    const result = await renderExportCanvas({ scale, transparent });
+    if (!result) return;
+    const canvas = result.canvas;
     const bgSuffix = transparent ? '_transparent' : '';
     const filename = `qcm-disponibles_${safeName(year)}_${safeName(wilaya)}_${scale}x${bgSuffix}.png`;
     canvas.toBlob(blob => {
@@ -730,8 +753,10 @@ async function exportAsPdf() {
 
   try {
     const prefs = getPdfPrefs();
-    let canvas = await renderExportCanvas({ scale: 2 });
-    if (!canvas) return;
+    let rendered = await renderExportCanvas({ scale: 2 });
+    if (!rendered) return;
+    let canvas = rendered.canvas;
+    let rowCuts = rendered.rowCuts;
 
     // Auto: pick orientation based on captured canvas aspect ratio. When the
     // content is taller than wide, re-render the grid as 2 columns so it fits
@@ -743,26 +768,67 @@ async function exportAsPdf() {
       } else {
         orientation = 'portrait';
         const narrow = await renderExportCanvas({ cols: 2, scale: 2 });
-        if (narrow) canvas = narrow;
+        if (narrow) { canvas = narrow.canvas; rowCuts = narrow.rowCuts; }
       }
     }
 
-    // A4 landscape: 297mm x 210mm. Fit canvas into the page preserving
-    // aspect ratio so the six-card grid lands on a single page.
     const pdf = new jsPDFCtor({ orientation, unit: 'mm', format: prefs.format });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
     const margin = 8;
     const maxW = pageW - margin * 2;
     const maxH = pageH - margin * 2;
-    const ratio = canvas.width / canvas.height;
-    let imgW = maxW;
-    let imgH = imgW / ratio;
-    if (imgH > maxH) { imgH = maxH; imgW = imgH * ratio; }
-    const x = (pageW - imgW) / 2;
-    const y = (pageH - imgH) / 2;
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-    pdf.addImage(dataUrl, 'JPEG', x, y, imgW, imgH, undefined, 'FAST');
+
+    // Use full page width as the reference scale so text stays legible; if
+    // the resulting image is taller than one page, flow across multiple pages
+    // breaking on card-row boundaries instead of shrinking further.
+    const mmPerPx = maxW / canvas.width;
+    const fullImgH = canvas.height * mmPerPx;
+
+    if (fullImgH <= maxH) {
+      // Single page – centered, preserving prior behaviour.
+      const imgW = maxW;
+      const imgH = fullImgH;
+      const x = margin;
+      const y = (pageH - imgH) / 2;
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      pdf.addImage(dataUrl, 'JPEG', x, y, imgW, imgH, undefined, 'FAST');
+    } else {
+      // Multi-page: slice vertically. Prefer breaking at row midpoints.
+      const sliceMaxPx = Math.floor(maxH / mmPerPx);
+      const sortedCuts = rowCuts.slice().sort((a, b) => a - b);
+      let startY = 0;
+      let first = true;
+      let guard = 0;
+      while (startY < canvas.height && guard++ < 200) {
+        const remaining = canvas.height - startY;
+        let endY;
+        if (remaining <= sliceMaxPx) {
+          endY = canvas.height;
+        } else {
+          const target = startY + sliceMaxPx;
+          let best = -1;
+          for (const c of sortedCuts) {
+            if (c > startY && c <= target) best = c;
+            else if (c > target) break;
+          }
+          endY = best > 0 ? best : target;
+        }
+        const sliceH = endY - startY;
+        const slice = document.createElement('canvas');
+        slice.width = canvas.width;
+        slice.height = sliceH;
+        const sctx = slice.getContext('2d');
+        sctx.drawImage(canvas, 0, startY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        const dataUrl = slice.toDataURL('image/jpeg', 0.92);
+        const imgW = maxW;
+        const imgH = sliceH * mmPerPx;
+        if (!first) pdf.addPage(prefs.format, orientation);
+        pdf.addImage(dataUrl, 'JPEG', margin, margin, imgW, imgH, undefined, 'FAST');
+        first = false;
+        startY = endY;
+      }
+    }
     pdf.save(`qcm-disponibles_${safeName(year)}_${safeName(wilaya)}.pdf`);
   } catch (err) {
     console.error('PDF export failed:', err);
