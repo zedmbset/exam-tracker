@@ -1208,7 +1208,10 @@
           // edited row and the composed submodule editor is mounted. Otherwise
           // fall back to the persisted tags (e.g. listing rendering for other rows).
           const editorMounted = !!document.getElementById("composedSubmoduleSection");
-          const useLive = row === activeRow && editorMounted && Array.isArray(composedSubmodulesState) && composedSubmodulesState.length > 0;
+          // When the editor is mounted for the active row, the in-memory
+          // state is authoritative — even when empty — so stale stored
+          // tags cannot mask newly cleared ranges.
+          const useLive = row === activeRow && editorMounted && Array.isArray(composedSubmodulesState);
           const items = useLive
             ? composedSubmodulesState.map(item => ({
                 name: String(item.name || "").trim(),
