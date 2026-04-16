@@ -2135,19 +2135,22 @@
 
         container.innerHTML = subcategoriesState.map(sc => `
           <div
+            data-reorder-id="${String(sc.id)}"
             ondragover="handleSubcategoryDragOver(event, ${JSON.stringify(sc.id)})"
             ondragleave="handleSubcategoryDragLeave(event)"
             ondrop="handleSubcategoryDrop(event, ${JSON.stringify(sc.id)})"
-            style="display:flex;gap:8px;align-items:center;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);"
+            style="display:flex;gap:8px;align-items:center;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);touch-action:auto;"
           >
             <button
               type="button"
               draggable="true"
+              data-reorder-handle="subcategory"
+              data-reorder-id="${String(sc.id)}"
               ondragstart="handleSubcategoryDragStart(event, ${JSON.stringify(sc.id)})"
               ondragend="handleSubcategoryDragEnd()"
-              title="Drag to reorder"
-              aria-label="Drag to reorder"
-              style="cursor:grab;border:1px solid var(--border2);background:var(--bg);border-radius:10px;padding:8px 10px;color:var(--text3);font-size:16px;line-height:1;user-select:none;"
+              title="Drag to reorder (or use arrow keys)"
+              aria-label="Drag to reorder. Use arrow up or arrow down to move."
+              style="cursor:grab;border:1px solid var(--border2);background:var(--bg);border-radius:10px;padding:8px 10px;color:var(--text3);font-size:16px;line-height:1;user-select:none;touch-action:none;"
             >⋮⋮</button>
             <input
               type="text"
@@ -2166,6 +2169,7 @@
             <button type="button" class="btn btn-sm" onclick="removeSubcategoryRow(${JSON.stringify(sc.id)})" style="color:var(--red-text);border-color:var(--red-border);">Remove</button>
           </div>
         `).join("");
+        setupReorderHandles(container, subcategoryReorderConfig);
       }
 
       function renderComposedSubmodules() {
@@ -2185,19 +2189,22 @@
           </div>
           ${composedSubmodulesState.map(item => `
           <div
+            data-reorder-id="${String(item.id)}"
             ondragover="handleComposedSubmoduleDragOver(event, ${JSON.stringify(item.id)})"
             ondragleave="handleComposedSubmoduleDragLeave(event)"
             ondrop="handleComposedSubmoduleDrop(event, ${JSON.stringify(item.id)})"
-            style="display:flex;gap:8px;align-items:center;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);"
+            style="display:flex;gap:8px;align-items:center;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);touch-action:auto;"
           >
             <button
               type="button"
               draggable="true"
+              data-reorder-handle="composed"
+              data-reorder-id="${String(item.id)}"
               ondragstart="handleComposedSubmoduleDragStart(event, ${JSON.stringify(item.id)})"
               ondragend="handleComposedSubmoduleDragEnd()"
-              title="Drag to reorder"
-              aria-label="Drag to reorder"
-              style="cursor:grab;border:1px solid var(--border2);background:var(--bg);border-radius:10px;padding:8px 10px;color:var(--text3);font-size:16px;line-height:1;user-select:none;"
+              title="Drag to reorder (or use arrow keys)"
+              aria-label="Drag to reorder. Use arrow up or arrow down to move."
+              style="cursor:grab;border:1px solid var(--border2);background:var(--bg);border-radius:10px;padding:8px 10px;color:var(--text3);font-size:16px;line-height:1;user-select:none;touch-action:none;"
             >⋮⋮</button>
             <div style="flex:1;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;">
               <div style="font-weight:600;">${item.name}</div>
@@ -2211,6 +2218,7 @@
             >
           </div>
         `).join("")}`;
+        setupReorderHandles(container, composedSubmoduleReorderConfig);
       }
 
       function handleSubcategoryDragStart(event, id) {
@@ -2355,6 +2363,169 @@
         draggedComposedSubmoduleId = null;
         renderComposedSubmodules();
       }
+
+      // ----- Touch + keyboard reorder support (complements HTML5 DnD) -----
+      // The HTML5 drag-and-drop API above powers desktop mouse dragging, but
+      // it does not fire touch events on most phones/tablets. This helper
+      // wires up Pointer Events on the drag handles to produce the same
+      // reorder behavior via touch, and adds ArrowUp/ArrowDown keyboard
+      // reordering while a handle is focused.
+      function setupReorderHandles(container, config) {
+        if (!container) return;
+        const handles = container.querySelectorAll('[data-reorder-handle="' + config.handleType + '"]');
+        handles.forEach(handle => {
+          handle.addEventListener('pointerdown', ev => onReorderPointerDown(ev, config));
+          handle.addEventListener('keydown', ev => onReorderKeyDown(ev, config));
+        });
+      }
+
+      function findReorderRowFromPoint(container, x, y) {
+        const el = document.elementFromPoint(x, y);
+        if (!el) return null;
+        const row = el.closest('[data-reorder-id]');
+        if (!row || !container.contains(row)) return null;
+        // Prefer the row element (direct child of container), not the handle
+        // button which also carries data-reorder-id.
+        if (row.tagName === 'BUTTON') {
+          const parent = row.parentElement?.closest('[data-reorder-id]');
+          return parent && container.contains(parent) ? parent : null;
+        }
+        return row;
+      }
+
+      function onReorderPointerDown(ev, config) {
+        // Leave mouse interactions to native HTML5 drag-and-drop.
+        if (ev.pointerType === 'mouse') return;
+        ev.preventDefault();
+
+        const handle = ev.currentTarget;
+        const id = handle.getAttribute('data-reorder-id');
+        const container = document.getElementById(config.containerId);
+        if (!container) return;
+        const startRow = handle.closest('[data-reorder-id]:not(button)')
+          || container.querySelector('[data-reorder-id="' + CSS.escape(id) + '"]:not(button)');
+        if (!startRow) return;
+
+        try { handle.setPointerCapture(ev.pointerId); } catch (_) {}
+        handle.style.cursor = 'grabbing';
+        startRow.style.opacity = '0.6';
+        let lastOverRow = null;
+
+        const clearHover = (row) => {
+          if (!row) return;
+          row.style.borderColor = 'var(--border2)';
+          row.style.background = 'var(--bg2)';
+        };
+        const setHover = (row) => {
+          if (!row) return;
+          row.style.borderColor = 'var(--accent)';
+          row.style.background = 'var(--blue-bg)';
+        };
+
+        const onMove = (e) => {
+          e.preventDefault();
+          const overRow = findReorderRowFromPoint(container, e.clientX, e.clientY);
+          if (overRow !== lastOverRow) {
+            clearHover(lastOverRow);
+            if (overRow && overRow !== startRow) setHover(overRow);
+            lastOverRow = overRow;
+          }
+        };
+
+        const onUp = (e) => {
+          handle.removeEventListener('pointermove', onMove);
+          handle.removeEventListener('pointerup', onUp);
+          handle.removeEventListener('pointercancel', onUp);
+          try { handle.releasePointerCapture(ev.pointerId); } catch (_) {}
+          handle.style.cursor = 'grab';
+          startRow.style.opacity = '';
+          clearHover(lastOverRow);
+
+          const targetRow = findReorderRowFromPoint(container, e.clientX, e.clientY);
+          const targetId = targetRow ? targetRow.getAttribute('data-reorder-id') : null;
+          if (targetId && targetId !== id) {
+            config.reorder(id, targetId);
+          }
+        };
+
+        handle.addEventListener('pointermove', onMove);
+        handle.addEventListener('pointerup', onUp);
+        handle.addEventListener('pointercancel', onUp);
+      }
+
+      function onReorderKeyDown(ev, config) {
+        if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+        const id = ev.currentTarget.getAttribute('data-reorder-id');
+        ev.preventDefault();
+        const moved = config.nudge(id, ev.key === 'ArrowUp' ? -1 : 1);
+        if (!moved) return;
+        // Re-focus the moved handle after re-render so repeated arrow
+        // presses keep moving the same row.
+        requestAnimationFrame(() => {
+          const container = document.getElementById(config.containerId);
+          const next = container?.querySelector(
+            '[data-reorder-handle="' + config.handleType + '"][data-reorder-id="' + CSS.escape(id) + '"]'
+          );
+          next?.focus();
+        });
+      }
+
+      function reorderStateById(arr, sourceId, targetId) {
+        const sourceIndex = arr.findIndex(x => String(x.id) === String(sourceId));
+        const targetIndex = arr.findIndex(x => String(x.id) === String(targetId));
+        if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return false;
+        const [moved] = arr.splice(sourceIndex, 1);
+        arr.splice(targetIndex, 0, moved);
+        return true;
+      }
+
+      function nudgeStateById(arr, id, delta) {
+        const idx = arr.findIndex(x => String(x.id) === String(id));
+        if (idx < 0) return false;
+        const newIdx = Math.max(0, Math.min(arr.length - 1, idx + delta));
+        if (newIdx === idx) return false;
+        const [moved] = arr.splice(idx, 1);
+        arr.splice(newIdx, 0, moved);
+        return true;
+      }
+
+      const subcategoryReorderConfig = {
+        containerId: 'subcategoryList',
+        handleType: 'subcategory',
+        reorder(sourceId, targetId) {
+          if (reorderStateById(subcategoriesState, sourceId, targetId)) {
+            renderSubcategories();
+            refreshPromptText();
+          }
+        },
+        nudge(id, delta) {
+          if (nudgeStateById(subcategoriesState, id, delta)) {
+            renderSubcategories();
+            refreshPromptText();
+            return true;
+          }
+          return false;
+        },
+      };
+
+      const composedSubmoduleReorderConfig = {
+        containerId: 'composedSubmoduleList',
+        handleType: 'composed',
+        reorder(sourceId, targetId) {
+          if (reorderStateById(composedSubmodulesState, sourceId, targetId)) {
+            renderComposedSubmodules();
+            refreshPromptText();
+          }
+        },
+        nudge(id, delta) {
+          if (nudgeStateById(composedSubmodulesState, id, delta)) {
+            renderComposedSubmodules();
+            refreshPromptText();
+            return true;
+          }
+          return false;
+        },
+      };
 
       // Context Extractor
       function getExamContext() {
