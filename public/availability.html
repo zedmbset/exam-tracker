@@ -262,6 +262,12 @@
       <select id="fYear" onchange="onFilterChange()"></select>
       <label for="fWilaya">Wilaya</label>
       <select id="fWilaya" onchange="onFilterChange()"></select>
+      <label for="fPngScale">Échelle PNG</label>
+      <select id="fPngScale" onchange="onPngScaleChange()" title="Résolution de l'export PNG">
+        <option value="1">1×</option>
+        <option value="2">2×</option>
+        <option value="3">3×</option>
+      </select>
       <button type="button" id="exportBtn" class="export-btn" onclick="exportAsImage()" title="Exporter en image PNG">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span id="exportBtnText">PNG</span>
@@ -537,7 +543,32 @@ function renderCard(level, scope) {
     </div>`;
 }
 
-async function renderExportCanvas() {
+const PNG_SCALE_KEY = 'availability.pngScale';
+const PNG_SCALE_ALLOWED = ['1', '2', '3'];
+const PNG_SCALE_DEFAULT = '2';
+
+function readPngScale() {
+  try {
+    const v = localStorage.getItem(PNG_SCALE_KEY);
+    if (PNG_SCALE_ALLOWED.includes(v)) return v;
+  } catch (e) {}
+  return PNG_SCALE_DEFAULT;
+}
+function writePngScale(v) {
+  if (!PNG_SCALE_ALLOWED.includes(v)) return;
+  try { localStorage.setItem(PNG_SCALE_KEY, v); } catch (e) {}
+}
+function initPngScaleSelect() {
+  const sel = document.getElementById('fPngScale');
+  if (sel) sel.value = readPngScale();
+}
+function onPngScaleChange() {
+  const sel = document.getElementById('fPngScale');
+  if (sel) writePngScale(sel.value);
+}
+
+async function renderExportCanvas(opts) {
+  const scale = (opts && Number(opts.scale)) || 2;
   const titleEl = document.getElementById('pageTitle');
   const grid = document.getElementById('cardsGrid');
   if (!grid || grid.style.display === 'none') return null;
@@ -564,7 +595,7 @@ async function renderExportCanvas() {
   try {
     const canvas = await html2canvas(wrap, {
       backgroundColor: null,
-      scale: 2,
+      scale: scale,
       useCORS: true,
       logging: false,
       windowWidth: wrap.scrollWidth,
@@ -619,9 +650,10 @@ async function exportAsImage() {
   btnText.textContent = 'Export…';
 
   try {
-    const canvas = await renderExportCanvas();
+    const scale = Number(readPngScale());
+    const canvas = await renderExportCanvas({ scale });
     if (!canvas) return;
-    const filename = `qcm-disponibles_${safeName(year)}_${safeName(wilaya)}.png`;
+    const filename = `qcm-disponibles_${safeName(year)}_${safeName(wilaya)}_${scale}x.png`;
     canvas.toBlob(blob => {
       if (!blob) { alert('Échec de la génération de l\'image.'); return; }
       const url = URL.createObjectURL(blob);
@@ -658,7 +690,7 @@ async function exportAsPdf() {
   btnText.textContent = 'Export…';
 
   try {
-    const canvas = await renderExportCanvas();
+    const canvas = await renderExportCanvas({ scale: 2 });
     if (!canvas) return;
 
     // A4 landscape: 297mm x 210mm. Fit canvas into the page preserving
@@ -695,6 +727,7 @@ function escapeHtml(s) {
 }
 
 initPdfPrefsUI();
+initPngScaleSelect();
 loadData();
 </script>
 </body>
