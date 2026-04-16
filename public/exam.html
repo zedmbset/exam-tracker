@@ -1204,8 +1204,19 @@
         if (!(cell(row, "ExamDate") || cell(row, "Exam Date"))) missing.push("Exam date");
         if (!(parseInt(tags.nQst, 10) > 0)) missing.push("Total number of questions");
         if (isComposedExam(row)) {
-          const stored = getStoredComposedSubmodules(row);
-          const composedValidation = validateComposedSubmodulesState(stored, tags.nQst, tags.missingPos || []);
+          // Prefer the live in-memory state when we're looking at the currently
+          // edited row and the composed submodule editor is mounted. Otherwise
+          // fall back to the persisted tags (e.g. listing rendering for other rows).
+          const editorMounted = !!document.getElementById("composedSubmoduleSection");
+          const useLive = row === activeRow && editorMounted && Array.isArray(composedSubmodulesState) && composedSubmodulesState.length > 0;
+          const items = useLive
+            ? composedSubmodulesState.map(item => ({
+                name: String(item.name || "").trim(),
+                categoryId: String(item.categoryId || "").trim(),
+                range: String(item.range || "").trim(),
+              }))
+            : getStoredComposedSubmodules(row);
+          const composedValidation = validateComposedSubmodulesState(items, tags.nQst, tags.missingPos || []);
           if (!composedValidation.ok) missing.push("Composed submodule ranges");
         }
         return {
@@ -2053,7 +2064,7 @@
         const body = `
           <div class="instruction-box">
             <strong>Save Step 1 first to unlock the digitization prompt.</strong>
-            <ul>
+            <ul data-locked-missing>
               ${missingList}
             </ul>
           </div>`;
@@ -2257,6 +2268,45 @@
         if (!item) return;
         item.range = value;
         refreshPromptText();
+        refreshStep1Readiness();
+      }
+
+      // Re-render just the step 2 card in place so the "missing requirements"
+      // indicator reflects live composed-submodule state without rebuilding
+      // the whole step list (which would re-init state from tags and drop
+      // in-progress edits / focus).
+      //
+      // To avoid clobbering Step 2 textarea content (dcJson1Input / dcJson2Input)
+      // when a user edits a range while Step 2 is already unlocked, we only
+      // swap when the ready/locked state actually changes. When the card
+      // stays in the locked state we just update the missing-requirements
+      // list in place.
+      function refreshStep1Readiness() {
+        if (!activeRow) return;
+        const step2Card = document.getElementById("stepCard_1");
+        if (!step2Card) return;
+        const examId = cell(activeRow, "ID_Exams") || String(activeRow._rowIndex);
+        const state = loadStepState(examId);
+        const step1Prompt = getStep1PromptRequirements(activeRow);
+        const isCurrentlyUnlocked = !!step2Card.querySelector("#dcJson1Input");
+
+        if (step1Prompt.ready && isCurrentlyUnlocked) return; // nothing to change
+        if (!step1Prompt.ready && !isCurrentlyUnlocked) {
+          // Stay locked but refresh the missing-fields list in place.
+          const list = step2Card.querySelector("[data-locked-missing]");
+          if (list) {
+            list.innerHTML = step1Prompt.missing
+              .map(m => `<li>${m}</li>`)
+              .join("");
+            return;
+          }
+          // Fallback: if the locked card doesn't expose the list, swap.
+        }
+
+        const newHtml = step1Prompt.ready
+          ? buildStep2(examId, state)
+          : buildStep2Locked(examId, state, step1Prompt.missing);
+        step2Card.outerHTML = newHtml;
       }
 
       function handleComposedSubmoduleDragStart(event, id) {
