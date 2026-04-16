@@ -148,6 +148,15 @@
     border-width: 0 2.5px 2.5px 0;
     transform: translateY(-1px) rotate(45deg);
   }
+  a.chk-link {
+    text-decoration: none;
+    display: inline-flex;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+  a.chk-link:hover { transform: scale(1.12); box-shadow: 0 0 0 2px rgba(34,197,94,0.35); }
+  a.chk-link:focus-visible { outline: 2px solid #1e3a8a; outline-offset: 2px; }
 
   /* Years 4-6: matrix */
   .matrix-wrap { overflow-x: auto; }
@@ -361,10 +370,16 @@ function fillOptions(selectEl, items) {
   selectEl.appendChild(frag);
 }
 
-function chkHtml(on, ariaLabel) {
+function chkHtml(on, ariaLabel, examId) {
   const label = ariaLabel ? ` aria-label="${escapeHtml(ariaLabel)}"` : '';
   const state = on ? 'true' : 'false';
-  return `<span class="chk${on ? ' on' : ''}" role="img" aria-checked="${state}"${label}></span>`;
+  const span = `<span class="chk${on ? ' on' : ''}" role="img" aria-checked="${state}"${label}></span>`;
+  if (on && examId) {
+    const href = `/exam?id=${encodeURIComponent(examId)}`;
+    const linkLabel = ariaLabel ? ` aria-label="${escapeHtml('Ouvrir l\u2019examen : ' + ariaLabel)}"` : '';
+    return `<a class="chk-link" href="${href}" target="_blank" rel="noopener"${linkLabel}>${span}</a>`;
+  }
+  return span;
 }
 
 async function loadData() {
@@ -439,9 +454,11 @@ function renderCard(level, scope) {
   } else if (!level.matrix) {
     const useSingleCol = modules.length <= 3;
     const items = modules.map(mod => {
-      const done = rows.some(r => cell(r, 'Module') === mod && isCompleted(r));
+      const doneRow = rows.find(r => cell(r, 'Module') === mod && isCompleted(r));
+      const done = !!doneRow;
+      const examId = done ? cell(doneRow, 'ID_Exams') : '';
       const aria = `${mod} — ${done ? 'disponible' : 'non disponible'}`;
-      return `<div class="module-item">${chkHtml(done, aria)}<span class="mod-name">${escapeHtml(mod)}</span></div>`;
+      return `<div class="module-item">${chkHtml(done, aria, examId)}<span class="mod-name">${escapeHtml(mod)}</span></div>`;
     }).join('');
     body = `<div class="module-list${useSingleCol ? ' single-col' : ''}">${items}</div>`;
   } else {
@@ -453,11 +470,13 @@ function renderCard(level, scope) {
     const tbody = modules.map(mod => {
       const modRows = rows.filter(r => cell(r, 'Module') === mod);
       const cells = MATRIX_COLS.map(c => {
-        const done = modRows.some(r => {
+        const doneRow = modRows.find(r => {
           if (!isCompleted(r)) return false;
           return c.matches(normRotation(cell(r, 'Rotation')), normPeriod(cell(r, 'Period')));
         });
-        return `<td>${chkHtml(done, `${mod} ${c.aria} — ${done ? 'disponible' : 'non disponible'}`)}</td>`;
+        const done = !!doneRow;
+        const examId = done ? cell(doneRow, 'ID_Exams') : '';
+        return `<td>${chkHtml(done, `${mod} ${c.aria} — ${done ? 'disponible' : 'non disponible'}`, examId)}</td>`;
       }).join('');
       return `<tr><th class="mod-col" scope="row">${escapeHtml(mod)}</th>${cells}</tr>`;
     }).join('');
