@@ -2121,18 +2121,19 @@
 
         container.innerHTML = subcategoriesState.map(sc => `
           <div
-            draggable="true"
-            ondragstart="handleSubcategoryDragStart(event, ${JSON.stringify(sc.id)})"
             ondragover="handleSubcategoryDragOver(event, ${JSON.stringify(sc.id)})"
             ondragleave="handleSubcategoryDragLeave(event)"
             ondrop="handleSubcategoryDrop(event, ${JSON.stringify(sc.id)})"
-            ondragend="handleSubcategoryDragEnd()"
             style="display:flex;gap:8px;align-items:center;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);"
           >
             <button
               type="button"
+              draggable="true"
+              ondragstart="handleSubcategoryDragStart(event, ${JSON.stringify(sc.id)})"
+              ondragend="handleSubcategoryDragEnd()"
               title="Drag to reorder"
-              style="cursor:grab;border:1px solid var(--border2);background:var(--bg);border-radius:10px;padding:8px 10px;color:var(--text3);font-size:16px;line-height:1;"
+              aria-label="Drag to reorder"
+              style="cursor:grab;border:1px solid var(--border2);background:var(--bg);border-radius:10px;padding:8px 10px;color:var(--text3);font-size:16px;line-height:1;user-select:none;"
             >⋮⋮</button>
             <input
               type="text"
@@ -2170,18 +2171,19 @@
           </div>
           ${composedSubmodulesState.map(item => `
           <div
-            draggable="true"
-            ondragstart="handleComposedSubmoduleDragStart(event, ${JSON.stringify(item.id)})"
             ondragover="handleComposedSubmoduleDragOver(event, ${JSON.stringify(item.id)})"
             ondragleave="handleComposedSubmoduleDragLeave(event)"
             ondrop="handleComposedSubmoduleDrop(event, ${JSON.stringify(item.id)})"
-            ondragend="handleComposedSubmoduleDragEnd()"
             style="display:flex;gap:8px;align-items:center;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);"
           >
             <button
               type="button"
+              draggable="true"
+              ondragstart="handleComposedSubmoduleDragStart(event, ${JSON.stringify(item.id)})"
+              ondragend="handleComposedSubmoduleDragEnd()"
               title="Drag to reorder"
-              style="cursor:grab;border:1px solid var(--border2);background:var(--bg);border-radius:10px;padding:8px 10px;color:var(--text3);font-size:16px;line-height:1;"
+              aria-label="Drag to reorder"
+              style="cursor:grab;border:1px solid var(--border2);background:var(--bg);border-radius:10px;padding:8px 10px;color:var(--text3);font-size:16px;line-height:1;user-select:none;"
             >⋮⋮</button>
             <div style="flex:1;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;">
               <div style="font-weight:600;">${item.name}</div>
