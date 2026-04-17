@@ -14,6 +14,7 @@ A Node.js/Express web application for tracking the digitization progress of exam
 - `public/` - Static frontend files (index.html, exam.html, availability.html, prompts/ JS modules)
 - `reports/` - PDF report generation logic (admin and public reports)
 - `docs/` - Project documentation and data schemas
+- `docs/plans/` - Saved task plans for AI-assisted work, stored as numbered markdown files so they appear in order across models
 
 ## Key API Routes
 - `GET /api/sheet` - Read all rows from Google Sheet
