@@ -185,6 +185,12 @@
     .setup-banner{background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:20px;font-size:13px;color:var(--blue-text);line-height:1.6}
     .setup-banner strong{font-weight:600}
     .setup-banner code{font-family:"SF Mono","Fira Code",monospace;background:rgba(43,92,230,0.10);padding:1px 6px;border-radius:4px;font-size:12px}
+    th.sortable{cursor:pointer;user-select:none}
+    th.sortable:hover{background:var(--hover-bg)}
+    th.sortable .sort-arrow{font-size:10px;margin-left:4px;color:var(--text3)}
+    th.sortable.asc .sort-arrow::after{content:'▲'}
+    th.sortable.desc .sort-arrow::after{content:'▼'}
+    th.sortable:not(.asc):not(.desc) .sort-arrow::after{content:'⇅';opacity:0.4}
 
     @media(max-width:640px){
       .main{padding:16px 14px 48px}
@@ -225,8 +231,7 @@
   </div>
 
   <div id="setupBanner" class="setup-banner" style="display:none">
-    <strong>Telegram bot non configuré.</strong> Pour activer le suivi automatique des rejoignants, ajoutez la variable d'environnement <code>TELEGRAM_BOT_TOKEN</code> et enregistrez le webhook :
-    <code>POST https://api.telegram.org/bot&lt;TOKEN&gt;/setWebhook?url=https://votre-app.railway.app/api/telegram/webhook</code>
+    <div id="setupBannerMsg"></div>
   </div>
 
   <div class="toolbar">
@@ -249,8 +254,8 @@
     <table id="contactsTable" style="display:none">
       <thead>
         <tr>
-          <th class="col-name">Contact</th>
-          <th>Promo</th>
+          <th class="col-name sortable" onclick="setSort('name')" id="th-name">Contact <span class="sort-arrow"></span></th>
+          <th class="sortable" onclick="setSort('promo')" id="th-promo">Promo <span class="sort-arrow"></span></th>
           <th>Wilaya</th>
           <th>Emails</th>
           <th>Telegram</th>
@@ -370,6 +375,25 @@
   let editingId     = null;
   let deleteTarget  = null;
   let deleteName    = '';
+  let sortCol       = 'name';   // 'name' | 'promo'
+  let sortDir       = 'asc';    // 'asc' | 'desc'
+
+  function setSort(col) {
+    if (sortCol === col) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
+    else { sortCol = col; sortDir = 'asc'; }
+    ['th-name','th-promo'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.classList.remove('asc','desc'); }
+    });
+    const active = document.getElementById('th-' + col);
+    if (active) active.classList.add(sortDir);
+    renderContacts();
+  }
+  // Set initial arrow state
+  document.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById('th-name');
+    if (el) el.classList.add('asc');
+  });
 
   // ── Validation helpers ───────────────────────────────────────────────────
   function isValidEmail(s) {
@@ -390,8 +414,18 @@
       ]);
       allContacts   = cRes.contacts   || [];
       allActivities = aRes.activities || [];
-      document.getElementById('setupBanner').style.display =
-        cfgRes.telegramConfigured ? 'none' : 'block';
+      const hasJoins = allActivities.some(a => a.Action === 'joined_channel');
+      const banner   = document.getElementById('setupBanner');
+      const bannerMsg = document.getElementById('setupBannerMsg');
+      if (!cfgRes.telegramConfigured) {
+        bannerMsg.innerHTML = '<strong>Telegram bot non configuré.</strong> Pour activer le suivi automatique des rejoignants, ajoutez la variable d\'environnement <code>TELEGRAM_BOT_TOKEN</code> (et <code>TELEGRAM_WEBHOOK_SECRET</code>) puis enregistrez le webhook : <code>POST https://api.telegram.org/bot&lt;TOKEN&gt;/setWebhook?url=https://votre-app.railway.app/api/telegram/webhook&secret_token=&lt;SECRET&gt;</code>';
+        banner.style.display = 'block';
+      } else if (!hasJoins) {
+        bannerMsg.innerHTML = '<strong>Bot configuré — en attente du premier rejoignant.</strong> Si aucun événement n\'arrive, vérifiez que le bot est admin dans votre channel, et que le webhook est bien enregistré avec <code>allowed_updates=["chat_member"]</code>.';
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
       populatePromoFilter();
       renderStats();
       renderContacts();
@@ -449,7 +483,7 @@
     const promo = document.getElementById('promoFilter').value;
     const vip   = document.getElementById('vipFilter').value;
 
-    const filtered = allContacts.filter(c => {
+    let filtered = allContacts.filter(c => {
       if (promo && c.Promo !== promo) return false;
       if (vip === 'vip' && c.VIP !== 'TRUE') return false;
       if (!q) return true;
@@ -463,6 +497,21 @@
         c['Archive_Tlg_Contacts'] || '',
       ].join(' ').toLowerCase();
       return haystack.includes(q);
+    });
+
+    // Apply column sort
+    filtered = [...filtered].sort((a, b) => {
+      let va = '', vb = '';
+      if (sortCol === 'name') {
+        va = [(a['Prénom (en francais)']||a.Prenom||a.Prénom||'').trim(), (a['Nom (en francais)']||a.Nom||'').trim()].join(' ').toLowerCase();
+        vb = [(b['Prénom (en francais)']||b.Prenom||b.Prénom||'').trim(), (b['Nom (en francais)']||b.Nom||'').trim()].join(' ').toLowerCase();
+      } else if (sortCol === 'promo') {
+        va = (a.Promo || '').toLowerCase();
+        vb = (b.Promo || '').toLowerCase();
+      }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ?  1 : -1;
+      return 0;
     });
 
     document.getElementById('loadingState').style.display = 'none';
