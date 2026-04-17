@@ -319,5 +319,275 @@ app.get('/api/config', (req, res) => {
   res.json({ sheetTab: SHEET_TAB, headerRow: HEADER_ROW, googleClientId: GOOGLE_CLIENT_ID });
 });
 
+// ─── CONTACTS MINI-APP ───────────────────────────────────────────────────────
+
+const CONTACTS_SHEET_ID = process.env.CONTACTS_SHEET_ID || '1tsP9abcf5NsIqNV-K_qts_RncpDdSPn3ElAPeY6YkdU';
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+
+const CTAB  = 'ZED_Contacts';
+const ETAB  = 'ZED_Emails';
+const ATAB  = 'ZED_Accounts';
+const XATAB = 'ZED_Activities';
+
+async function csRead(tab) {
+  try {
+    const token = await getAccessToken();
+    const r = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${CONTACTS_SHEET_ID}/values/${encodeURIComponent(tab)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!r.ok) return [];
+    const d = await r.json();
+    return d.values || [];
+  } catch { return []; }
+}
+
+async function csAppend(tab, row) {
+  const token = await getAccessToken();
+  const r = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${CONTACTS_SHEET_ID}/values/${encodeURIComponent(tab)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [row] }),
+    }
+  );
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function csUpdate(tab, rowIndex, row) {
+  const token = await getAccessToken();
+  const r = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${CONTACTS_SHEET_ID}/values/${encodeURIComponent(`${tab}!A${rowIndex}`)}?valueInputOption=USER_ENTERED`,
+    {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [row] }),
+    }
+  );
+  if (!r.ok) throw new Error(await r.text());
+}
+
+async function csEnsureTab(tabName, headers) {
+  const token = await getAccessToken();
+  const metaRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${CONTACTS_SHEET_ID}?fields=sheets(properties(title))`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  const meta = await metaRes.json();
+  const exists = (meta.sheets || []).some(s => s.properties.title === tabName);
+  if (!exists) {
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${CONTACTS_SHEET_ID}:batchUpdate`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests: [{ addSheet: { properties: { title: tabName } } }] }),
+      }
+    );
+    if (headers) await csAppend(tabName, headers);
+  }
+}
+
+function rowsToObjects(rows) {
+  if (!rows.length) return [];
+  const [headers, ...data] = rows;
+  return data
+    .map((row, i) => {
+      const obj = { _rowIndex: i + 2 };
+      headers.forEach((h, j) => { obj[h.trim()] = (row[j] || '').trim(); });
+      return obj;
+    })
+    .filter(obj => Object.keys(obj).some(k => k !== '_rowIndex' && obj[k]));
+}
+
+function nextId(prefix, existingIds, padLen = 5) {
+  const nums = existingIds
+    .map(id => { const m = String(id || '').match(/(\d+)$/); return m ? parseInt(m[1]) : 0; })
+    .filter(n => !isNaN(n) && n > 0);
+  return `${prefix}${String((nums.length ? Math.max(...nums) : 0) + 1).padStart(padLen, '0')}`;
+}
+
+// GET /api/contacts
+app.get('/api/contacts', async (req, res) => {
+  try {
+    const [contactRows, emailRows, accountRows] = await Promise.all([
+      csRead(CTAB), csRead(ETAB), csRead(ATAB),
+    ]);
+    const contacts = rowsToObjects(contactRows);
+    const emails   = rowsToObjects(emailRows);
+    const accounts = rowsToObjects(accountRows);
+    const enriched = contacts.map(c => ({
+      ...c,
+      emails:   emails.filter(e => e.ID_Contact === c.ID_Contact),
+      accounts: accounts.filter(a => a.ID_Contact === c.ID_Contact),
+    }));
+    res.json({ contacts: enriched });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/contacts/activities
+app.get('/api/contacts/activities', async (req, res) => {
+  try {
+    const rows = await csRead(XATAB);
+    res.json({ activities: rowsToObjects(rows) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/contacts
+app.post('/api/contacts', async (req, res) => {
+  try {
+    const [contactRows, emailRows, accountRows] = await Promise.all([
+      csRead(CTAB), csRead(ETAB), csRead(ATAB),
+    ]);
+    const { nom, prenom, tlgName, promo, wilaya, commune, vip, tag, emails = [], accounts = [] } = req.body;
+    const contactId = nextId('CTK-', contactRows.slice(1).map(r => r[0]));
+    const ts = new Date().toLocaleString('fr-FR');
+    // Columns: ID_Contact, Timestamp, Email Address, Nom, Prénom, TLG_Name, Username, Official phone, Archive_Tlg, Wilaya, Commune, Archive_adresse, Promo, VIP, Tag
+    await csAppend(CTAB, [contactId, ts, '', nom||'', prenom||'', tlgName||'', '', '', '', wilaya||'', commune||'', '', promo||'', vip ? 'TRUE' : 'FALSE', tag||'']);
+    const emailIdPool = emailRows.slice(1).map(r => r[0]);
+    for (const e of emails) {
+      const eid = nextId('E-', emailIdPool); emailIdPool.push(eid);
+      await csAppend(ETAB, [eid, contactId, e.email||'', e.isPrimary ? 'TRUE' : 'FALSE']);
+    }
+    const accountIdPool = accountRows.slice(1).map(r => r[0]);
+    for (const a of accounts) {
+      const aid = nextId('T-', accountIdPool); accountIdPool.push(aid);
+      await csAppend(ATAB, [aid, contactId, a.tgUserId||'', a.tgUsername||'']);
+    }
+    res.json({ ok: true, id: contactId });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/contacts/:id/emails
+app.post('/api/contacts/:id/emails', async (req, res) => {
+  try {
+    const eRows = await csRead(ETAB);
+    const eid = nextId('E-', eRows.slice(1).map(r => r[0]));
+    const { email, isPrimary } = req.body;
+    await csAppend(ETAB, [eid, req.params.id, email||'', isPrimary ? 'TRUE' : 'FALSE']);
+    res.json({ ok: true, id: eid });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/contacts/:id/accounts
+app.post('/api/contacts/:id/accounts', async (req, res) => {
+  try {
+    const aRows = await csRead(ATAB);
+    const aid = nextId('T-', aRows.slice(1).map(r => r[0]));
+    const { tgUserId, tgUsername } = req.body;
+    await csAppend(ATAB, [aid, req.params.id, tgUserId||'', tgUsername||'']);
+    res.json({ ok: true, id: aid });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/contacts/link-activity
+app.post('/api/contacts/link-activity', async (req, res) => {
+  try {
+    const { activityRowIndex, contactId, accountId } = req.body;
+    const actRows = await csRead(XATAB);
+    const ex = [...(actRows[activityRowIndex - 1] || [])];
+    ex[1] = contactId || ''; ex[2] = accountId || '';
+    await csUpdate(XATAB, activityRowIndex, ex);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/contacts/:id
+app.put('/api/contacts/:id', async (req, res) => {
+  try {
+    const contactRows = await csRead(CTAB);
+    const idx = contactRows.findIndex((r, i) => i > 0 && r[0] === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Contact not found' });
+    const ex = contactRows[idx];
+    const { nom, prenom, tlgName, promo, wilaya, commune, vip, tag } = req.body;
+    await csUpdate(CTAB, idx + 1, [
+      ex[0], ex[1], ex[2],
+      nom     !== undefined ? nom     : (ex[3]  || ''),
+      prenom  !== undefined ? prenom  : (ex[4]  || ''),
+      tlgName !== undefined ? tlgName : (ex[5]  || ''),
+      ex[6]||'', ex[7]||'', ex[8]||'',
+      wilaya  !== undefined ? wilaya  : (ex[9]  || ''),
+      commune !== undefined ? commune : (ex[10] || ''),
+      ex[11]||'',
+      promo   !== undefined ? promo   : (ex[12] || ''),
+      vip     !== undefined ? (vip ? 'TRUE' : 'FALSE') : (ex[13] || 'FALSE'),
+      tag     !== undefined ? tag     : (ex[14] || ''),
+    ]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/contacts/emails/:emailId
+app.delete('/api/contacts/emails/:emailId', async (req, res) => {
+  try {
+    const eRows = await csRead(ETAB);
+    const idx = eRows.findIndex((r, i) => i > 0 && r[0] === req.params.emailId);
+    if (idx > 0) await csUpdate(ETAB, idx + 1, ['', '', '', '']);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/contacts/accounts/:accountId
+app.delete('/api/contacts/accounts/:accountId', async (req, res) => {
+  try {
+    const aRows = await csRead(ATAB);
+    const idx = aRows.findIndex((r, i) => i > 0 && r[0] === req.params.accountId);
+    if (idx > 0) await csUpdate(ATAB, idx + 1, ['', '', '', '']);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/contacts/:id
+app.delete('/api/contacts/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const [cRows, eRows, aRows] = await Promise.all([csRead(CTAB), csRead(ETAB), csRead(ATAB)]);
+    const blank = len => Array(len).fill('');
+    const cIdx = cRows.findIndex((r, i) => i > 0 && r[0] === id);
+    if (cIdx > 0) await csUpdate(CTAB, cIdx + 1, blank(15));
+    for (let i = 1; i < eRows.length; i++) {
+      if ((eRows[i][1]||'') === id) await csUpdate(ETAB, i + 1, blank(4));
+    }
+    for (let i = 1; i < aRows.length; i++) {
+      if ((aRows[i][1]||'') === id) await csUpdate(ATAB, i + 1, blank(4));
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/telegram/webhook
+app.post('/api/telegram/webhook', async (req, res) => {
+  res.json({ ok: true }); // respond immediately
+  try {
+    const update = req.body;
+    const member = update.chat_member || update.my_chat_member;
+    if (!member) return;
+    const newStatus = (member.new_chat_member || {}).status;
+    if (!['member', 'administrator'].includes(newStatus)) return;
+    const tgUser = member.new_chat_member.user;
+    if (tgUser.is_bot) return;
+    const channel  = member.chat;
+    const tgUserId = String(tgUser.id);
+    const tgUsername = tgUser.username ? `@${tgUser.username}` : (tgUser.first_name || '');
+    const aRows = await csRead(ATAB);
+    const matchRow = aRows.slice(1).find(r => String(r[2]) === tgUserId);
+    await csEnsureTab(XATAB, ['ID_Activity','ID_Contact','ID_Telegram','TG_User_ID','TG_Username','Action','Channel','Timestamp']);
+    const actRows = await csRead(XATAB);
+    const actId = nextId('A-', actRows.slice(1).map(r => r[0]));
+    await csAppend(XATAB, [
+      actId,
+      matchRow ? (matchRow[1]||'') : '',
+      matchRow ? (matchRow[0]||'') : '',
+      tgUserId, tgUsername, 'joined_channel',
+      channel.title || channel.username || String(channel.id),
+      new Date().toISOString(),
+    ]);
+  } catch (e) { console.error('TG webhook error:', e.message); }
+});
+
+// ─── END CONTACTS MINI-APP ────────────────────────────────────────────────────
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => console.log(`Exam Tracker backend running on port ${PORT}`));

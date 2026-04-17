@@ -38,7 +38,13 @@ Example filenames:
 
 Every plan file should include at minimum: task number + title, current status (PROPOSED / IN PROGRESS / MERGED / CANCELLED), a "What & Why" section, a "Done looks like" section, and a list of implementation tasks.
 
-## Key API Routes
+## Architecture — Pages
+- `/` (index.html) — Main exam digitization dashboard
+- `/exam` (exam.html) — Exam detail / processing page
+- `/availability.html` — Public availability dashboard
+- `/contacts/` (contacts/index.html) — Contacts mini-app with Telegram join tracking
+
+## Key API Routes — Exam tracker
 - `GET /api/sheet` - Read all rows from Google Sheet
 - `PUT /api/sheet/:rowIndex` - Write one row to Google Sheet
 - `POST /api/upload` - Upload file to Google Drive
@@ -47,7 +53,20 @@ Every plan file should include at minimum: task number + title, current status (
 - `GET /api/drive-meta` - Get file metadata from Google Drive
 - `GET /api/config` - Return sheet config and Google Client ID
 
-## Environment Variables Required
+## Key API Routes — Contacts mini-app
+- `GET /api/contacts` - List all contacts enriched with emails + Telegram accounts
+- `POST /api/contacts` - Create contact with emails and Telegram accounts
+- `PUT /api/contacts/:id` - Update core contact fields
+- `DELETE /api/contacts/:id` - Blank the contact row and all linked rows
+- `POST /api/contacts/:id/emails` - Add an email to a contact
+- `DELETE /api/contacts/emails/:emailId` - Remove an email
+- `POST /api/contacts/:id/accounts` - Add a Telegram account to a contact
+- `DELETE /api/contacts/accounts/:accountId` - Remove a Telegram account
+- `GET /api/contacts/activities` - Return all join events
+- `POST /api/contacts/link-activity` - Manually link an unmatched joiner to a contact
+- `POST /api/telegram/webhook` - Telegram bot webhook (handles chat_member joins)
+
+## Environment Variables Required — Exam tracker
 - `SHEET_ID` - Google Sheets spreadsheet ID
 - `SHEET_TAB` - Sheet tab name (default: Sheet1)
 - `HEADER_ROW` - Header row number (default: 1)
@@ -57,6 +76,16 @@ Every plan file should include at minimum: task number + title, current status (
 - `OWNER_GOOGLE_CLIENT_ID` - Owner Google OAuth2 client ID
 - `OWNER_GOOGLE_CLIENT_SECRET` - Owner Google OAuth2 client secret
 - `OWNER_GOOGLE_REFRESH_TOKEN` - Owner Google OAuth2 refresh token
+
+## Environment Variables Required — Contacts mini-app
+- `CONTACTS_SHEET_ID` - Contacts Google Sheets ID (default: `1tsP9abcf5NsIqNV-K_qts_RncpDdSPn3ElAPeY6YkdU`)
+- `TELEGRAM_BOT_TOKEN` - Telegram bot token from BotFather (optional; enables join tracking)
+
+## Contacts data model (sheets inside CONTACTS_SHEET_ID)
+- `ZED_Contacts` — One row per person. ID format: `CTK-00001`
+- `ZED_Emails` — One row per email address. ID format: `E-00001`
+- `ZED_Accounts` — One row per Telegram account. ID format: `T-00001`
+- `ZED_Activities` — One row per event (auto-created by bot). ID format: `A-00001`
 
 ## Running the App
 - Port: 5000 (binds to 0.0.0.0)
