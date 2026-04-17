@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import signal
 import threading
 from datetime import datetime, timezone
 
@@ -20,7 +21,14 @@ LOCK = threading.Lock()
 API_ID = int(os.environ.get("TELEGRAM_API_ID", "0"))
 API_HASH = os.environ.get("TELEGRAM_API_HASH", "")
 TELEGRAM_SESSION = os.environ.get("TELEGRAM_SESSION", "")
+WORKER_AUTH_TOKEN = os.environ.get("WORKER_AUTH_TOKEN", "")
 PORT = int(os.environ.get("PORT", "8000"))
+ASYNC_TIMEOUT_SECONDS = int(os.environ.get("TELEGRAM_REQUEST_TIMEOUT_SECONDS", "45"))
+
+WORKER_LOOP = asyncio.new_event_loop()
+LOOP_THREAD = None
+CLIENT = None
+CLIENT_LOCK = threading.Lock()
 
 
 def now_iso():
@@ -50,19 +58,21 @@ def base_job(job_id, job_type, channel=""):
 
 def persist_job(job):
     store = get_store()
-    store.upsert_job({
-        "ID_Job": job["jobId"],
-        "Type": job["type"],
-        "Channel": job["channel"],
-        "Status": job["status"],
-        "Progress": str(job["progress"]),
-        "Total": str(job["total"]),
-        "Started": job["started"],
-        "Finished": job["finished"],
-        "Error": job["error"],
-        "Summary_JSON": job["summary"],
-        "Worker_Job_ID": job["jobId"],
-    })
+    store.upsert_job(
+        {
+            "ID_Job": job["jobId"],
+            "Type": job["type"],
+            "Channel": job["channel"],
+            "Status": job["status"],
+            "Progress": str(job["progress"]),
+            "Total": str(job["total"]),
+            "Started": job["started"],
+            "Finished": job["finished"],
+            "Error": job["error"],
+            "Summary_JSON": job["summary"],
+            "Worker_Job_ID": job["jobId"],
+        }
+    )
 
 
 def set_job(job_id, **updates):
@@ -70,45 +80,117 @@ def set_job(job_id, **updates):
         job = JOBS[job_id]
         job.update(updates)
         snapshot = dict(job)
-    persist_job(snapshot)
+        persist_job(snapshot)
     return snapshot
-
-
-async def create_client():
-    client = TelegramClient(StringSession(TELEGRAM_SESSION), API_ID, API_HASH)
-    await client.connect()
-    if not await client.is_user_authorized():
-        raise RuntimeError("TELEGRAM_SESSION is invalid or expired.")
-    return client
-
-
-def run_async_job(job_id, coroutine_factory):
-    def runner():
-        try:
-            asyncio.run(coroutine_factory())
-        except Exception as error:
-            set_job(job_id, status="error", error=str(error), finished=now_iso(), summary=str(error))
-    thread = threading.Thread(target=runner, daemon=True)
-    thread.start()
 
 
 def create_job(job_type, channel=""):
     job_id = make_id("job")
     job = base_job(job_id, job_type, channel)
     with LOCK:
-      JOBS[job_id] = job
-    persist_job(job)
+        JOBS[job_id] = job
+        persist_job(job)
     return job_id
+
+
+def loop_runner():
+    asyncio.set_event_loop(WORKER_LOOP)
+    WORKER_LOOP.run_forever()
+
+
+def start_worker_loop():
+    global LOOP_THREAD
+    if LOOP_THREAD and LOOP_THREAD.is_alive():
+        return
+    LOOP_THREAD = threading.Thread(target=loop_runner, daemon=True, name="telegram-worker-loop")
+    LOOP_THREAD.start()
+
+
+async def init_client():
+    global CLIENT
+    if CLIENT is None:
+        CLIENT = TelegramClient(StringSession(TELEGRAM_SESSION), API_ID, API_HASH)
+        await CLIENT.connect()
+    elif not CLIENT.is_connected():
+        await CLIENT.connect()
+    if not await CLIENT.is_user_authorized():
+        raise RuntimeError("TELEGRAM_SESSION is invalid or expired.")
+    return CLIENT
+
+
+def ensure_client_ready():
+    if not (API_ID and API_HASH and TELEGRAM_SESSION):
+        raise RuntimeError("Telegram worker is not fully configured.")
+    start_worker_loop()
+    with CLIENT_LOCK:
+        future = asyncio.run_coroutine_threadsafe(init_client(), WORKER_LOOP)
+        return future.result(timeout=ASYNC_TIMEOUT_SECONDS + 15)
+
+
+def run_async(coroutine):
+    ensure_client_ready()
+    future = asyncio.run_coroutine_threadsafe(coroutine, WORKER_LOOP)
+    return future.result(timeout=None)
+
+
+async def shutdown_client():
+    global CLIENT
+    if CLIENT is not None and CLIENT.is_connected():
+        await CLIENT.disconnect()
+    CLIENT = None
+
+
+def shutdown_worker(*_args):
+    if LOOP_THREAD and LOOP_THREAD.is_alive():
+        try:
+            asyncio.run_coroutine_threadsafe(shutdown_client(), WORKER_LOOP).result(timeout=15)
+        except Exception:
+            pass
+        WORKER_LOOP.call_soon_threadsafe(WORKER_LOOP.stop)
+
+
+def run_async_job(job_id, coroutine_factory):
+    def runner():
+        try:
+            run_async(coroutine_factory())
+        except Exception as error:
+            set_job(job_id, status="error", error=str(error), finished=now_iso(), summary=str(error))
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+
+
+@app.before_request
+def require_worker_token():
+    if request.path == "/health":
+        return None
+    if request.path.startswith("/jobs/"):
+        if not WORKER_AUTH_TOKEN:
+            return jsonify({"error": "WORKER_AUTH_TOKEN is not configured on the worker."}), 503
+        if request.headers.get("X-Worker-Token", "") != WORKER_AUTH_TOKEN:
+            return jsonify({"error": "Unauthorized worker request."}), 401
+    return None
 
 
 @app.get("/health")
 def health():
     ready = bool(API_ID and API_HASH and TELEGRAM_SESSION)
-    return jsonify({
-        "ok": True,
-        "telethonConfigured": ready,
-        "contactsSheetConfigured": bool(os.environ.get("CONTACTS_SHEET_ID")),
-    })
+    client_ready = False
+    if ready:
+      try:
+          ensure_client_ready()
+          client_ready = True
+      except Exception:
+          client_ready = False
+    return jsonify(
+        {
+            "ok": True,
+            "telethonConfigured": ready,
+            "telethonConnected": client_ready,
+            "contactsSheetConfigured": bool(os.environ.get("CONTACTS_SHEET_ID")),
+            "workerAuthConfigured": bool(WORKER_AUTH_TOKEN),
+        }
+    )
 
 
 @app.post("/jobs/list-channels")
@@ -116,12 +198,9 @@ def start_list_channels():
     job_id = create_job("list-channels")
 
     async def work():
+        client = await init_client()
         set_job(job_id, status="running", summary="Listing channels...")
-        client = await create_client()
-        try:
-            channels = await list_channels(client)
-        finally:
-            await client.disconnect()
+        channels = await list_channels(client, timeout_seconds=ASYNC_TIMEOUT_SECONDS)
         store = get_store()
         store.write_channels(channels)
         summary = json.dumps({"channels": len(channels)})
@@ -145,17 +224,14 @@ def start_fetch_members():
     job_id = create_job("fetch-members", label)
 
     async def work():
+        client = await init_client()
         set_job(job_id, status="running", summary=f"Fetching members for {label}...")
-        client = await create_client()
-        try:
-            result = await fetch_members(
-                client,
-                channel_ref,
-                progress_cb=lambda progress: set_job(job_id, status="running", progress=progress),
-            )
-        finally:
-            await client.disconnect()
-
+        result = await fetch_members(
+            client,
+            channel_ref,
+            progress_cb=lambda progress: set_job(job_id, status="running", progress=progress),
+            timeout_seconds=ASYNC_TIMEOUT_SECONDS,
+        )
         set_job(job_id, total=result["total"], channel=result["channel_name"])
         store = get_store()
         summary_payload = store.import_members(result["members"])
@@ -184,19 +260,26 @@ def get_job(job_id):
     rows, _ = store.get_rows("ZED_Jobs")
     for row in rows:
         if row.get("ID_Job") == job_id:
-            return jsonify({
-                "jobId": row.get("ID_Job"),
-                "type": row.get("Type"),
-                "channel": row.get("Channel"),
-                "status": row.get("Status"),
-                "progress": int(str(row.get("Progress", "0") or "0")),
-                "total": int(str(row.get("Total", "0") or "0")),
-                "started": row.get("Started", ""),
-                "finished": row.get("Finished", ""),
-                "error": row.get("Error", ""),
-                "summary": row.get("Summary_JSON", ""),
-            })
+            return jsonify(
+                {
+                    "jobId": row.get("ID_Job"),
+                    "type": row.get("Type"),
+                    "channel": row.get("Channel"),
+                    "status": row.get("Status"),
+                    "progress": int(str(row.get("Progress", "0") or "0")),
+                    "total": int(str(row.get("Total", "0") or "0")),
+                    "started": row.get("Started", ""),
+                    "finished": row.get("Finished", ""),
+                    "error": row.get("Error", ""),
+                    "summary": row.get("Summary_JSON", ""),
+                }
+            )
     return jsonify({"error": "Job not found."}), 404
+
+
+start_worker_loop()
+for sig in (signal.SIGINT, signal.SIGTERM):
+    signal.signal(sig, shutdown_worker)
 
 
 if __name__ == "__main__":

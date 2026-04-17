@@ -44,7 +44,19 @@ const OWNER_GOOGLE_CLIENT_SECRET = process.env.OWNER_GOOGLE_CLIENT_SECRET || '';
 const OWNER_GOOGLE_REFRESH_TOKEN = process.env.OWNER_GOOGLE_REFRESH_TOKEN || '';
 const CONTACTS_SHEET_ID = process.env.CONTACTS_SHEET_ID || '';
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
-const TELEGRAM_WORKER_URL = (process.env.TELEGRAM_WORKER_URL || '').replace(/\/+$/, '');
+const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || '';
+const APP_URL = (process.env.APP_URL || '').trim().replace(/\/+$/, '');
+const WORKER_AUTH_TOKEN = process.env.WORKER_AUTH_TOKEN || '';
+const RAW_TELEGRAM_WORKER_URL = (process.env.TELEGRAM_WORKER_URL || '').trim();
+const TELEGRAM_WORKER_URL = RAW_TELEGRAM_WORKER_URL.replace(/\/+$/, '');
+const WORKER_URL_VALID = !TELEGRAM_WORKER_URL || /^https?:\/\//i.test(TELEGRAM_WORKER_URL);
+const WORKER_PROXY_ERROR = WORKER_URL_VALID
+  ? ''
+  : 'TELEGRAM_WORKER_URL must start with http:// or https://. Worker proxy endpoints are disabled.';
+
+if (!WORKER_URL_VALID) {
+  console.error(WORKER_PROXY_ERROR);
+}
 
 const CONTACTS_HEADERS = {
   ZED_Contacts: ['ID_Contact', 'Full_Name', 'Notes', 'Tags', 'Created_At', 'Updated_At', 'Created_By', 'Updated_By'],
@@ -98,6 +110,34 @@ function normalizeAccountValue(type, value) {
   if (type === 'email') return raw.toLowerCase();
   if (type === 'phone') return raw.replace(/[^\d+]/g, '');
   return raw.toLowerCase();
+}
+
+function getAppBaseUrl(req) {
+  if (APP_URL) return APP_URL;
+  const host = compactString(req.get('x-forwarded-host') || req.get('host'));
+  if (!host) return '';
+  const protocol = compactString(req.get('x-forwarded-proto')) || (req.secure ? 'https' : 'http');
+  return `${protocol}://${host}`;
+}
+
+async function telegramApi(method, payload = null) {
+  if (!TELEGRAM_BOT_TOKEN) return { configured: false };
+  const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`, {
+    method: payload ? 'POST' : 'GET',
+    headers: payload ? { 'Content-Type': 'application/json' } : undefined,
+    body: payload ? JSON.stringify(payload) : undefined,
+  });
+  const text = await response.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (error) {
+    throw new Error(text || `Telegram ${method} returned an invalid response.`);
+  }
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.description || text || `Telegram ${method} failed.`);
+  }
+  return { configured: true, ...data };
 }
 
 function jsonResponseSafe(value) {
@@ -271,6 +311,39 @@ async function writeWholeSheet(token, spreadsheetId, tabName, headers, objects) 
   await updateSheetValues(token, spreadsheetId, `${tabName}!A1:${colToLetter(headers.length - 1)}${rows.length}`, rows);
 }
 
+async function appendSheetObject(token, spreadsheetId, tabName, headers, obj) {
+  return googleJson(`${buildSheetsUrl(spreadsheetId, `${tabName}!A1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ values: [objectToRow(headers, obj)] }),
+  });
+}
+
+async function updateSheetObject(token, spreadsheetId, tabName, headers, rowIndex, obj) {
+  await updateSheetValues(
+    token,
+    spreadsheetId,
+    `${tabName}!A${rowIndex}:${colToLetter(headers.length - 1)}${rowIndex}`,
+    [objectToRow(headers, obj)],
+  );
+}
+
+async function clearSheetRow(token, spreadsheetId, tabName, headers, rowIndex) {
+  await updateSheetValues(
+    token,
+    spreadsheetId,
+    `${tabName}!A${rowIndex}:${colToLetter(headers.length - 1)}${rowIndex}`,
+    [headers.map(() => '')],
+  );
+}
+
+function makeContactVersion(contact) {
+  return compactString(contact.Updated_At);
+}
+
 async function loadContactsState(token) {
   await ensureContactsInfra(token);
   const contacts = await loadSheetObjects(token, CONTACTS_SHEET_ID, 'ZED_Contacts', CONTACTS_HEADERS.ZED_Contacts);
@@ -297,6 +370,7 @@ function aggregateContacts(state) {
     return {
       id: contact.ID_Contact,
       rowIndex: contact._rowIndex,
+      version: makeContactVersion(contact),
       fullName: contact.Full_Name,
       notes: contact.Notes,
       tags: contact.Tags,
@@ -366,6 +440,14 @@ function validateContactPayload(payload) {
       tgUsername: normalizeTelegramUsername(account.tgUsername || account.value),
     })),
   };
+}
+
+function assertContactVersion(contact, expectedVersion) {
+  if (makeContactVersion(contact) !== compactString(expectedVersion)) {
+    const error = new Error('This contact row was modified by someone else. Please reload and try again.');
+    error.statusCode = 409;
+    throw error;
+  }
 }
 
 function matchJoinToContactId(join, accounts) {
@@ -475,9 +557,13 @@ function buildNextVersionedFilename(baseStem, extension, existingName = '') {
 
 async function proxyWorker(path, method = 'GET', body = null) {
   if (!TELEGRAM_WORKER_URL) throw new Error('TELEGRAM_WORKER_URL is not configured.');
+  if (!WORKER_URL_VALID) throw new Error(WORKER_PROXY_ERROR);
   const response = await fetch(`${TELEGRAM_WORKER_URL}${path}`, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(WORKER_AUTH_TOKEN ? { 'X-Worker-Token': WORKER_AUTH_TOKEN } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await response.text();
@@ -589,7 +675,8 @@ app.get('/api/config', (req, res) => {
     googleClientId: GOOGLE_CLIENT_ID,
     contactsConfigured: Boolean(CONTACTS_SHEET_ID),
     telegramBotConfigured: Boolean(TELEGRAM_BOT_TOKEN),
-    telegramWorkerConfigured: Boolean(TELEGRAM_WORKER_URL),
+    telegramWorkerConfigured: Boolean(TELEGRAM_WORKER_URL) && WORKER_URL_VALID,
+    telegramWorkerError: WORKER_PROXY_ERROR,
   });
 });
 
@@ -634,11 +721,9 @@ app.post('/api/contacts', async (req, res) => {
   try {
     const token = await getAccessToken();
     const payload = validateContactPayload(req.body || {});
-    const state = await loadContactsState(token);
     const timestamp = nowIso();
     const contactId = makeId('contact');
-
-    state.contacts.push({
+    const contactRow = {
       ID_Contact: contactId,
       Full_Name: payload.fullName,
       Notes: payload.notes,
@@ -647,10 +732,11 @@ app.post('/api/contacts', async (req, res) => {
       Updated_At: timestamp,
       Created_By: payload.updatedBy,
       Updated_By: payload.updatedBy,
-    });
+    };
 
+    await appendSheetObject(token, CONTACTS_SHEET_ID, 'ZED_Contacts', CONTACTS_HEADERS.ZED_Contacts, contactRow);
     for (const account of payload.accounts) {
-      state.accounts.push({
+      await appendSheetObject(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, {
         ID_Account: makeId('acct'),
         ID_Contact: contactId,
         Account_Type: account.type,
@@ -664,9 +750,6 @@ app.post('/api/contacts', async (req, res) => {
         Updated_At: timestamp,
       });
     }
-
-    await writeWholeSheet(token, CONTACTS_SHEET_ID, 'ZED_Contacts', CONTACTS_HEADERS.ZED_Contacts, state.contacts);
-    await writeWholeSheet(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, state.accounts);
     res.json({ ok: true, id: contactId });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -681,19 +764,23 @@ app.put('/api/contacts/:rowIndex', async (req, res) => {
     const state = await loadContactsState(token);
     const contact = state.contacts.find((entry) => entry._rowIndex === rowIndex);
     if (!contact) return res.status(404).json({ error: 'Contact not found.' });
+    assertContactVersion(contact, req.body?.version);
 
+    const timestamp = nowIso();
     contact.Full_Name = payload.fullName;
     contact.Notes = payload.notes;
     contact.Tags = payload.tags;
-    contact.Updated_At = nowIso();
+    contact.Updated_At = timestamp;
     contact.Updated_By = payload.updatedBy;
 
-    const remainingAccounts = state.accounts.filter((account) => account.ID_Contact !== contact.ID_Contact);
-    const existingById = new Map(state.accounts.filter((account) => account.ID_Contact === contact.ID_Contact).map((account) => [account.ID_Account, account]));
+    const existingAccounts = state.accounts.filter((account) => account.ID_Contact === contact.ID_Contact);
+    const existingById = new Map(existingAccounts.map((account) => [account.ID_Account, account]));
+    const seenAccountIds = new Set();
     const refreshedAccounts = payload.accounts.map((account) => {
-      const existing = existingById.get(account.id) || {};
+      const existing = existingById.get(account.id) || null;
+      if (existing?.ID_Account) seenAccountIds.add(existing.ID_Account);
       return {
-        ID_Account: existing.ID_Account || makeId('acct'),
+        ID_Account: existing?.ID_Account || makeId('acct'),
         ID_Contact: contact.ID_Contact,
         Account_Type: account.type,
         Value: account.value,
@@ -702,24 +789,42 @@ app.put('/api/contacts/:rowIndex', async (req, res) => {
         TG_Username: account.tgUsername,
         TG_Display_Name: account.tgDisplayName,
         Source: account.source,
-        Created_At: existing.Created_At || nowIso(),
-        Updated_At: nowIso(),
+        Created_At: existing?.Created_At || timestamp,
+        Updated_At: timestamp,
+        _rowIndex: existing?._rowIndex,
       };
     });
-    state.accounts = [...remainingAccounts, ...refreshedAccounts];
 
     for (const join of state.joins) {
       if (join.Matched_ID_Contact === contact.ID_Contact || !join.Matched_ID_Contact) {
-        join.Matched_ID_Contact = matchJoinToContactId(join, state.accounts);
+        join.Matched_ID_Contact = matchJoinToContactId(join, refreshedAccounts.concat(state.accounts.filter((account) => account.ID_Contact !== contact.ID_Contact)));
       }
     }
 
-    await writeWholeSheet(token, CONTACTS_SHEET_ID, 'ZED_Contacts', CONTACTS_HEADERS.ZED_Contacts, state.contacts);
-    await writeWholeSheet(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, state.accounts);
-    await writeWholeSheet(token, CONTACTS_SHEET_ID, 'Telegram_Joins', CONTACTS_HEADERS.Telegram_Joins, state.joins);
+    await updateSheetObject(token, CONTACTS_SHEET_ID, 'ZED_Contacts', CONTACTS_HEADERS.ZED_Contacts, contact._rowIndex, contact);
+
+    for (const account of refreshedAccounts) {
+      if (account._rowIndex) {
+        await updateSheetObject(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, account._rowIndex, account);
+      } else {
+        await appendSheetObject(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, account);
+      }
+    }
+
+    for (const existing of existingAccounts) {
+      if (!seenAccountIds.has(existing.ID_Account)) {
+        await clearSheetRow(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, existing._rowIndex);
+      }
+    }
+
+    for (const join of state.joins) {
+      if (join.Matched_ID_Contact === contact.ID_Contact || !join.Matched_ID_Contact) {
+        await updateSheetObject(token, CONTACTS_SHEET_ID, 'Telegram_Joins', CONTACTS_HEADERS.Telegram_Joins, join._rowIndex, join);
+      }
+    }
     res.json({ ok: true, id: contact.ID_Contact });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(error.statusCode || 400).json({ error: error.message });
   }
 });
 
@@ -730,17 +835,21 @@ app.delete('/api/contacts/:rowIndex', async (req, res) => {
     const state = await loadContactsState(token);
     const contact = state.contacts.find((entry) => entry._rowIndex === rowIndex);
     if (!contact) return res.status(404).json({ error: 'Contact not found.' });
+    assertContactVersion(contact, req.body?.version || req.query?.version);
 
-    state.contacts = state.contacts.filter((entry) => entry.ID_Contact !== contact.ID_Contact);
-    state.accounts = state.accounts.filter((entry) => entry.ID_Contact !== contact.ID_Contact);
-    state.joins = state.joins.map((join) => (join.Matched_ID_Contact === contact.ID_Contact ? { ...join, Matched_ID_Contact: '' } : join));
+    await clearSheetRow(token, CONTACTS_SHEET_ID, 'ZED_Contacts', CONTACTS_HEADERS.ZED_Contacts, contact._rowIndex);
 
-    await writeWholeSheet(token, CONTACTS_SHEET_ID, 'ZED_Contacts', CONTACTS_HEADERS.ZED_Contacts, state.contacts);
-    await writeWholeSheet(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, state.accounts);
-    await writeWholeSheet(token, CONTACTS_SHEET_ID, 'Telegram_Joins', CONTACTS_HEADERS.Telegram_Joins, state.joins);
+    for (const account of state.accounts.filter((entry) => entry.ID_Contact === contact.ID_Contact)) {
+      await clearSheetRow(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, account._rowIndex);
+    }
+
+    for (const join of state.joins.filter((entry) => entry.Matched_ID_Contact === contact.ID_Contact)) {
+      join.Matched_ID_Contact = '';
+      await updateSheetObject(token, CONTACTS_SHEET_ID, 'Telegram_Joins', CONTACTS_HEADERS.Telegram_Joins, join._rowIndex, join);
+    }
     res.json({ ok: true });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(error.statusCode || 400).json({ error: error.message });
   }
 });
 
@@ -755,7 +864,7 @@ app.post('/api/telegram/joins/:joinId/link', async (req, res) => {
       return res.status(400).json({ error: 'Invalid contact selection.' });
     }
     join.Matched_ID_Contact = contactId;
-    await writeWholeSheet(token, CONTACTS_SHEET_ID, 'Telegram_Joins', CONTACTS_HEADERS.Telegram_Joins, state.joins);
+    await updateSheetObject(token, CONTACTS_SHEET_ID, 'Telegram_Joins', CONTACTS_HEADERS.Telegram_Joins, join._rowIndex, join);
     res.json({ ok: true });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -764,6 +873,12 @@ app.post('/api/telegram/joins/:joinId/link', async (req, res) => {
 
 app.post('/api/telegram/webhook', async (req, res) => {
   try {
+    if (TELEGRAM_WEBHOOK_SECRET) {
+      const providedSecret = compactString(req.get('x-telegram-bot-api-secret-token'));
+      if (providedSecret !== TELEGRAM_WEBHOOK_SECRET) {
+        return res.status(401).json({ error: 'Invalid Telegram webhook secret.' });
+      }
+    }
     if (!CONTACTS_SHEET_ID) return res.json({ ok: true, skipped: 'CONTACTS_SHEET_ID not configured' });
     const token = await getAccessToken();
     const state = await loadContactsState(token);
@@ -791,16 +906,76 @@ app.post('/api/telegram/webhook', async (req, res) => {
     for (const candidate of candidateUpdates) {
       const exists = state.joins.some((join) => compactString(join.Update_ID) === compactString(candidate._updateId));
       if (exists) continue;
-      state.joins.push(extractJoinRow(candidate, state.accounts));
+      const joinRow = extractJoinRow(candidate, state.accounts);
+      state.joins.push(joinRow);
+      await appendSheetObject(token, CONTACTS_SHEET_ID, 'Telegram_Joins', CONTACTS_HEADERS.Telegram_Joins, joinRow);
       created += 1;
-    }
-
-    if (created) {
-      await writeWholeSheet(token, CONTACTS_SHEET_ID, 'Telegram_Joins', CONTACTS_HEADERS.Telegram_Joins, state.joins);
     }
     res.json({ ok: true, created });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/telegram/bot-info', async (req, res) => {
+  try {
+    const info = await telegramApi('getMe');
+    if (!info.configured) return res.json({ configured: false });
+    const bot = info.result || {};
+    res.json({
+      configured: true,
+      id: bot.id,
+      name: bot.first_name || '',
+      username: bot.username || '',
+      canJoinGroups: Boolean(bot.can_join_groups),
+      canReadAllGroupMessages: Boolean(bot.can_read_all_group_messages),
+      supportsInlineQueries: Boolean(bot.supports_inline_queries),
+    });
+  } catch (error) {
+    res.status(502).json({ error: error.message });
+  }
+});
+
+app.get('/api/telegram/webhook-info', async (req, res) => {
+  try {
+    const info = await telegramApi('getWebhookInfo');
+    if (!info.configured) return res.json({ configured: false });
+    const webhook = info.result || {};
+    res.json({
+      configured: true,
+      url: webhook.url || '',
+      pendingUpdateCount: webhook.pending_update_count || 0,
+      lastErrorDate: webhook.last_error_date || 0,
+      lastErrorMessage: webhook.last_error_message || '',
+      hasCustomCertificate: Boolean(webhook.has_custom_certificate),
+      allowedUpdates: webhook.allowed_updates || [],
+    });
+  } catch (error) {
+    res.status(502).json({ error: error.message });
+  }
+});
+
+app.post('/api/telegram/register-webhook', async (req, res) => {
+  try {
+    if (!TELEGRAM_BOT_TOKEN) return res.json({ configured: false });
+    const baseUrl = getAppBaseUrl(req);
+    if (!/^https?:\/\//i.test(baseUrl)) {
+      return res.status(400).json({ error: 'APP_URL or request host did not produce a valid absolute URL.' });
+    }
+    const webhookUrl = `${baseUrl.replace(/\/+$/, '')}/api/telegram/webhook`;
+    const result = await telegramApi('setWebhook', {
+      url: webhookUrl,
+      secret_token: TELEGRAM_WEBHOOK_SECRET || undefined,
+      allowed_updates: ['chat_member'],
+    });
+    res.json({
+      configured: true,
+      ok: Boolean(result.ok),
+      description: result.description || '',
+      url: webhookUrl,
+    });
+  } catch (error) {
+    res.status(502).json({ error: error.message });
   }
 });
 
@@ -810,7 +985,7 @@ app.get('/api/telegram/channels', async (req, res) => {
     await ensureContactsInfra(token);
     const channels = await loadSheetObjects(token, CONTACTS_SHEET_ID, 'ZED_Channels', CONTACTS_HEADERS.ZED_Channels);
     res.json({
-      workerConfigured: Boolean(TELEGRAM_WORKER_URL),
+      workerConfigured: Boolean(TELEGRAM_WORKER_URL) && WORKER_URL_VALID,
       channels: channels.map((channel) => ({
         rowIndex: channel._rowIndex,
         id: channel.ID_Channel,
@@ -854,334 +1029,6 @@ app.get('/api/telegram/jobs/:jobId', async (req, res) => {
   }
 });
 
-// ─── CONTACTS MINI-APP ───────────────────────────────────────────────────────
-
-/*
-const CONTACTS_SHEET_ID = process.env.CONTACTS_SHEET_ID || '1tsP9abcf5NsIqNV-K_qts_RncpDdSPn3ElAPeY6YkdU';
-const TELEGRAM_BOT_TOKEN    = process.env.TELEGRAM_BOT_TOKEN    || '';
-const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || '';
-
-const CTAB  = 'ZED_Contacts';
-const ETAB  = 'ZED_Emails';
-const ATAB  = 'ZED_Accounts';
-const XATAB = 'ZED_Activities';
-
-const CTAB_HEADERS  = ['ID_Contact','Timestamp','Email Address','Nom (en francais)','Prénom (en francais)','TLG_Name','Username','Official phone number','Archive_Tlg_Contacts','Wilaya','Commune','Archive_adresse','Promo','VIP','Tag'];
-const ETAB_HEADERS  = ['ID_Email','ID_Contact','Email','Is_Primary'];
-const ATAB_HEADERS  = ['ID_Telegram','ID_Contact','TG_User_ID','TG_Username'];
-const XATAB_HEADERS = ['ID_Activity','ID_Contact','ID_Telegram','TG_User_ID','TG_Username','Action','Channel','Timestamp'];
-
-async function csRead(tab) {
-  try {
-    const token = await getAccessToken();
-    const r = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${CONTACTS_SHEET_ID}/values/${encodeURIComponent(tab)}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!r.ok) return [];
-    const d = await r.json();
-    return d.values || [];
-  } catch { return []; }
-}
-
-async function csAppend(tab, row) {
-  const token = await getAccessToken();
-  const r = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${CONTACTS_SHEET_ID}/values/${encodeURIComponent(tab)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [row] }),
-    }
-  );
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-
-async function csUpdate(tab, rowIndex, row) {
-  const token = await getAccessToken();
-  const r = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${CONTACTS_SHEET_ID}/values/${encodeURIComponent(`${tab}!A${rowIndex}`)}?valueInputOption=USER_ENTERED`,
-    {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [row] }),
-    }
-  );
-  if (!r.ok) throw new Error(await r.text());
-}
-
-async function csEnsureTab(tabName, headers) {
-  const token = await getAccessToken();
-  const metaRes = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${CONTACTS_SHEET_ID}?fields=sheets(properties(title))`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  const meta = await metaRes.json();
-  const exists = (meta.sheets || []).some(s => s.properties.title === tabName);
-  if (!exists) {
-    await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${CONTACTS_SHEET_ID}:batchUpdate`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requests: [{ addSheet: { properties: { title: tabName } } }] }),
-      }
-    );
-  }
-  // Always ensure headers exist (handles both new and previously-empty tabs)
-  if (headers) {
-    const rows = await csRead(tabName);
-    if (!rows.length) await csAppend(tabName, headers);
-  }
-}
-
-function rowsToObjects(rows) {
-  if (!rows.length) return [];
-  const [headers, ...data] = rows;
-  return data
-    .map((row, i) => {
-      const obj = { _rowIndex: i + 2 };
-      headers.forEach((h, j) => { obj[h.trim()] = (row[j] || '').trim(); });
-      return obj;
-    })
-    .filter(obj => Object.keys(obj).some(k => k !== '_rowIndex' && obj[k]));
-}
-
-function nextId(prefix, existingIds, padLen = 5) {
-  const nums = existingIds
-    .map(id => { const m = String(id || '').match(/(\d+)$/); return m ? parseInt(m[1]) : 0; })
-    .filter(n => !isNaN(n) && n > 0);
-  return `${prefix}${String((nums.length ? Math.max(...nums) : 0) + 1).padStart(padLen, '0')}`;
-}
-
-// GET /api/contacts
-app.get('/api/contacts', async (req, res) => {
-  try {
-    const [contactRows, emailRows, accountRows] = await Promise.all([
-      csRead(CTAB), csRead(ETAB), csRead(ATAB),
-    ]);
-    const contacts = rowsToObjects(contactRows);
-    const emails   = rowsToObjects(emailRows);
-    const accounts = rowsToObjects(accountRows);
-    const enriched = contacts.map(c => ({
-      ...c,
-      emails:   emails.filter(e => e.ID_Contact === c.ID_Contact),
-      accounts: accounts.filter(a => a.ID_Contact === c.ID_Contact),
-    }));
-    res.json({ contacts: enriched });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// GET /api/contacts/activities
-app.get('/api/contacts/activities', async (req, res) => {
-  try {
-    const rows = await csRead(XATAB);
-    res.json({ activities: rowsToObjects(rows) });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// POST /api/contacts
-app.post('/api/contacts', async (req, res) => {
-  try {
-    // Ensure all tabs exist with headers before first write
-    await Promise.all([
-      csEnsureTab(CTAB, CTAB_HEADERS),
-      csEnsureTab(ETAB, ETAB_HEADERS),
-      csEnsureTab(ATAB, ATAB_HEADERS),
-    ]);
-    const [contactRows, emailRows, accountRows] = await Promise.all([
-      csRead(CTAB), csRead(ETAB), csRead(ATAB),
-    ]);
-    const { nom, prenom, tlgName, promo, wilaya, commune, vip, tag, emails = [], accounts = [] } = req.body;
-    const contactId = nextId('CTK-', contactRows.slice(1).map(r => r[0]));
-    const ts = new Date().toLocaleString('fr-FR');
-    // Columns: ID_Contact, Timestamp, Email Address, Nom, Prénom, TLG_Name, Username, Official phone, Archive_Tlg, Wilaya, Commune, Archive_adresse, Promo, VIP, Tag
-    await csAppend(CTAB, [contactId, ts, '', nom||'', prenom||'', tlgName||'', '', '', '', wilaya||'', commune||'', '', promo||'', vip ? 'TRUE' : 'FALSE', tag||'']);
-    const emailIdPool = emailRows.slice(1).map(r => r[0]);
-    for (const e of emails) {
-      const eid = nextId('E-', emailIdPool); emailIdPool.push(eid);
-      await csAppend(ETAB, [eid, contactId, e.email||'', e.isPrimary ? 'TRUE' : 'FALSE']);
-    }
-    const accountIdPool = accountRows.slice(1).map(r => r[0]);
-    for (const a of accounts) {
-      const aid = nextId('T-', accountIdPool); accountIdPool.push(aid);
-      await csAppend(ATAB, [aid, contactId, a.tgUserId||'', a.tgUsername||'']);
-    }
-    res.json({ ok: true, id: contactId });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// POST /api/contacts/:id/emails
-app.post('/api/contacts/:id/emails', async (req, res) => {
-  try {
-    const eRows = await csRead(ETAB);
-    const eid = nextId('E-', eRows.slice(1).map(r => r[0]));
-    const { email, isPrimary } = req.body;
-    await csAppend(ETAB, [eid, req.params.id, email||'', isPrimary ? 'TRUE' : 'FALSE']);
-    res.json({ ok: true, id: eid });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// POST /api/contacts/:id/accounts
-app.post('/api/contacts/:id/accounts', async (req, res) => {
-  try {
-    const aRows = await csRead(ATAB);
-    const aid = nextId('T-', aRows.slice(1).map(r => r[0]));
-    const { tgUserId, tgUsername } = req.body;
-    await csAppend(ATAB, [aid, req.params.id, tgUserId||'', tgUsername||'']);
-    res.json({ ok: true, id: aid });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// POST /api/contacts/link-activity
-app.post('/api/contacts/link-activity', async (req, res) => {
-  try {
-    const { activityRowIndex, contactId, accountId } = req.body;
-    const actRows = await csRead(XATAB);
-    const ex = [...(actRows[activityRowIndex - 1] || [])];
-    ex[1] = contactId || ''; ex[2] = accountId || '';
-    await csUpdate(XATAB, activityRowIndex, ex);
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// PUT /api/contacts/:id
-app.put('/api/contacts/:id', async (req, res) => {
-  try {
-    const contactRows = await csRead(CTAB);
-    const idx = contactRows.findIndex((r, i) => i > 0 && r[0] === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'Contact not found' });
-    const ex = contactRows[idx];
-    const { nom, prenom, tlgName, promo, wilaya, commune, vip, tag } = req.body;
-    await csUpdate(CTAB, idx + 1, [
-      ex[0], ex[1], ex[2],
-      nom     !== undefined ? nom     : (ex[3]  || ''),
-      prenom  !== undefined ? prenom  : (ex[4]  || ''),
-      tlgName !== undefined ? tlgName : (ex[5]  || ''),
-      ex[6]||'', ex[7]||'', ex[8]||'',
-      wilaya  !== undefined ? wilaya  : (ex[9]  || ''),
-      commune !== undefined ? commune : (ex[10] || ''),
-      ex[11]||'',
-      promo   !== undefined ? promo   : (ex[12] || ''),
-      vip     !== undefined ? (vip ? 'TRUE' : 'FALSE') : (ex[13] || 'FALSE'),
-      tag     !== undefined ? tag     : (ex[14] || ''),
-    ]);
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// DELETE /api/contacts/emails/:emailId
-app.delete('/api/contacts/emails/:emailId', async (req, res) => {
-  try {
-    const eRows = await csRead(ETAB);
-    const idx = eRows.findIndex((r, i) => i > 0 && r[0] === req.params.emailId);
-    if (idx > 0) await csUpdate(ETAB, idx + 1, ['', '', '', '']);
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// DELETE /api/contacts/accounts/:accountId
-app.delete('/api/contacts/accounts/:accountId', async (req, res) => {
-  try {
-    const aRows = await csRead(ATAB);
-    const idx = aRows.findIndex((r, i) => i > 0 && r[0] === req.params.accountId);
-    if (idx > 0) await csUpdate(ATAB, idx + 1, ['', '', '', '']);
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// DELETE /api/contacts/:id/all-emails  (used by edit-mode save to replace all emails)
-app.delete('/api/contacts/:id/all-emails', async (req, res) => {
-  try {
-    const eRows = await csRead(ETAB);
-    const id = req.params.id;
-    for (let i = 1; i < eRows.length; i++) {
-      if ((eRows[i][1]||'') === id) await csUpdate(ETAB, i + 1, ['', '', '', '']);
-    }
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// DELETE /api/contacts/:id/all-accounts  (used by edit-mode save to replace all accounts)
-app.delete('/api/contacts/:id/all-accounts', async (req, res) => {
-  try {
-    const aRows = await csRead(ATAB);
-    const id = req.params.id;
-    for (let i = 1; i < aRows.length; i++) {
-      if ((aRows[i][1]||'') === id) await csUpdate(ATAB, i + 1, ['', '', '', '']);
-    }
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// DELETE /api/contacts/:id
-app.delete('/api/contacts/:id', async (req, res) => {
-  try {
-    const id = req.params.id;
-    const [cRows, eRows, aRows] = await Promise.all([csRead(CTAB), csRead(ETAB), csRead(ATAB)]);
-    const blank = len => Array(len).fill('');
-    const cIdx = cRows.findIndex((r, i) => i > 0 && r[0] === id);
-    if (cIdx > 0) await csUpdate(CTAB, cIdx + 1, blank(15));
-    for (let i = 1; i < eRows.length; i++) {
-      if ((eRows[i][1]||'') === id) await csUpdate(ETAB, i + 1, blank(4));
-    }
-    for (let i = 1; i < aRows.length; i++) {
-      if ((aRows[i][1]||'') === id) await csUpdate(ATAB, i + 1, blank(4));
-    }
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// POST /api/telegram/webhook
-app.post('/api/telegram/webhook', async (req, res) => {
-  // Validate secret token header (if TELEGRAM_WEBHOOK_SECRET is configured)
-  if (TELEGRAM_WEBHOOK_SECRET) {
-    const provided = req.headers['x-telegram-bot-api-secret-token'] || '';
-    if (provided !== TELEGRAM_WEBHOOK_SECRET) {
-      return res.status(403).json({ ok: false, error: 'Invalid webhook secret' });
-    }
-  }
-  res.json({ ok: true }); // always respond 200 immediately
-  try {
-    const update = req.body;
-    const member = update.chat_member || update.my_chat_member;
-    if (!member) return;
-    const newStatus = (member.new_chat_member || {}).status;
-    if (!['member', 'administrator'].includes(newStatus)) return;
-    const tgUser = member.new_chat_member.user;
-    if (tgUser.is_bot) return;
-    const channel  = member.chat;
-    const tgUserId = String(tgUser.id);
-    const tgUsername = tgUser.username ? `@${tgUser.username}` : (tgUser.first_name || '');
-    const aRows = await csRead(ATAB);
-    // Match by TG_User_ID first, then fall back to username match
-    const matchRow = aRows.slice(1).find(r =>
-      (r[2] && String(r[2]) === tgUserId) ||
-      (tgUser.username && r[3] && r[3].replace('@','').toLowerCase() === tgUser.username.toLowerCase())
-    );
-    await csEnsureTab(XATAB, XATAB_HEADERS);
-    const actRows = await csRead(XATAB);
-    const actId = nextId('A-', actRows.slice(1).map(r => r[0]));
-    await csAppend(XATAB, [
-      actId,
-      matchRow ? (matchRow[1]||'') : '',
-      matchRow ? (matchRow[0]||'') : '',
-      tgUserId, tgUsername, 'joined_channel',
-      channel.title || channel.username || String(channel.id),
-      new Date().toISOString(),
-    ]);
-  } catch (e) { console.error('TG webhook error:', e.message); }
-});
-
-// GET /api/contacts/config — expose bot configuration state
-app.get('/api/contacts/config', (req, res) => {
-  res.json({ telegramConfigured: !!TELEGRAM_BOT_TOKEN });
-});
-
-// ─── END CONTACTS MINI-APP ────────────────────────────────────────────────────
-
-*/
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Exam Tracker backend running on port ${PORT}`);

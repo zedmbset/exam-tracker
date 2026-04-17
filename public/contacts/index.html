@@ -5,300 +5,93 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Contacts</title>
 <style>
-  :root {
-    --bg: #f5f3ee;
-    --panel: #ffffff;
-    --panel-soft: #faf8f2;
-    --text: #1a1a18;
-    --muted: #6b6a65;
-    --border: rgba(0, 0, 0, 0.12);
-    --accent: #185fa5;
-    --accent-soft: #e6f1fb;
-    --success: #3b6d11;
-    --success-bg: #eaf3de;
-    --warn: #854f0b;
-    --warn-bg: #faeeda;
-    --danger: #a32d2d;
-    --danger-bg: #fcebeb;
-    --purple: #534ab7;
-    --purple-bg: #eeedfe;
-    --radius: 12px;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    color: var(--text);
-    background: linear-gradient(180deg, #f5f3ee 0%, #efede6 100%);
-  }
-  .topbar {
-    position: sticky;
-    top: 0;
-    z-index: 20;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 14px 22px;
-    background: rgba(255,255,255,0.92);
-    backdrop-filter: blur(10px);
-    border-bottom: 1px solid var(--border);
-  }
-  .title { font-size: 18px; font-weight: 600; }
-  .sub { color: var(--muted); font-size: 13px; }
-  .topbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  body { margin: 0; font-family: "Segoe UI", sans-serif; background: #f5f3ee; color: #1a1a18; }
+  .topbar, .controls, .controls-right, .controls-left { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .topbar { position: sticky; top: 0; z-index: 10; padding: 14px 22px; background: rgba(255,255,255,0.94); border-bottom: 1px solid rgba(0,0,0,0.08); }
+  .topbar-right { margin-left: auto; }
   .page { max-width: 1480px; margin: 0 auto; padding: 22px; display: grid; gap: 18px; }
-  .hero {
-    background: radial-gradient(circle at top left, #ffffff 0%, #f8f4eb 60%, #f1ecdf 100%);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 22px;
-    display: flex;
-    gap: 20px;
-    align-items: flex-start;
-    justify-content: space-between;
-    flex-wrap: wrap;
-  }
-  .hero h1 { margin: 0 0 6px; font-size: 28px; }
-  .hero p { margin: 0; color: var(--muted); max-width: 760px; line-height: 1.55; }
+  .hero, .panel { background: #fff; border: 1px solid rgba(0,0,0,0.1); border-radius: 16px; padding: 16px; }
+  .hero { display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
   .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-  .panel {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px;
-    box-shadow: 0 12px 30px rgba(0,0,0,0.04);
-  }
-  .panel h2, .panel h3 { margin: 0 0 10px; font-size: 16px; }
-  .muted { color: var(--muted); }
-  .pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 600;
-  }
-  .pill.ok { background: var(--success-bg); color: var(--success); }
-  .pill.warn { background: var(--warn-bg); color: var(--warn); }
-  .pill.err { background: var(--danger-bg); color: var(--danger); }
-  .btn, button, select, input, textarea {
-    font: inherit;
-  }
-  .btn {
-    border: 1px solid var(--border);
-    background: white;
-    color: var(--text);
-    text-decoration: none;
-    padding: 9px 14px;
-    border-radius: 10px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-  }
-  .btn:hover { background: var(--panel-soft); }
-  .btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
-  .btn.primary:hover { filter: brightness(0.95); }
-  .btn.danger { color: var(--danger); background: white; }
-  .controls {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .controls-left, .controls-right {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-  .search {
-    width: min(380px, 100%);
-    padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: white;
-  }
-  .layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
-    gap: 18px;
-    align-items: start;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-  th, td {
-    text-align: left;
-    padding: 11px 10px;
-    border-bottom: 1px solid rgba(0,0,0,0.08);
-    vertical-align: top;
-  }
-  th { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
-  .table-wrap { overflow: auto; }
-  .tag {
-    display: inline-flex;
-    background: var(--accent-soft);
-    color: var(--accent);
-    padding: 3px 8px;
-    border-radius: 999px;
-    font-size: 11px;
-    margin: 2px 4px 2px 0;
-  }
-  .tag.join { background: var(--purple-bg); color: var(--purple); }
+  .layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr); gap: 18px; }
   .stack { display: grid; gap: 12px; }
-  .stat { font-size: 30px; font-weight: 700; margin-top: 2px; }
-  .small { font-size: 12px; color: var(--muted); }
-  .modal {
-    position: fixed;
-    inset: 0;
-    background: rgba(20, 20, 20, 0.45);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    z-index: 30;
-  }
+  .btn, input, textarea, select { font: inherit; }
+  .btn { padding: 9px 14px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.14); background: #fff; cursor: pointer; }
+  .btn.primary { background: #185fa5; border-color: #185fa5; color: #fff; }
+  .btn.danger { color: #a32d2d; }
+  .search, .field input, .field textarea, .field select { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.14); }
+  .search { width: min(380px, 100%); }
+  .stat { font-size: 30px; font-weight: 700; }
+  .small, .muted { color: #6b6a65; font-size: 12px; }
+  .notice { padding: 12px; border-radius: 12px; font-size: 13px; line-height: 1.5; }
+  .notice.info { background: #e6f1fb; color: #185fa5; }
+  .notice.warn { background: #faeeda; color: #854f0b; }
+  .notice.err { background: #fcebeb; color: #a32d2d; }
+  .pill { display: inline-flex; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .pill.ok { background: #eaf3de; color: #3b6d11; }
+  .pill.warn { background: #faeeda; color: #854f0b; }
+  .pill.err { background: #fcebeb; color: #a32d2d; }
+  .tag { display: inline-flex; padding: 3px 8px; border-radius: 999px; background: #e6f1fb; color: #185fa5; font-size: 11px; margin: 2px 4px 2px 0; }
+  .tag.join { background: #eeedfe; color: #534ab7; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 11px 10px; border-bottom: 1px solid rgba(0,0,0,0.08); vertical-align: top; }
+  th { font-size: 11px; color: #6b6a65; text-transform: uppercase; letter-spacing: 0.06em; }
+  .table-wrap { overflow: auto; }
+  .empty { padding: 22px 12px; text-align: center; color: #6b6a65; }
+  .job-row { padding: 10px 12px; border-radius: 10px; background: #faf8f2; border: 1px solid rgba(0,0,0,0.08); }
+  .progress { height: 7px; background: #ebe7dc; border-radius: 999px; overflow: hidden; margin-top: 8px; }
+  .progress > div { height: 100%; background: linear-gradient(90deg, #185fa5, #7e6ee7); }
+  .modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; padding: 20px; background: rgba(20,20,20,0.45); }
   .modal.open { display: flex; }
-  .modal-card {
-    width: min(920px, 100%);
-    max-height: 90vh;
-    overflow: auto;
-    background: white;
-    border-radius: 18px;
-    border: 1px solid var(--border);
-    padding: 18px;
-  }
-  .form-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-  .full { grid-column: 1 / -1; }
+  .modal-card { width: min(920px, 100%); max-height: 90vh; overflow: auto; background: #fff; border-radius: 18px; border: 1px solid rgba(0,0,0,0.12); padding: 18px; }
+  .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .field { display: grid; gap: 6px; }
-  .field input, .field textarea, .field select {
-    width: 100%;
-    padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: white;
-  }
-  .account-row {
-    display: grid;
-    grid-template-columns: 120px 1fr 120px 120px auto;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 8px;
-  }
-  .notice {
-    padding: 12px;
-    border-radius: 12px;
-    font-size: 13px;
-    line-height: 1.5;
-  }
-  .notice.info { background: var(--accent-soft); color: var(--accent); }
-  .notice.warn { background: var(--warn-bg); color: var(--warn); }
-  .notice.err { background: var(--danger-bg); color: var(--danger); }
-  .job-row {
-    padding: 10px 12px;
-    border-radius: 10px;
-    background: var(--panel-soft);
-    border: 1px solid var(--border);
-  }
-  .progress {
-    height: 7px;
-    background: #ebe7dc;
-    border-radius: 999px;
-    overflow: hidden;
-    margin-top: 8px;
-  }
-  .progress > div {
-    height: 100%;
-    background: linear-gradient(90deg, #185fa5, #7e6ee7);
-    width: 0%;
-  }
-  .empty {
-    padding: 26px 12px;
-    text-align: center;
-    color: var(--muted);
-  }
-  @media (max-width: 1100px) {
-    .layout { grid-template-columns: 1fr; }
-    .grid-3 { grid-template-columns: 1fr; }
-    .form-grid { grid-template-columns: 1fr; }
-    .account-row { grid-template-columns: 1fr; }
-  }
+  .full { grid-column: 1 / -1; }
+  .account-row { display: grid; grid-template-columns: 120px 1fr 120px 120px auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+  @media (max-width: 1100px) { .grid-3, .layout, .form-grid, .account-row { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
   <div class="topbar">
     <div>
-      <div class="title">Contacts & Telegram</div>
-      <div class="sub">Shared moderator workspace for contacts, joins, and Telethon sync jobs.</div>
+      <div><strong>Contacts & Telegram</strong></div>
+      <div class="small">Shared moderator workspace for contacts, joins, and Telethon sync jobs.</div>
     </div>
     <div class="topbar-right">
       <a class="btn" href="/availability.html">Availability</a>
       <a class="btn" href="/">Dashboard</a>
-      <button class="btn primary" id="addContactBtn">Add contact</button>
+      <button class="btn primary" id="addContactBtn" type="button">Add contact</button>
     </div>
   </div>
 
   <div class="page">
     <section class="hero">
       <div>
-        <h1>Moderator-ready Telegram sync</h1>
-        <p>Manage contacts in a relational model, capture bot-based joins in real time, and trigger Telethon backfills from the browser when the worker is connected.</p>
+        <h1 style="margin:0 0 6px;">Moderator-ready Telegram sync</h1>
+        <p class="muted" style="margin:0; max-width:760px;">Manage contacts in a relational model, capture bot-based joins in real time, and trigger Telethon backfills from the browser when the worker is connected.</p>
       </div>
       <div class="controls-right">
-        <button class="btn" id="refreshBtn">Refresh data</button>
-        <button class="btn primary" id="syncChannelsBtn">Sync channel list</button>
+        <button class="btn" id="refreshBtn" type="button">Refresh data</button>
+        <button class="btn primary" id="syncChannelsBtn" type="button">Sync channel list</button>
       </div>
     </section>
 
     <section class="grid-3">
-      <div class="panel">
-        <div class="small">Contacts</div>
-        <div class="stat" id="contactsCount">0</div>
-        <div class="muted">Aggregated people records from <code>ZED_Contacts</code> + <code>ZED_Accounts</code>.</div>
-      </div>
-      <div class="panel">
-        <div class="small">Telegram Joins</div>
-        <div class="stat" id="joinsCount">0</div>
-        <div class="muted">Live join events collected through the bot webhook.</div>
-      </div>
-      <div class="panel">
-        <div class="small">Worker Status</div>
-        <div style="margin-top:8px;" id="workerPill" class="pill warn">Checking…</div>
-        <div class="muted" id="workerHint" style="margin-top:8px;">Worker-backed channel sync is optional but recommended.</div>
-      </div>
+      <div class="panel"><div class="small">Contacts</div><div class="stat" id="contactsCount">0</div><div class="muted">Aggregated records from <code>ZED_Contacts</code> + <code>ZED_Accounts</code>.</div></div>
+      <div class="panel"><div class="small">Telegram Joins</div><div class="stat" id="joinsCount">0</div><div class="muted">Live join events collected through the bot webhook.</div></div>
+      <div class="panel"><div class="small">Worker Status</div><div style="margin-top:8px;" id="workerPill" class="pill warn">Checking...</div><div class="muted" id="workerHint" style="margin-top:8px;">Worker-backed channel sync is optional but recommended.</div></div>
     </section>
 
     <section class="layout">
       <div class="stack">
         <div class="panel">
           <div class="controls">
-            <div class="controls-left">
-              <input class="search" id="searchInput" placeholder="Search by name, account, username, notes, or tag">
-            </div>
-            <div class="controls-right">
-              <span class="small" id="resultsLabel">0 contacts</span>
-            </div>
+            <div class="controls-left"><input class="search" id="searchInput" placeholder="Search by name, account, username, notes, or tag"></div>
+            <div class="controls-right"><span class="small" id="resultsLabel">0 contacts</span></div>
           </div>
           <div class="table-wrap" style="margin-top:14px;">
             <table>
-              <thead>
-                <tr>
-                  <th>Contact</th>
-                  <th>Accounts</th>
-                  <th>Joined Channels</th>
-                  <th>Updated</th>
-                  <th></th>
-                </tr>
-              </thead>
+              <thead><tr><th>Contact</th><th>Accounts</th><th>Joined Channels</th><th>Updated</th><th></th></tr></thead>
               <tbody id="contactsBody"></tbody>
             </table>
           </div>
@@ -306,21 +99,16 @@
 
         <div class="panel">
           <div class="controls">
-            <h2>My Channels</h2>
-            <button class="btn" id="reloadChannelsBtn">Reload cache</button>
+            <h2 style="margin:0;">My Channels</h2>
+            <div class="controls-right">
+              <button class="btn" id="toggleChannelsBtn" type="button">Close panel</button>
+              <button class="btn" id="reloadChannelsBtn" type="button">Reload cache</button>
+            </div>
           </div>
           <div id="channelsNotice" class="notice info" style="margin-top:10px;">Channel sync becomes available when <code>TELEGRAM_WORKER_URL</code> is configured.</div>
-          <div class="table-wrap" style="margin-top:12px;">
+          <div class="table-wrap" id="channelsWrap" style="margin-top:12px;">
             <table>
-              <thead>
-                <tr>
-                  <th>Channel</th>
-                  <th>Type</th>
-                  <th>Members</th>
-                  <th>Last Sync</th>
-                  <th></th>
-                </tr>
-              </thead>
+              <thead><tr><th>Channel</th><th>Type</th><th>Members</th><th>Last Sync</th><th></th></tr></thead>
               <tbody id="channelsBody"></tbody>
             </table>
           </div>
@@ -328,20 +116,9 @@
       </div>
 
       <div class="stack">
-        <div class="panel">
-          <h2>Bot & Worker</h2>
-          <div id="configStatus" class="stack"></div>
-        </div>
-
-        <div class="panel">
-          <h2>Unmatched Joiners</h2>
-          <div id="unmatchedBody" class="stack"></div>
-        </div>
-
-        <div class="panel">
-          <h2>Jobs</h2>
-          <div id="jobsBody" class="stack"></div>
-        </div>
+        <div class="panel"><h2 style="margin-top:0;">Bot & Worker</h2><div id="configStatus" class="stack"></div></div>
+        <div class="panel"><h2 style="margin-top:0;">Unmatched Joiners</h2><div id="unmatchedBody" class="stack"></div></div>
+        <div class="panel"><h2 style="margin-top:0;">Jobs</h2><div id="jobsBody" class="stack"></div></div>
       </div>
     </section>
   </div>
@@ -349,30 +126,15 @@
   <div class="modal" id="contactModal">
     <div class="modal-card">
       <div class="controls">
-        <div>
-          <h2 id="modalTitle">Add contact</h2>
-          <div class="muted">Each account row is stored separately in <code>ZED_Accounts</code>.</div>
-        </div>
-        <button class="btn" id="closeModalBtn">Close</button>
+        <div><h2 id="modalTitle" style="margin:0;">Add contact</h2><div class="muted">Each account row is stored separately in <code>ZED_Accounts</code>.</div></div>
+        <button class="btn" id="closeModalBtn" type="button">Close</button>
       </div>
       <div class="form-grid" style="margin-top:14px;">
-        <div class="field">
-          <label for="fullName">Full name</label>
-          <input id="fullName" placeholder="e.g. Dr. Nadia Bensalem">
-        </div>
-        <div class="field">
-          <label for="tags">Tags</label>
-          <input id="tags" placeholder="telethon_import, moderator, alumni">
-        </div>
+        <div class="field"><label for="fullName">Full name</label><input id="fullName"></div>
+        <div class="field"><label for="tags">Tags</label><input id="tags"></div>
+        <div class="field full"><label for="notes">Notes</label><textarea id="notes" rows="4"></textarea></div>
         <div class="field full">
-          <label for="notes">Notes</label>
-          <textarea id="notes" rows="4" placeholder="Anything useful for moderators..."></textarea>
-        </div>
-        <div class="field full">
-          <div class="controls">
-            <label>Accounts</label>
-            <button class="btn" id="addAccountBtn" type="button">Add account row</button>
-          </div>
+          <div class="controls"><label>Accounts</label><button class="btn" id="addAccountBtn" type="button">Add account row</button></div>
           <div id="accountsContainer" style="margin-top:10px;"></div>
         </div>
       </div>
@@ -387,353 +149,92 @@
   </div>
 
 <script>
-const state = {
-  config: null,
-  contacts: [],
-  unmatchedJoins: [],
-  channels: [],
-  jobs: [],
-  editing: null,
-  jobTimers: new Map(),
-};
-
+const MAX_POLL_ERRORS = 5;
+const POLL_INTERVAL_MS = 3000;
+const RELOAD_DEBOUNCE_MS = 1000;
+const state = { config: null, botInfo: null, webhookInfo: null, botPanelMessage: '', contacts: [], unmatchedJoins: [], channels: [], jobs: [], editing: null, channelsOpen: true, jobTimers: new Map(), jobPollErrors: new Map(), refreshTimer: null };
 const els = {
-  contactsBody: document.getElementById('contactsBody'),
-  unmatchedBody: document.getElementById('unmatchedBody'),
-  channelsBody: document.getElementById('channelsBody'),
-  jobsBody: document.getElementById('jobsBody'),
-  contactsCount: document.getElementById('contactsCount'),
-  joinsCount: document.getElementById('joinsCount'),
-  workerPill: document.getElementById('workerPill'),
-  workerHint: document.getElementById('workerHint'),
-  configStatus: document.getElementById('configStatus'),
-  searchInput: document.getElementById('searchInput'),
-  resultsLabel: document.getElementById('resultsLabel'),
-  channelsNotice: document.getElementById('channelsNotice'),
-  modal: document.getElementById('contactModal'),
-  modalTitle: document.getElementById('modalTitle'),
-  modalMeta: document.getElementById('modalMeta'),
-  fullName: document.getElementById('fullName'),
-  tags: document.getElementById('tags'),
-  notes: document.getElementById('notes'),
-  accountsContainer: document.getElementById('accountsContainer'),
+  contactsBody: document.getElementById('contactsBody'), unmatchedBody: document.getElementById('unmatchedBody'), channelsBody: document.getElementById('channelsBody'), jobsBody: document.getElementById('jobsBody'),
+  contactsCount: document.getElementById('contactsCount'), joinsCount: document.getElementById('joinsCount'), workerPill: document.getElementById('workerPill'), workerHint: document.getElementById('workerHint'),
+  configStatus: document.getElementById('configStatus'), searchInput: document.getElementById('searchInput'), resultsLabel: document.getElementById('resultsLabel'), channelsNotice: document.getElementById('channelsNotice'),
+  channelsWrap: document.getElementById('channelsWrap'), toggleChannelsBtn: document.getElementById('toggleChannelsBtn'), modal: document.getElementById('contactModal'), modalTitle: document.getElementById('modalTitle'),
+  modalMeta: document.getElementById('modalMeta'), fullName: document.getElementById('fullName'), tags: document.getElementById('tags'), notes: document.getElementById('notes'), accountsContainer: document.getElementById('accountsContainer'),
   deleteContactBtn: document.getElementById('deleteContactBtn'),
 };
-
-function escapeHtml(value) {
-  return String(value || '').replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
-}
-
-async function api(url, options = {}) {
-  const response = await fetch(url, options);
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || 'Request failed.');
-  return data;
-}
-
+const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+const formatUnixDate = (seconds) => seconds ? new Date(Number(seconds) * 1000).toLocaleString() : '';
+async function api(url, options = {}) { const response = await fetch(url, options); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || 'Request failed.'); return data; }
+function stopPolling(jobId) { clearTimeout(state.jobTimers.get(jobId)); state.jobTimers.delete(jobId); }
+function stopAllPolling() { for (const jobId of state.jobTimers.keys()) stopPolling(jobId); }
+function scheduleLoadAll(delay = RELOAD_DEBOUNCE_MS) { clearTimeout(state.refreshTimer); state.refreshTimer = setTimeout(() => loadAll().catch((error) => console.error(error)), delay); }
 function renderConfigStatus() {
-  const items = [
-    ['Contacts sheet', state.config?.contactsConfigured, 'CONTACTS_SHEET_ID'],
-    ['Telegram bot', state.config?.telegramBotConfigured, 'TELEGRAM_BOT_TOKEN'],
-    ['Telethon worker', state.config?.telegramWorkerConfigured, 'TELEGRAM_WORKER_URL'],
-  ];
-  els.configStatus.innerHTML = items.map(([label, ready, key]) => `
-    <div class="notice ${ready ? 'info' : 'warn'}">
-      <strong>${escapeHtml(label)}</strong><br>
-      ${ready ? `${escapeHtml(key)} is configured.` : `${escapeHtml(key)} is missing or not reachable yet.`}
-    </div>
-  `).join('');
-  els.workerPill.className = `pill ${state.config?.telegramWorkerConfigured ? 'ok' : 'warn'}`;
-  els.workerPill.textContent = state.config?.telegramWorkerConfigured ? 'Worker connected' : 'Worker not configured';
-  els.workerHint.textContent = state.config?.telegramWorkerConfigured
-    ? 'Moderators can sync channels and fetch members from this page.'
-    : 'Contacts and join tracking still work without the worker.';
-  els.channelsNotice.className = `notice ${state.config?.telegramWorkerConfigured ? 'info' : 'warn'}`;
-  els.channelsNotice.innerHTML = state.config?.telegramWorkerConfigured
-    ? 'Use "Sync channel list" to refresh the Telethon-visible channels cache, then fetch members channel by channel.'
-    : 'The worker is not connected. Channel browsing and member backfills stay disabled until TELEGRAM_WORKER_URL is configured.';
+  const workerReady = Boolean(state.config?.telegramWorkerConfigured);
+  const workerMessage = workerReady ? 'TELEGRAM_WORKER_URL is configured.' : (state.config?.telegramWorkerError || 'The worker is not connected yet.');
+  const botConfigured = Boolean(state.botInfo?.configured);
+  const webhookConfigured = Boolean(state.webhookInfo?.configured);
+  els.workerPill.className = `pill ${workerReady ? 'ok' : 'warn'}`;
+  els.workerPill.textContent = workerReady ? 'Worker connected' : 'Worker unavailable';
+  els.workerHint.textContent = workerReady ? 'Moderators can sync channels and fetch members from this page.' : workerMessage;
+  const botCard = !botConfigured ? `<div class=\"notice warn\"><strong>Telegram bot</strong><br>TELEGRAM_BOT_TOKEN is missing, so bot info and webhook registration are unavailable.</div>` : `<div class=\"notice info\"><strong>${escapeHtml(state.botInfo.name || 'Telegram bot')}</strong><br><span class=\"small\">@${escapeHtml(state.botInfo.username || '')}</span><div class=\"small\" style=\"margin-top:8px;\">Webhook URL: ${escapeHtml(webhookConfigured ? (state.webhookInfo.url || 'Registered without URL') : 'Not registered')}</div><div class=\"small\">Pending updates: ${escapeHtml(state.webhookInfo?.pendingUpdateCount || 0)}</div><div class=\"small\">Last error: ${escapeHtml(state.webhookInfo?.lastErrorMessage || 'None')}</div><div class=\"small\">${escapeHtml(formatUnixDate(state.webhookInfo?.lastErrorDate) || '')}</div><div style=\"margin-top:10px;\"><button class=\"btn primary\" id=\"registerWebhookBtn\" type=\"button\">Register Webhook</button></div>${state.botPanelMessage ? `<div class=\"small\" style=\"margin-top:8px;\">${escapeHtml(state.botPanelMessage)}</div>` : ''}</div>`;
+  els.configStatus.innerHTML = [`<div class=\"notice ${state.config?.contactsConfigured ? 'info' : 'warn'}\"><strong>Contacts sheet</strong><br>${state.config?.contactsConfigured ? 'CONTACTS_SHEET_ID is configured.' : 'CONTACTS_SHEET_ID is missing.'}</div>`, botCard, `<div class=\"notice ${workerReady ? 'info' : 'warn'}\"><strong>Telethon worker</strong><br>${escapeHtml(workerMessage)}</div>`].join('');
+  els.channelsNotice.className = `notice ${workerReady ? 'info' : 'warn'}`;
+  els.channelsNotice.innerHTML = workerReady ? 'Use \"Sync channel list\" to refresh the Telethon-visible channels cache, then fetch members channel by channel.' : escapeHtml(workerMessage);
 }
-
-function getFilteredContacts() {
-  const query = els.searchInput.value.trim().toLowerCase();
-  if (!query) return state.contacts;
-  return state.contacts.filter((contact) => {
-    const haystack = [
-      contact.fullName,
-      contact.notes,
-      contact.tags,
-      ...contact.accounts.flatMap((account) => [account.type, account.value, account.tgUsername, account.tgUserId, account.tgDisplayName]),
-      ...contact.joins.flatMap((join) => [join.channelName, join.channelUsername, join.tgUsername]),
-    ].join(' ').toLowerCase();
-    return haystack.includes(query);
-  });
-}
-
+function getFilteredContacts() { const query = els.searchInput.value.trim().toLowerCase(); if (!query) return state.contacts; return state.contacts.filter((contact) => [contact.fullName, contact.notes, contact.tags, ...contact.accounts.flatMap((account) => [account.type, account.value, account.tgUsername, account.tgUserId, account.tgDisplayName]), ...contact.joins.flatMap((join) => [join.channelName, join.channelUsername, join.tgUsername])].join(' ').toLowerCase().includes(query)); }
 function renderContacts() {
-  const contacts = getFilteredContacts();
-  els.contactsCount.textContent = state.contacts.length;
-  els.joinsCount.textContent = state.unmatchedJoins.length;
-  els.resultsLabel.textContent = `${contacts.length} contact${contacts.length === 1 ? '' : 's'}`;
-  if (!contacts.length) {
-    els.contactsBody.innerHTML = `<tr><td colspan="5" class="empty">No contacts match the current search.</td></tr>`;
-    return;
-  }
-  els.contactsBody.innerHTML = contacts.map((contact) => `
-    <tr>
-      <td>
-        <strong>${escapeHtml(contact.fullName)}</strong><br>
-        <span class="small">${escapeHtml(contact.notes || 'No notes')}</span>
-        ${contact.tags ? `<div style="margin-top:6px;">${contact.tags.split(',').filter(Boolean).map((tag) => `<span class="tag">${escapeHtml(tag.trim())}</span>`).join('')}</div>` : ''}
-      </td>
-      <td>${contact.accounts.length ? contact.accounts.map((account) => `<div style="margin-bottom:6px;"><strong>${escapeHtml(account.type)}</strong>: ${escapeHtml(account.value || account.tgUsername || account.tgUserId || account.tgDisplayName || '')}</div>`).join('') : '<span class="small">No linked accounts</span>'}</td>
-      <td>${contact.joins.length ? contact.joins.map((join) => `<span class="tag join">${escapeHtml(join.channelName || join.channelUsername || 'Joined')}</span>`).join('') : '<span class="small">No matched joins</span>'}</td>
-      <td><span class="small">${escapeHtml(contact.updatedAt || contact.createdAt || '')}</span></td>
-      <td><button class="btn" type="button" onclick='openContactModal(${JSON.stringify(contact.id)})'>Edit</button></td>
-    </tr>
-  `).join('');
+  const contacts = getFilteredContacts(); els.contactsCount.textContent = state.contacts.length; els.joinsCount.textContent = state.unmatchedJoins.length; els.resultsLabel.textContent = `${contacts.length} contact${contacts.length === 1 ? '' : 's'}`;
+  if (!contacts.length) { els.contactsBody.innerHTML = '<tr><td colspan=\"5\" class=\"empty\">No contacts match the current search.</td></tr>'; return; }
+  els.contactsBody.innerHTML = contacts.map((contact) => `<tr><td><strong>${escapeHtml(contact.fullName)}</strong><br><span class=\"small\">${escapeHtml(contact.notes || 'No notes')}</span>${contact.tags ? `<div style=\"margin-top:6px;\">${contact.tags.split(',').filter(Boolean).map((tag) => `<span class=\"tag\">${escapeHtml(tag.trim())}</span>`).join('')}</div>` : ''}</td><td>${contact.accounts.length ? contact.accounts.map((account) => `<div style=\"margin-bottom:6px;\"><strong>${escapeHtml(account.type)}</strong>: ${escapeHtml(account.value || account.tgUsername || account.tgUserId || account.tgDisplayName || '')}</div>`).join('') : '<span class=\"small\">No linked accounts</span>'}</td><td>${contact.joins.length ? contact.joins.map((join) => `<span class=\"tag join\">${escapeHtml(join.channelName || join.channelUsername || 'Joined')}</span>`).join('') : '<span class=\"small\">No matched joins</span>'}</td><td><span class=\"small\">${escapeHtml(contact.updatedAt || contact.createdAt || '')}</span></td><td><button class=\"btn edit-contact-btn\" type=\"button\" data-contact-id=\"${escapeHtml(contact.id)}\">Edit</button></td></tr>`).join('');
 }
-
 function renderUnmatchedJoins() {
-  if (!state.unmatchedJoins.length) {
-    els.unmatchedBody.innerHTML = '<div class="empty">No unmatched joiners right now.</div>';
-    return;
-  }
-  const options = state.contacts.map((contact) => `<option value="${escapeHtml(contact.id)}">${escapeHtml(contact.fullName)}</option>`).join('');
-  els.unmatchedBody.innerHTML = state.unmatchedJoins.map((join) => `
-    <div class="panel" style="padding:12px;">
-      <strong>${escapeHtml(join.tgDisplayName || join.tgUsername || join.tgUserId || 'Unknown joiner')}</strong>
-      <div class="small" style="margin-top:4px;">${escapeHtml(join.channelName || join.channelUsername || 'Unknown channel')} • ${escapeHtml(join.joinedAt || '')}</div>
-      <div class="controls" style="margin-top:10px;">
-        <select id="joinSelect_${join.id}">
-          <option value="">Choose contact…</option>
-          ${options}
-        </select>
-        <button class="btn" onclick='linkJoin(${JSON.stringify(join.id)})'>Link</button>
-      </div>
-    </div>
-  `).join('');
+  if (!state.unmatchedJoins.length) { els.unmatchedBody.innerHTML = '<div class=\"empty\">No unmatched joiners right now.</div>'; return; }
+  const options = state.contacts.map((contact) => `<option value=\"${escapeHtml(contact.id)}\">${escapeHtml(contact.fullName)}</option>`).join('');
+  els.unmatchedBody.innerHTML = state.unmatchedJoins.map((join) => `<div class=\"panel\"><strong>${escapeHtml(join.tgDisplayName || join.tgUsername || join.tgUserId || 'Unknown joiner')}</strong><div class=\"small\" style=\"margin-top:4px;\">${escapeHtml(join.channelName || join.channelUsername || 'Unknown channel')} • ${escapeHtml(join.joinedAt || '')}</div><div class=\"controls\" style=\"margin-top:10px;\"><select class=\"join-contact-select\" data-join-id=\"${escapeHtml(join.id)}\"><option value=\"\">Choose contact...</option>${options}</select><button class=\"btn link-join-btn\" type=\"button\" data-join-id=\"${escapeHtml(join.id)}\">Link</button></div></div>`).join('');
 }
-
 function renderChannels() {
-  if (!state.channels.length) {
-    els.channelsBody.innerHTML = '<tr><td colspan="5" class="empty">No channels cached yet.</td></tr>';
-    return;
-  }
-  els.channelsBody.innerHTML = state.channels.map((channel) => `
-    <tr>
-      <td><strong>${escapeHtml(channel.name || channel.username || channel.id)}</strong><br><span class="small">${escapeHtml(channel.username || channel.id || '')}</span></td>
-      <td>${escapeHtml(channel.type || '')}</td>
-      <td>${escapeHtml(channel.membersCount || '')}</td>
-      <td>${escapeHtml(channel.lastSync || '')}</td>
-      <td><button class="btn" ${state.config?.telegramWorkerConfigured ? '' : 'disabled'} onclick='fetchMembers(${JSON.stringify(channel.id || "")}, ${JSON.stringify(channel.username || "")}, ${JSON.stringify(channel.name || "")})'>Fetch members</button></td>
-    </tr>
-  `).join('');
+  els.channelsWrap.hidden = !state.channelsOpen; els.toggleChannelsBtn.textContent = state.channelsOpen ? 'Close panel' : 'Open panel';
+  if (!state.channelsOpen) { els.channelsBody.innerHTML = ''; return; }
+  if (!state.channels.length) { els.channelsBody.innerHTML = '<tr><td colspan=\"5\" class=\"empty\">No channels cached yet.</td></tr>'; return; }
+  els.channelsBody.innerHTML = state.channels.map((channel) => `<tr><td><strong>${escapeHtml(channel.name || channel.username || channel.id)}</strong><br><span class=\"small\">${escapeHtml(channel.username || channel.id || '')}</span></td><td>${escapeHtml(channel.type || '')}</td><td>${escapeHtml(channel.membersCount || '')}</td><td>${escapeHtml(channel.lastSync || '')}</td><td><button class=\"btn fetch-members-btn\" type=\"button\" ${state.config?.telegramWorkerConfigured ? '' : 'disabled'} data-channel-id=\"${escapeHtml(channel.id || '')}\" data-channel-username=\"${escapeHtml(channel.username || '')}\" data-channel-name=\"${escapeHtml(channel.name || '')}\">Fetch members</button></td></tr>`).join('');
 }
-
 function renderJobs() {
-  if (!state.jobs.length) {
-    els.jobsBody.innerHTML = '<div class="empty">No worker jobs recorded yet.</div>';
-    return;
-  }
-  els.jobsBody.innerHTML = state.jobs.slice().reverse().slice(0, 8).map((job) => {
-    const progress = Number(job.progress || 0);
-    const total = Number(job.total || 0);
-    const pct = total > 0 ? Math.min(100, Math.round((progress / total) * 100)) : (job.status === 'done' ? 100 : 0);
-    return `
-      <div class="job-row">
-        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
-          <div>
-            <strong>${escapeHtml(job.type || 'job')}</strong>
-            <div class="small">${escapeHtml(job.channel || '')}</div>
-          </div>
-          <span class="pill ${job.status === 'done' ? 'ok' : job.status === 'error' ? 'err' : 'warn'}">${escapeHtml(job.status || 'pending')}</span>
-        </div>
-        <div class="small" style="margin-top:6px;">${escapeHtml(job.summary || job.error || '')}</div>
-        <div class="progress"><div style="width:${pct}%;"></div></div>
-      </div>
-    `;
-  }).join('');
+  if (!state.jobs.length) { els.jobsBody.innerHTML = '<div class=\"empty\">No worker jobs recorded yet.</div>'; return; }
+  const hasPollingError = [...state.jobPollErrors.values()].some((count) => count >= MAX_POLL_ERRORS);
+  els.jobsBody.innerHTML = `${hasPollingError ? '<div class=\"notice err\">Lost connection to worker while polling job status.</div>' : ''}${state.jobs.slice().reverse().slice(0, 8).map((job) => { const progress = Number(job.progress || 0); const total = Number(job.total || 0); const pct = total > 0 ? Math.min(100, Math.round((progress / total) * 100)) : (job.status === 'done' ? 100 : 0); return `<div class=\"job-row\"><div style=\"display:flex;justify-content:space-between;gap:10px;align-items:flex-start;\"><div><strong>${escapeHtml(job.type || 'job')}</strong><div class=\"small\">${escapeHtml(job.channel || '')}</div></div><span class=\"pill ${job.status === 'done' ? 'ok' : job.status === 'error' ? 'err' : 'warn'}\">${escapeHtml(job.status || 'pending')}</span></div><div class=\"small\" style=\"margin-top:6px;\">${escapeHtml(job.summary || job.error || '')}</div><div class=\"progress\"><div style=\"width:${pct}%;\"></div></div></div>`; }).join('')}`;
 }
-
-function makeAccountRow(account = {}) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'account-row';
-  wrapper.innerHTML = `
-    <select class="account-type">
-      <option value="telegram">telegram</option>
-      <option value="email">email</option>
-      <option value="phone">phone</option>
-      <option value="other">other</option>
-    </select>
-    <input class="account-value" placeholder="@username / email / phone">
-    <input class="account-user-id" placeholder="TG user id">
-    <input class="account-display" placeholder="Display name">
-    <button class="btn danger" type="button">Remove</button>
-  `;
-  wrapper.dataset.id = account.id || '';
-  wrapper.querySelector('.account-type').value = account.type || 'telegram';
-  wrapper.querySelector('.account-value').value = account.value || '';
-  wrapper.querySelector('.account-user-id').value = account.tgUserId || '';
-  wrapper.querySelector('.account-display').value = account.tgDisplayName || '';
-  wrapper.querySelector('button').addEventListener('click', () => wrapper.remove());
-  els.accountsContainer.appendChild(wrapper);
-}
-
-function collectAccounts() {
-  return [...els.accountsContainer.querySelectorAll('.account-row')].map((row) => ({
-    id: row.dataset.id || '',
-    type: row.querySelector('.account-type').value,
-    value: row.querySelector('.account-value').value.trim(),
-    tgUserId: row.querySelector('.account-user-id').value.trim(),
-    tgDisplayName: row.querySelector('.account-display').value.trim(),
-    source: 'manual',
-  })).filter((account) => account.value || account.tgUserId || account.tgDisplayName);
-}
-
-function openContactModal(contactId = null) {
-  const contact = state.contacts.find((entry) => entry.id === contactId) || null;
-  state.editing = contact;
-  els.modalTitle.textContent = contact ? 'Edit contact' : 'Add contact';
-  els.modalMeta.textContent = contact ? `Created ${contact.createdAt || ''}` : 'New contact';
-  els.fullName.value = contact?.fullName || '';
-  els.tags.value = contact?.tags || '';
-  els.notes.value = contact?.notes || '';
-  els.accountsContainer.innerHTML = '';
-  (contact?.accounts?.length ? contact.accounts : [{}]).forEach((account) => makeAccountRow(account));
-  els.deleteContactBtn.style.display = contact ? 'inline-flex' : 'none';
-  els.modal.classList.add('open');
-}
-
-function closeContactModal() {
-  els.modal.classList.remove('open');
-  state.editing = null;
-}
-
-async function saveContact() {
-  const fullName = els.fullName.value.trim();
-  if (!fullName) {
-    alert('Full name is required.');
-    return;
-  }
-  const payload = {
-    fullName,
-    tags: els.tags.value.trim(),
-    notes: els.notes.value.trim(),
-    updatedBy: 'web-ui',
-    accounts: collectAccounts(),
-  };
-  if (state.editing) {
-    await api(`/api/contacts/${state.editing.rowIndex}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-  } else {
-    await api('/api/contacts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-  }
-  closeContactModal();
-  await loadAll();
-}
-
-async function deleteContact() {
-  if (!state.editing || !confirm(`Delete ${state.editing.fullName}?`)) return;
-  await api(`/api/contacts/${state.editing.rowIndex}`, { method: 'DELETE' });
-  closeContactModal();
-  await loadAll();
-}
-
-async function linkJoin(joinId) {
-  const select = document.getElementById(`joinSelect_${joinId}`);
-  if (!select?.value) {
-    alert('Choose a contact first.');
-    return;
-  }
-  await api(`/api/telegram/joins/${joinId}/link`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contactId: select.value }),
-  });
-  await loadAll();
-}
-
-async function runJob(type, payload = {}) {
-  if (!state.config?.telegramWorkerConfigured) {
-    alert('TELEGRAM_WORKER_URL is not configured yet.');
-    return;
-  }
-  const result = await api('/api/telegram/jobs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type, ...payload }),
-  });
-  if (result.jobId) pollJob(result.jobId);
-  await loadAll();
-}
-
-async function pollJob(jobId) {
-  clearTimeout(state.jobTimers.get(jobId));
-  try {
-    const result = await api(`/api/telegram/jobs/${jobId}`);
-    if (!['done', 'error'].includes(result.status)) {
-      state.jobTimers.set(jobId, setTimeout(() => pollJob(jobId), 3000));
-    } else {
-      await loadAll();
-    }
-  } catch (error) {
-    state.jobTimers.set(jobId, setTimeout(() => pollJob(jobId), 4000));
-  }
-}
-
-async function fetchMembers(channelId, channelUsername, channelName) {
-  await runJob('fetch-members', { channelId, channelUsername, channelName });
-}
-
-async function loadConfig() {
-  state.config = await api('/api/config');
-  renderConfigStatus();
-}
-
-async function loadAll() {
-  const data = await api('/api/contacts');
-  state.contacts = data.contacts || [];
-  state.unmatchedJoins = data.unmatchedJoins || [];
-  state.channels = data.channels || [];
-  state.jobs = data.jobs || [];
-  renderContacts();
-  renderUnmatchedJoins();
-  renderChannels();
-  renderJobs();
-}
-
+function makeAccountRow(account = {}) { const wrapper = document.createElement('div'); wrapper.className = 'account-row'; wrapper.innerHTML = `<select class=\"account-type\"><option value=\"telegram\">telegram</option><option value=\"email\">email</option><option value=\"phone\">phone</option><option value=\"other\">other</option></select><input class=\"account-value\" placeholder=\"@username / email / phone\"><input class=\"account-user-id\" placeholder=\"TG user id\"><input class=\"account-display\" placeholder=\"Display name\"><button class=\"btn danger\" type=\"button\">Remove</button>`; wrapper.dataset.id = account.id || ''; wrapper.querySelector('.account-type').value = account.type || 'telegram'; wrapper.querySelector('.account-value').value = account.value || ''; wrapper.querySelector('.account-user-id').value = account.tgUserId || ''; wrapper.querySelector('.account-display').value = account.tgDisplayName || ''; wrapper.querySelector('button').addEventListener('click', () => wrapper.remove()); els.accountsContainer.appendChild(wrapper); }
+function collectAccounts() { return [...els.accountsContainer.querySelectorAll('.account-row')].map((row) => ({ id: row.dataset.id || '', type: row.querySelector('.account-type').value, value: row.querySelector('.account-value').value.trim(), tgUserId: row.querySelector('.account-user-id').value.trim(), tgDisplayName: row.querySelector('.account-display').value.trim(), source: 'manual' })).filter((account) => account.value || account.tgUserId || account.tgDisplayName); }
+function openContactModal(contactId = null) { const contact = state.contacts.find((entry) => entry.id === contactId) || null; state.editing = contact; els.modalTitle.textContent = contact ? 'Edit contact' : 'Add contact'; els.modalMeta.textContent = contact ? `Created ${contact.createdAt || ''}` : 'New contact'; els.fullName.value = contact?.fullName || ''; els.tags.value = contact?.tags || ''; els.notes.value = contact?.notes || ''; els.accountsContainer.innerHTML = ''; (contact?.accounts?.length ? contact.accounts : [{}]).forEach((account) => makeAccountRow(account)); els.deleteContactBtn.style.display = contact ? 'inline-flex' : 'none'; els.modal.classList.add('open'); }
+function closeContactModal() { els.modal.classList.remove('open'); state.editing = null; }
+async function saveContact() { const fullName = els.fullName.value.trim(); if (!fullName) return alert('Full name is required.'); const payload = { fullName, tags: els.tags.value.trim(), notes: els.notes.value.trim(), updatedBy: 'web-ui', accounts: collectAccounts() }; if (state.editing) payload.version = state.editing.version; try { if (state.editing) { await api(`/api/contacts/${state.editing.rowIndex}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); } else { await api('/api/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); } closeContactModal(); await loadAll(); } catch (error) { alert(error.message); } }
+async function deleteContact() { if (!state.editing || !confirm(`Delete ${state.editing.fullName}?`)) return; try { await api(`/api/contacts/${state.editing.rowIndex}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version: state.editing.version }) }); closeContactModal(); await loadAll(); } catch (error) { alert(error.message); } }
+async function linkJoin(joinId) { const select = els.unmatchedBody.querySelector(`select[data-join-id=\"${joinId}\"]`); if (!select?.value) return alert('Choose a contact first.'); await api(`/api/telegram/joins/${joinId}/link`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contactId: select.value }) }); await loadAll(); }
+async function runJob(type, payload = {}) { if (!state.config?.telegramWorkerConfigured) return alert(state.config?.telegramWorkerError || 'TELEGRAM_WORKER_URL is not configured yet.'); const result = await api('/api/telegram/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, ...payload }) }); if (result.jobId && state.channelsOpen) { state.jobPollErrors.set(result.jobId, 0); pollJob(result.jobId); } scheduleLoadAll(250); }
+async function pollJob(jobId) { stopPolling(jobId); if (!state.channelsOpen) return; try { const result = await api(`/api/telegram/jobs/${jobId}`); state.jobPollErrors.set(jobId, 0); if (!['done', 'error'].includes(result.status)) { state.jobTimers.set(jobId, setTimeout(() => pollJob(jobId), POLL_INTERVAL_MS)); } else { scheduleLoadAll(); } } catch (error) { const failures = (state.jobPollErrors.get(jobId) || 0) + 1; state.jobPollErrors.set(jobId, failures); if (failures >= MAX_POLL_ERRORS) return renderJobs(); state.jobTimers.set(jobId, setTimeout(() => pollJob(jobId), POLL_INTERVAL_MS + 1000)); } }
+async function fetchMembers(channelId, channelUsername, channelName) { await runJob('fetch-members', { channelId, channelUsername, channelName }); }
+async function loadConfig() { state.config = await api('/api/config'); }
+async function loadBotStatus() { const [botInfo, webhookInfo] = await Promise.all([api('/api/telegram/bot-info').catch((error) => ({ configured: false, error: error.message })), api('/api/telegram/webhook-info').catch((error) => ({ configured: false, error: error.message }))]); state.botInfo = botInfo; state.webhookInfo = webhookInfo; }
+async function registerWebhook() { try { const result = await api('/api/telegram/register-webhook', { method: 'POST' }); state.botPanelMessage = result.description || `Webhook set to ${result.url}`; } catch (error) { state.botPanelMessage = error.message; } await loadBotStatus(); renderConfigStatus(); }
+async function refreshEverything() { await Promise.all([loadConfig(), loadBotStatus()]); renderConfigStatus(); await loadAll(); }
+async function loadAll() { const data = await api('/api/contacts'); state.contacts = data.contacts || []; state.unmatchedJoins = data.unmatchedJoins || []; state.channels = data.channels || []; state.jobs = data.jobs || []; renderContacts(); renderUnmatchedJoins(); renderChannels(); renderJobs(); }
+function toggleChannelsPanel() { state.channelsOpen = !state.channelsOpen; if (!state.channelsOpen) stopAllPolling(); renderChannels(); }
 document.getElementById('addContactBtn').addEventListener('click', () => openContactModal());
 document.getElementById('closeModalBtn').addEventListener('click', closeContactModal);
 document.getElementById('saveContactBtn').addEventListener('click', saveContact);
 document.getElementById('deleteContactBtn').addEventListener('click', deleteContact);
 document.getElementById('addAccountBtn').addEventListener('click', () => makeAccountRow({}));
-document.getElementById('refreshBtn').addEventListener('click', loadAll);
+document.getElementById('refreshBtn').addEventListener('click', refreshEverything);
 document.getElementById('reloadChannelsBtn').addEventListener('click', loadAll);
 document.getElementById('syncChannelsBtn').addEventListener('click', () => runJob('list-channels'));
+els.toggleChannelsBtn.addEventListener('click', toggleChannelsPanel);
 els.searchInput.addEventListener('input', renderContacts);
-els.modal.addEventListener('click', (event) => {
-  if (event.target === els.modal) closeContactModal();
-});
-
-window.openContactModal = openContactModal;
-window.linkJoin = linkJoin;
-window.fetchMembers = fetchMembers;
-
-(async function init() {
-  try {
-    await loadConfig();
-    await loadAll();
-  } catch (error) {
-    document.body.innerHTML = `<div class="page"><div class="panel notice err">Could not load Contacts UI: ${escapeHtml(error.message)}</div></div>`;
-  }
-})();
+els.modal.addEventListener('click', (event) => { if (event.target === els.modal) closeContactModal(); });
+els.contactsBody.addEventListener('click', (event) => { const button = event.target.closest('.edit-contact-btn'); if (button) openContactModal(button.dataset.contactId); });
+els.unmatchedBody.addEventListener('click', async (event) => { const button = event.target.closest('.link-join-btn'); if (button) await linkJoin(button.dataset.joinId); });
+els.channelsBody.addEventListener('click', async (event) => { const button = event.target.closest('.fetch-members-btn'); if (button) await fetchMembers(button.dataset.channelId, button.dataset.channelUsername, button.dataset.channelName); });
+els.configStatus.addEventListener('click', async (event) => { if (event.target.id === 'registerWebhookBtn') await registerWebhook(); });
+window.addEventListener('pagehide', stopAllPolling);
+(async function init() { try { await refreshEverything(); } catch (error) { document.body.innerHTML = `<div class=\"page\"><div class=\"panel notice err\">Could not load Contacts UI: ${escapeHtml(error.message)}</div></div>`; } })();
 </script>
 </body>
 </html>
