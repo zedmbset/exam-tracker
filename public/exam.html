@@ -992,7 +992,7 @@
         const definition = getComposedExamDefinition(row);
         if (!definition) return [];
         return definition.submodules.map(item => ({
-          id: `${item.categoryId}-${Date.now()}-${Math.random()}`,
+          id: Date.now() + Math.random(),
           name: item.name,
           categoryId: item.categoryId,
           range: "",
@@ -1008,7 +1008,7 @@
           if (!normalizedId || seen.has(normalizedId)) return;
           seen.add(normalizedId);
           merged.push({
-            id: item.id || `${categoryId}-${Date.now()}-${Math.random()}`,
+            id: Date.now() + Math.random(),
             name: String(item.name || "").trim(),
             categoryId,
             range: String(item.range || "").trim(),
