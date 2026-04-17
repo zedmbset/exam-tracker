@@ -15,6 +15,18 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 
 
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
+
+app.get('/exam', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.sendFile(`${__dirname}/public/exam.html`);
+});
+
+app.get(['/contacts', '/contacts/', '/contacts/index.html'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  ensureContactsSessionCookie(req, res);
+  res.sendFile(`${__dirname}/public/contacts/index.html`);
+});
+
 app.use(express.static('public', {
   setHeaders(res, path) {
     if (path.endsWith('.html')) {
@@ -22,17 +34,6 @@ app.use(express.static('public', {
     }
   },
 }));
-
-app.get('/exam', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.sendFile(`${__dirname}/public/exam.html`);
-});
-
-app.get(['/contacts', '/contacts/'], (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  ensureContactsSessionCookie(req, res);
-  res.sendFile(`${__dirname}/public/contacts/index.html`);
-});
 
 const SHEET_ID = process.env.SHEET_ID || '';
 const SHEET_TAB = process.env.SHEET_TAB || 'Sheet1';
