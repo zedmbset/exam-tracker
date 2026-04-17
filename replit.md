@@ -14,7 +14,19 @@ A Node.js/Express web application for tracking the digitization progress of exam
 - `public/` - Static frontend files (index.html, exam.html, availability.html, prompts/ JS modules)
 - `reports/` - PDF report generation logic (admin and public reports)
 - `docs/` - Project documentation and data schemas
-- `docs/plans/` - Saved task plans for AI-assisted work, stored as numbered markdown files so they appear in order across models
+- `docs/plans/` - Task plans created by AI models (Replit, Codex, ChatGPT, Claude, etc.)
+
+## Rules for AI models — Plan storage
+**Whenever any AI model (Replit Agent, Codex, ChatGPT, Claude, or any other) creates a task plan or feature plan, it MUST be saved as a markdown file inside `docs/plans/`.**
+
+Naming convention: `NN-short-description.md` where `NN` is a zero-padded task number that matches the task sequence (e.g. `01`, `02`, `17`). This keeps plans sorted in order in the file tree.
+
+Example filenames:
+- `docs/plans/01-availability-dashboard.md`
+- `docs/plans/11-fix-submodule-reordering.md`
+- `docs/plans/17-contacts-and-telegram.md`
+
+Every plan file should include at minimum: task number + title, current status (PROPOSED / IN PROGRESS / MERGED / CANCELLED), a "What & Why" section, a "Done looks like" section, and a list of implementation tasks.
 
 ## Key API Routes
 - `GET /api/sheet` - Read all rows from Google Sheet

@@ -1,4 +1,6 @@
-# Contacts & Telegram channel-join tracking
+# Plan #17 — Contacts & Telegram channel-join tracking
+
+> Task #17 · Status: PROPOSED
 
 ## What & Why
 Add a second mini-app inside this same repo so the user can store their contacts in Google Sheets via a flexible web form, and link Telegram channel joins back to those contacts. Today the same Express server is already wired to Google Sheets via a service account; this work reuses that plumbing under separate URL paths and a separate sheet ID. No new project, no second Railway deploy, no duplicated auth setup.
@@ -26,11 +28,8 @@ The contacts data layout is intentionally simple per the user's choice: one row 
 
 ## Tasks
 1. **Backend: contacts API** — Add Express routes (`GET /api/contacts`, `POST /api/contacts`, `PUT /api/contacts/:rowIndex`, `DELETE /api/contacts/:rowIndex`) that read and write a separate Google Sheet identified by a new `CONTACTS_SHEET_ID` environment variable. Reuse the existing service-account JWT helper. Auto-create the header row on first write if the sheet is empty.
-
 2. **Frontend: contacts page** — Build `/public/contacts/index.html` with a contacts list (search, sort, edit, delete) and a flexible add/edit form supporting dynamic add/remove rows for emails and Telegram handles. Match the existing app's visual style. Add a "Contacts" link to the top bar of the main exam-tracker dashboard.
-
 3. **Telegram bot integration** — Register a bot via BotFather (the user provides the token as a `TELEGRAM_BOT_TOKEN` secret), add a webhook endpoint at `/api/telegram/webhook`, handle `chat_member` updates to capture new joiners, and append rows to a `Telegram_Joins` tab in the contacts sheet. Show clear setup instructions in the contacts page when no joins have arrived yet.
-
 4. **Match joins to contacts** — When loading the contacts page, cross-reference each join row's telegram username against the comma-separated Telegram handles in each contact, and surface a small badge ("Joined: Channel X, Channel Y") on matched contacts. Surface unmatched joins in a separate "Unlinked Telegram joiners" panel so the user can attach them to a contact in one click.
 
 ## Relevant files
