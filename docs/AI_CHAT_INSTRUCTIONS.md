@@ -19,10 +19,10 @@ This file stores persistent working preferences for AI assistants working on thi
 ### Documentation
 - Keep `docs/SCHEMA.md` as the authoritative source for column indices
 - `docs/TECHNICAL_OVERVIEW.md` should reflect the actual sheet structure (not a planned/future one)
-- Update `replit.md` whenever major architectural changes are made
+- Update `replit.md` and `PROJECT_OVERVIEW.md` whenever major architectural changes are made
 
 ### Column Indices
-The correct column indices (0-based) are defined in `docs/SCHEMA.md`. The authoritative mapping is in `public/exam.html` COLS object. Always use that as the source of truth, not `docs/replit.md` or older references.
+The correct column indices (0-based) are defined in `docs/SCHEMA.md`. The authoritative mapping is in `public/exam.html` COLS object. Always use that as the source of truth, not older duplicated references.
 
 ### Git / GitHub
 - Push to GitHub using the `GITHUB_TOKEN` secret and the script pattern:
@@ -38,5 +38,5 @@ The correct column indices (0-based) are defined in `docs/SCHEMA.md`. The author
 - Verify status filter and search after changes to `getFiltered()` or `deriveStatusForRow()`
 
 ## Known Issues / History
-- `docs/replit.md` (now `docs/TECHNICAL_OVERVIEW.md`) had outdated column indices — these were corrected in April 2026 when the COLS object in `index.html` was also fixed
+- `docs/TECHNICAL_OVERVIEW.md` replaced the older duplicate technical overview file and should be treated as the active deep-reference document
 - The `index.html` COLS was missing `categoryId` (index 6) and `AffichagePDF` (index 13), causing wrong status derivation
