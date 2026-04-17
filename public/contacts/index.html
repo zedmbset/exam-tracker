@@ -1,827 +1,739 @@
-<!doctype html>
-<html lang="fr">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Contacts — Exam Tracker</title>
-  <style>
-    :root {
-      --bg: #ffffff; --bg2: #f8f8fc; --bg3: #f1f0f8;
-      --text: #0f0e1a; --text2: #5c5b72; --text3: #a09fb8;
-      --border: rgba(100,95,160,0.12); --border2: rgba(100,95,160,0.25);
-      --blue-bg: #eff4ff; --blue-text: #2b5ce6; --blue-border: #c3d3fc;
-      --green-bg: #edfaf4; --green-text: #1a7a4a; --green-border: #a6e8c6;
-      --amber-bg: #fff9ec; --amber-text: #9a5a08; --amber-border: #fcd98a;
-      --red-bg: #fff1f1; --red-text: #c0392b; --red-border: #fbbdbd;
-      --purple-bg: #f3f0ff; --purple-text: #6c47d9; --purple-border: #cfc1f9;
-      --accent: #4f46e5; --accent2: #7c3aed;
-      --radius: 10px; --radius-lg: 14px;
-      --shadow-sm: 0 1px 3px rgba(79,70,229,0.07),0 1px 2px rgba(0,0,0,0.04);
-      --shadow-md: 0 4px 16px rgba(79,70,229,0.10),0 2px 6px rgba(0,0,0,0.05);
-      --shadow-lg: 0 12px 40px rgba(79,70,229,0.13),0 4px 12px rgba(0,0,0,0.06);
-    }
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;background:linear-gradient(160deg,#f0eeff 0%,#f5f4fc 40%,#eef4ff 100%);background-attachment:fixed;color:var(--text);font-size:14px;line-height:1.5;min-height:100vh}
-
-    /* Topbar */
-    .topbar{background:rgba(255,255,255,0.88);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 28px;height:56px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;box-shadow:0 1px 0 rgba(79,70,229,0.06),0 2px 12px rgba(79,70,229,0.05)}
-    .topbar-title{font-size:15px;font-weight:650;letter-spacing:-0.01em;background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-    .topbar-nav{display:flex;align-items:center;gap:4px;margin-left:8px}
-    .nav-link{font-size:12px;font-weight:500;color:var(--text2);text-decoration:none;padding:5px 11px;border-radius:var(--radius);border:1px solid transparent;transition:all 0.15s}
-    .nav-link:hover{background:var(--bg2);color:var(--accent);border-color:var(--border)}
-    .nav-link.active{background:var(--purple-bg);color:var(--purple-text);border-color:var(--purple-border);font-weight:600}
-    .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
-    .identity-btn{display:flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text2);font-size:12px;font-weight:500;cursor:pointer;transition:all 0.15s}
-    .identity-btn:hover{border-color:var(--accent);color:var(--accent)}
-
-    /* Main */
-    .main{max-width:1100px;margin:0 auto;padding:28px 24px 60px}
-
-    /* Page header */
-    .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
-    .page-header h1{font-size:22px;font-weight:700;letter-spacing:-0.02em;background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-
-    /* Stats */
-    .stats-row{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
-    .stat-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px 18px;display:flex;flex-direction:column;gap:2px;box-shadow:var(--shadow-sm);min-width:120px}
-    .stat-num{font-size:22px;font-weight:700;letter-spacing:-0.02em;color:var(--accent)}
-    .stat-label{font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:0.06em}
-
-    /* Toolbar */
-    .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
-    .search-input{flex:1;min-width:200px;padding:8px 14px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;transition:all 0.15s}
-    .search-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,70,229,0.10)}
-    .filter-select{padding:8px 12px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;cursor:pointer}
-    .filter-select:focus{outline:none;border-color:var(--accent)}
-
-    /* Buttons */
-    .btn{padding:8px 18px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.15s;box-shadow:var(--shadow-sm)}
-    .btn:hover{background:var(--bg3);border-color:var(--accent);color:var(--accent)}
-    .btn-primary{background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(79,70,229,0.30)}
-    .btn-primary:hover{background:linear-gradient(135deg,#4338ca 0%,#6d28d9 100%);box-shadow:0 4px 12px rgba(79,70,229,0.40);transform:translateY(-1px)}
-    .btn-sm{padding:5px 12px;font-size:12px}
-    .btn-danger{color:var(--red-text);border-color:var(--red-border)}
-    .btn-danger:hover{background:var(--red-bg);border-color:var(--red-text);color:var(--red-text)}
-    .btn:disabled{opacity:0.5;cursor:not-allowed;transform:none!important}
-
-    /* Table */
-    .table-wrap{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
-    table{width:100%;border-collapse:collapse}
-    thead tr{background:linear-gradient(to right,#fafafe,#f8f7fd);border-bottom:1px solid var(--border)}
-    th{padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap}
-    td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle;font-size:13px}
-    tr:last-child td{border-bottom:none}
-    tr:hover td{background:var(--bg2)}
-    .col-name{min-width:160px}
-    .col-actions{width:100px;text-align:right;white-space:nowrap}
-
-    /* Contact name cell */
-    .contact-name{font-weight:600;color:var(--text)}
-    .contact-id{font-size:11px;color:var(--text3);font-family:"SF Mono","Fira Code",monospace;margin-top:2px}
-
-    /* Badges */
-    .badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap;border:1px solid;letter-spacing:0.01em}
-    .badge-blue{background:var(--blue-bg);color:var(--blue-text);border-color:var(--blue-border)}
-    .badge-green{background:var(--green-bg);color:var(--green-text);border-color:var(--green-border)}
-    .badge-amber{background:var(--amber-bg);color:var(--amber-text);border-color:var(--amber-border)}
-    .badge-purple{background:var(--purple-bg);color:var(--purple-text);border-color:var(--purple-border)}
-    .badge-gray{background:var(--bg2);color:var(--text2);border-color:var(--border2)}
-    .badge-red{background:var(--red-bg);color:var(--red-text);border-color:var(--red-border)}
-    .vip-star{color:#f59e0b;font-size:13px;margin-left:4px}
-
-    /* Chips */
-    .chip-list{display:flex;flex-wrap:wrap;gap:4px}
-    .chip{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--bg2);border:1px solid var(--border2);color:var(--text2);font-family:"SF Mono","Fira Code",monospace;cursor:default}
-    .chip-tg{background:#e8f4fd;border-color:#bee3f8;color:#1a56db}
-    .chip-email{background:#f0fdf4;border-color:#bbf7d0;color:#15803d}
-
-    /* Channels joined */
-    .joined-list{display:flex;flex-wrap:wrap;gap:3px}
-    .joined-badge{font-size:10px;padding:2px 7px;border-radius:20px;background:var(--green-bg);border:1px solid var(--green-border);color:var(--green-text);font-weight:600}
-
-    /* Empty state */
-    .empty-state{text-align:center;padding:48px 20px;color:var(--text3)}
-    .empty-state p{font-size:14px;margin-top:8px}
-
-    /* Loading spinner */
-    .spinner{width:28px;height:28px;border:3px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;margin:0 auto}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .loading-state{text-align:center;padding:48px 20px}
-
-    /* Drawer */
-    .drawer-overlay{display:none;position:fixed;inset:0;background:rgba(15,14,26,0.4);z-index:200;backdrop-filter:blur(2px)}
-    .drawer-overlay.open{display:block}
-    .drawer{position:fixed;top:0;right:-520px;width:480px;max-width:100vw;height:100vh;background:var(--bg);box-shadow:var(--shadow-lg);z-index:201;display:flex;flex-direction:column;transition:right 0.3s cubic-bezier(.34,1.10,.64,1)}
-    .drawer.open{right:0}
-    .drawer-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to right,#fafafe,#f8f7fd);flex-shrink:0}
-    .drawer-header h2{font-size:16px;font-weight:700;letter-spacing:-0.01em}
-    .drawer-close{width:28px;height:28px;border:1px solid var(--border2);border-radius:50%;background:var(--bg);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--text3);transition:all 0.15s}
-    .drawer-close:hover{background:var(--red-bg);border-color:var(--red-border);color:var(--red-text)}
-    .drawer-body{flex:1;overflow-y:auto;padding:24px}
-    .drawer-body::-webkit-scrollbar{width:5px}
-    .drawer-body::-webkit-scrollbar-track{background:transparent}
-    .drawer-body::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
-    .drawer-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;background:linear-gradient(to right,#fafafe,#f8f7fd);flex-shrink:0}
-
-    /* Form */
-    .form-section{margin-bottom:24px}
-    .form-section-title{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-    .form-section-title::after{content:"";flex:1;height:1px;background:var(--border)}
-    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .form-grid .full{grid-column:1/-1}
-    .form-row{display:flex;flex-direction:column;gap:5px}
-    .form-row label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.06em}
-    .form-row input,.form-row select,.form-row textarea{width:100%;padding:8px 11px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-size:13px;transition:all 0.15s}
-    .form-row input:focus,.form-row select:focus,.form-row textarea:focus{outline:none;background:var(--bg);border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,70,229,0.10)}
-    .form-row input:hover,.form-row select:hover{background:var(--bg);border-color:rgba(79,70,229,0.35)}
-    .toggle-row{display:flex;align-items:center;gap:10px;padding:8px 0}
-    .toggle-row label{font-size:13px;font-weight:500;color:var(--text);cursor:pointer}
-    input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
-
-    /* Dynamic list (emails/accounts) */
-    .dyn-list{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
-    .dyn-row{display:flex;align-items:center;gap:8px}
-    .dyn-row input{flex:1;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-size:13px;transition:all 0.15s}
-    .dyn-row input:focus{outline:none;background:var(--bg);border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,70,229,0.10)}
-    .dyn-row input.primary-email{border-color:var(--green-border);background:var(--green-bg)}
-    .dyn-remove{width:26px;height:26px;border:1px solid var(--border2);border-radius:50%;background:transparent;color:var(--text3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;transition:all 0.15s}
-    .dyn-remove:hover{background:var(--red-bg);border-color:var(--red-border);color:var(--red-text)}
-    .primary-radio{width:14px;height:14px;accent-color:var(--green-text);cursor:pointer;flex-shrink:0}
-    .add-row-btn{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--accent);background:transparent;border:1px dashed var(--border2);border-radius:var(--radius);padding:7px 12px;cursor:pointer;transition:all 0.15s;width:100%}
-    .add-row-btn:hover{background:var(--blue-bg);border-color:var(--blue-border)}
-
-    /* Existing item chip (when editing) */
-    .existing-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg2);font-size:13px}
-    .existing-item .item-label{flex:1;font-family:"SF Mono","Fira Code",monospace;font-size:12px}
-    .existing-item .primary-tag{font-size:10px;background:var(--green-bg);color:var(--green-text);border:1px solid var(--green-border);padding:1px 7px;border-radius:20px;font-weight:600}
-
-    /* Unlinked section */
-    .unlinked-section{margin-top:24px;background:var(--bg);border:1px solid var(--amber-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
-    .unlinked-header{padding:14px 18px;background:var(--amber-bg);border-bottom:1px solid var(--amber-border);display:flex;align-items:center;justify-content:space-between;cursor:pointer}
-    .unlinked-title{font-size:13px;font-weight:600;color:var(--amber-text);display:flex;align-items:center;gap:8px}
-    .unlinked-body{padding:0}
-    .unlinked-row{display:flex;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--border);font-size:13px}
-    .unlinked-row:last-child{border-bottom:none}
-    .unlinked-tg{font-family:"SF Mono","Fira Code",monospace;font-size:12px;color:var(--blue-text)}
-    .unlinked-meta{font-size:12px;color:var(--text3);flex:1}
-    .link-select{padding:5px 8px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:12px;min-width:140px}
-
-    /* Notification */
-    .notif{position:fixed;bottom:28px;right:28px;padding:13px 18px;border-radius:var(--radius-lg);font-size:13px;font-weight:500;z-index:500;transform:translateY(80px);opacity:0;transition:transform 0.3s cubic-bezier(.34,1.56,.64,1),opacity 0.25s;max-width:340px;box-shadow:var(--shadow-lg)}
-    .notif.show{transform:translateY(0);opacity:1}
-    .notif.success{background:var(--green-bg);color:var(--green-text);border:1px solid var(--green-border)}
-    .notif.error{background:var(--red-bg);color:var(--red-text);border:1px solid var(--red-border)}
-    .notif.info{background:var(--blue-bg);color:var(--blue-text);border:1px solid var(--blue-border)}
-
-    /* Confirm modal */
-    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,14,26,0.5);z-index:300;align-items:center;justify-content:center}
-    .modal-overlay.open{display:flex}
-    .modal{background:var(--bg);border-radius:var(--radius-lg);padding:28px 32px;max-width:380px;width:90%;box-shadow:var(--shadow-lg);border:1px solid var(--border)}
-    .modal h3{font-size:16px;font-weight:700;margin-bottom:8px;color:var(--red-text)}
-    .modal p{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:20px}
-    .modal-actions{display:flex;gap:10px;justify-content:flex-end}
-
-    /* Setup banner */
-    .setup-banner{background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:20px;font-size:13px;color:var(--blue-text);line-height:1.6}
-    .setup-banner strong{font-weight:600}
-    .setup-banner code{font-family:"SF Mono","Fira Code",monospace;background:rgba(43,92,230,0.10);padding:1px 6px;border-radius:4px;font-size:12px}
-    th.sortable{cursor:pointer;user-select:none}
-    th.sortable:hover{background:var(--hover-bg)}
-    th.sortable .sort-arrow{font-size:10px;margin-left:4px;color:var(--text3)}
-    th.sortable.asc .sort-arrow::after{content:'▲'}
-    th.sortable.desc .sort-arrow::after{content:'▼'}
-    th.sortable:not(.asc):not(.desc) .sort-arrow::after{content:'⇅';opacity:0.4}
-
-    @media(max-width:640px){
-      .main{padding:16px 14px 48px}
-      .topbar{padding:0 16px}
-      .form-grid{grid-template-columns:1fr}
-      .drawer{width:100vw}
-      th:nth-child(3),td:nth-child(3),th:nth-child(6),td:nth-child(6){display:none}
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contacts</title>
+<style>
+  :root {
+    --bg: #f5f3ee;
+    --panel: #ffffff;
+    --panel-soft: #faf8f2;
+    --text: #1a1a18;
+    --muted: #6b6a65;
+    --border: rgba(0, 0, 0, 0.12);
+    --accent: #185fa5;
+    --accent-soft: #e6f1fb;
+    --success: #3b6d11;
+    --success-bg: #eaf3de;
+    --warn: #854f0b;
+    --warn-bg: #faeeda;
+    --danger: #a32d2d;
+    --danger-bg: #fcebeb;
+    --purple: #534ab7;
+    --purple-bg: #eeedfe;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--text);
+    background: linear-gradient(180deg, #f5f3ee 0%, #efede6 100%);
+  }
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 22px;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .title { font-size: 18px; font-weight: 600; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .topbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .page { max-width: 1480px; margin: 0 auto; padding: 22px; display: grid; gap: 18px; }
+  .hero {
+    background: radial-gradient(circle at top left, #ffffff 0%, #f8f4eb 60%, #f1ecdf 100%);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 22px;
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .hero h1 { margin: 0 0 6px; font-size: 28px; }
+  .hero p { margin: 0; color: var(--muted); max-width: 760px; line-height: 1.55; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.04);
+  }
+  .panel h2, .panel h3 { margin: 0 0 10px; font-size: 16px; }
+  .muted { color: var(--muted); }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .pill.ok { background: var(--success-bg); color: var(--success); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.err { background: var(--danger-bg); color: var(--danger); }
+  .btn, button, select, input, textarea {
+    font: inherit;
+  }
+  .btn {
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--text);
+    text-decoration: none;
+    padding: 9px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .btn:hover { background: var(--panel-soft); }
+  .btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn.primary:hover { filter: brightness(0.95); }
+  .btn.danger { color: var(--danger); background: white; }
+  .controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .controls-left, .controls-right {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .search {
+    width: min(380px, 100%);
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: white;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
+    gap: 18px;
+    align-items: start;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 11px 10px;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    vertical-align: top;
+  }
+  th { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .table-wrap { overflow: auto; }
+  .tag {
+    display: inline-flex;
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    margin: 2px 4px 2px 0;
+  }
+  .tag.join { background: var(--purple-bg); color: var(--purple); }
+  .stack { display: grid; gap: 12px; }
+  .stat { font-size: 30px; font-weight: 700; margin-top: 2px; }
+  .small { font-size: 12px; color: var(--muted); }
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 20, 20, 0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 30;
+  }
+  .modal.open { display: flex; }
+  .modal-card {
+    width: min(920px, 100%);
+    max-height: 90vh;
+    overflow: auto;
+    background: white;
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    padding: 18px;
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .full { grid-column: 1 / -1; }
+  .field { display: grid; gap: 6px; }
+  .field input, .field textarea, .field select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: white;
+  }
+  .account-row {
+    display: grid;
+    grid-template-columns: 120px 1fr 120px 120px auto;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .notice {
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .notice.info { background: var(--accent-soft); color: var(--accent); }
+  .notice.warn { background: var(--warn-bg); color: var(--warn); }
+  .notice.err { background: var(--danger-bg); color: var(--danger); }
+  .job-row {
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--panel-soft);
+    border: 1px solid var(--border);
+  }
+  .progress {
+    height: 7px;
+    background: #ebe7dc;
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .progress > div {
+    height: 100%;
+    background: linear-gradient(90deg, #185fa5, #7e6ee7);
+    width: 0%;
+  }
+  .empty {
+    padding: 26px 12px;
+    text-align: center;
+    color: var(--muted);
+  }
+  @media (max-width: 1100px) {
+    .layout { grid-template-columns: 1fr; }
+    .grid-3 { grid-template-columns: 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
+    .account-row { grid-template-columns: 1fr; }
+  }
+</style>
 </head>
 <body>
-
-<div class="topbar">
-  <div class="topbar-title">Exam Tracker</div>
-  <nav class="topbar-nav">
-    <a class="nav-link" href="/">Exams</a>
-    <a class="nav-link" href="/availability.html">Disponibilité</a>
-    <a class="nav-link active" href="/contacts/">Contacts</a>
-  </nav>
-  <div class="topbar-right">
-    <button class="identity-btn" id="identityBtn" onclick="changeIdentity()">
-      <span>👤</span><span id="identityLabel">Set identity</span>
-    </button>
-  </div>
-</div>
-
-<div class="main">
-  <div class="page-header">
-    <h1>Contacts</h1>
-    <button class="btn btn-primary" onclick="openDrawer(null)">+ Add Contact</button>
-  </div>
-
-  <div class="stats-row" id="statsRow">
-    <div class="stat-card"><div class="stat-num" id="statTotal">—</div><div class="stat-label">Contacts</div></div>
-    <div class="stat-card"><div class="stat-num" id="statVip">—</div><div class="stat-label">VIP</div></div>
-    <div class="stat-card"><div class="stat-num" id="statTg">—</div><div class="stat-label">Telegram liés</div></div>
-    <div class="stat-card"><div class="stat-num" id="statJoined">—</div><div class="stat-label">Channels rejoints</div></div>
-  </div>
-
-  <div id="setupBanner" class="setup-banner" style="display:none">
-    <div id="setupBannerMsg"></div>
-  </div>
-
-  <div class="toolbar">
-    <input class="search-input" id="searchInput" type="search" placeholder="Rechercher par nom, email, Telegram…" oninput="renderContacts()">
-    <select class="filter-select" id="promoFilter" onchange="renderContacts()">
-      <option value="">Toutes les promos</option>
-    </select>
-    <select class="filter-select" id="vipFilter" onchange="renderContacts()">
-      <option value="">Tous</option>
-      <option value="vip">VIP uniquement</option>
-    </select>
-  </div>
-
-  <div class="table-wrap">
-    <div id="loadingState" class="loading-state"><div class="spinner"></div><p style="color:var(--text3);margin-top:12px;font-size:13px">Chargement des contacts…</p></div>
-    <div id="emptyState" class="empty-state" style="display:none">
-      <div style="font-size:32px">👥</div>
-      <p>Aucun contact trouvé.</p>
+  <div class="topbar">
+    <div>
+      <div class="title">Contacts & Telegram</div>
+      <div class="sub">Shared moderator workspace for contacts, joins, and Telethon sync jobs.</div>
     </div>
-    <table id="contactsTable" style="display:none">
-      <thead>
-        <tr>
-          <th class="col-name sortable" onclick="setSort('name')" id="th-name">Contact <span class="sort-arrow"></span></th>
-          <th class="sortable" onclick="setSort('promo')" id="th-promo">Promo <span class="sort-arrow"></span></th>
-          <th>Wilaya</th>
-          <th>Emails</th>
-          <th>Telegram</th>
-          <th>Channels</th>
-          <th class="col-actions"></th>
-        </tr>
-      </thead>
-      <tbody id="contactsTbody"></tbody>
-    </table>
+    <div class="topbar-right">
+      <a class="btn" href="/availability.html">Availability</a>
+      <a class="btn" href="/">Dashboard</a>
+      <button class="btn primary" id="addContactBtn">Add contact</button>
+    </div>
   </div>
 
-  <div id="unlinkedSection" style="display:none">
-    <div class="unlinked-section">
-      <div class="unlinked-header" onclick="toggleUnlinked()">
-        <div class="unlinked-title">
-          ⚠️ Rejoignants non liés
-          <span class="badge badge-amber" id="unlinkedCount">0</span>
+  <div class="page">
+    <section class="hero">
+      <div>
+        <h1>Moderator-ready Telegram sync</h1>
+        <p>Manage contacts in a relational model, capture bot-based joins in real time, and trigger Telethon backfills from the browser when the worker is connected.</p>
+      </div>
+      <div class="controls-right">
+        <button class="btn" id="refreshBtn">Refresh data</button>
+        <button class="btn primary" id="syncChannelsBtn">Sync channel list</button>
+      </div>
+    </section>
+
+    <section class="grid-3">
+      <div class="panel">
+        <div class="small">Contacts</div>
+        <div class="stat" id="contactsCount">0</div>
+        <div class="muted">Aggregated people records from <code>ZED_Contacts</code> + <code>ZED_Accounts</code>.</div>
+      </div>
+      <div class="panel">
+        <div class="small">Telegram Joins</div>
+        <div class="stat" id="joinsCount">0</div>
+        <div class="muted">Live join events collected through the bot webhook.</div>
+      </div>
+      <div class="panel">
+        <div class="small">Worker Status</div>
+        <div style="margin-top:8px;" id="workerPill" class="pill warn">Checking…</div>
+        <div class="muted" id="workerHint" style="margin-top:8px;">Worker-backed channel sync is optional but recommended.</div>
+      </div>
+    </section>
+
+    <section class="layout">
+      <div class="stack">
+        <div class="panel">
+          <div class="controls">
+            <div class="controls-left">
+              <input class="search" id="searchInput" placeholder="Search by name, account, username, notes, or tag">
+            </div>
+            <div class="controls-right">
+              <span class="small" id="resultsLabel">0 contacts</span>
+            </div>
+          </div>
+          <div class="table-wrap" style="margin-top:14px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Contact</th>
+                  <th>Accounts</th>
+                  <th>Joined Channels</th>
+                  <th>Updated</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="contactsBody"></tbody>
+            </table>
+          </div>
         </div>
-        <span id="unlinkedChevron" style="color:var(--amber-text);font-size:12px">▼</span>
-      </div>
-      <div id="unlinkedBody" class="unlinked-body"></div>
-    </div>
-  </div>
-</div>
 
-<!-- Drawer -->
-<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
-<div class="drawer" id="drawer">
-  <div class="drawer-header">
-    <h2 id="drawerTitle">Ajouter un contact</h2>
-    <button class="drawer-close" onclick="closeDrawer()">×</button>
-  </div>
-  <div class="drawer-body">
-    <div class="form-section">
-      <div class="form-section-title">Identité</div>
-      <div class="form-grid">
-        <div class="form-row"><label>Prénom *</label><input id="fPrenom" type="text" placeholder="Prénom" required></div>
-        <div class="form-row"><label>Nom *</label><input id="fNom" type="text" placeholder="Nom" required></div>
-        <div class="form-row full"><label>Nom Telegram (TLG_Name)</label><input id="fTlgName" type="text" placeholder="Nom affiché sur Telegram"></div>
-      </div>
-    </div>
-
-    <div class="form-section">
-      <div class="form-section-title">Localisation & Promo</div>
-      <div class="form-grid">
-        <div class="form-row"><label>Promo</label>
-          <select id="fPromo">
-            <option value="">— sélectionner —</option>
-            <option>Promo 2018</option><option>Promo 2019</option><option>Promo 2020</option>
-            <option>Promo 2021</option><option>Promo 2022</option><option>Promo 2023</option><option>Promo 2024</option>
-          </select>
+        <div class="panel">
+          <div class="controls">
+            <h2>My Channels</h2>
+            <button class="btn" id="reloadChannelsBtn">Reload cache</button>
+          </div>
+          <div id="channelsNotice" class="notice info" style="margin-top:10px;">Channel sync becomes available when <code>TELEGRAM_WORKER_URL</code> is configured.</div>
+          <div class="table-wrap" style="margin-top:12px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Channel</th>
+                  <th>Type</th>
+                  <th>Members</th>
+                  <th>Last Sync</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="channelsBody"></tbody>
+            </table>
+          </div>
         </div>
-        <div class="form-row"><label>Wilaya</label><input id="fWilaya" type="text" placeholder="Sétif, Alger…"></div>
-        <div class="form-row"><label>Commune</label><input id="fCommune" type="text" placeholder="Commune"></div>
-        <div class="form-row"><label>Tag</label><input id="fTag" type="text" placeholder="All Promo, Résident…"></div>
       </div>
-      <div class="toggle-row">
-        <input type="checkbox" id="fVip">
-        <label for="fVip">Contact VIP ⭐</label>
+
+      <div class="stack">
+        <div class="panel">
+          <h2>Bot & Worker</h2>
+          <div id="configStatus" class="stack"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Unmatched Joiners</h2>
+          <div id="unmatchedBody" class="stack"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Jobs</h2>
+          <div id="jobsBody" class="stack"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal" id="contactModal">
+    <div class="modal-card">
+      <div class="controls">
+        <div>
+          <h2 id="modalTitle">Add contact</h2>
+          <div class="muted">Each account row is stored separately in <code>ZED_Accounts</code>.</div>
+        </div>
+        <button class="btn" id="closeModalBtn">Close</button>
+      </div>
+      <div class="form-grid" style="margin-top:14px;">
+        <div class="field">
+          <label for="fullName">Full name</label>
+          <input id="fullName" placeholder="e.g. Dr. Nadia Bensalem">
+        </div>
+        <div class="field">
+          <label for="tags">Tags</label>
+          <input id="tags" placeholder="telethon_import, moderator, alumni">
+        </div>
+        <div class="field full">
+          <label for="notes">Notes</label>
+          <textarea id="notes" rows="4" placeholder="Anything useful for moderators..."></textarea>
+        </div>
+        <div class="field full">
+          <div class="controls">
+            <label>Accounts</label>
+            <button class="btn" id="addAccountBtn" type="button">Add account row</button>
+          </div>
+          <div id="accountsContainer" style="margin-top:10px;"></div>
+        </div>
+      </div>
+      <div class="controls" style="margin-top:16px;">
+        <div class="small" id="modalMeta"></div>
+        <div class="controls-right">
+          <button class="btn danger" id="deleteContactBtn" type="button" style="display:none;">Delete</button>
+          <button class="btn primary" id="saveContactBtn" type="button">Save contact</button>
+        </div>
       </div>
     </div>
-
-    <div class="form-section">
-      <div class="form-section-title">Emails</div>
-      <div class="dyn-list" id="allEmailsList"></div>
-      <button class="add-row-btn" onclick="addEmailRow()">+ Ajouter un email</button>
-    </div>
-
-    <div class="form-section">
-      <div class="form-section-title">Comptes Telegram</div>
-      <div class="dyn-list" id="allAccountsList"></div>
-      <button class="add-row-btn" onclick="addAccountRow()">+ Ajouter un compte Telegram</button>
-      <p style="font-size:11px;color:var(--text3);margin-top:8px">Le handle doit commencer par @ (ex: @username). Le TG User ID sera complété automatiquement par le bot.</p>
-    </div>
   </div>
-  <div class="drawer-footer">
-    <button class="btn" onclick="closeDrawer()">Annuler</button>
-    <button class="btn btn-primary" id="saveBtn" onclick="saveContact()">Enregistrer</button>
-  </div>
-</div>
-
-<!-- Confirm delete modal -->
-<div class="modal-overlay" id="confirmModal">
-  <div class="modal">
-    <h3>Supprimer le contact ?</h3>
-    <p id="confirmMsg">Cette action effacera le contact et tous ses emails et comptes Telegram associés.</p>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeConfirm()">Annuler</button>
-      <button class="btn btn-danger btn-primary" id="confirmOkBtn">Supprimer</button>
-    </div>
-  </div>
-</div>
-
-<!-- Notification -->
-<div class="notif" id="notif"></div>
 
 <script>
-  // ── Identity ─────────────────────────────────────────────────────────────
-  function loadIdentity() {
-    const id = JSON.parse(localStorage.getItem('userIdentity') || 'null');
-    const lbl = document.getElementById('identityLabel');
-    if (id && id.name) lbl.textContent = id.name;
-  }
-  function changeIdentity() {
-    const name = prompt('Votre nom :', JSON.parse(localStorage.getItem('userIdentity') || '{}').name || '');
-    if (name === null) return;
-    const email = prompt('Votre email :', JSON.parse(localStorage.getItem('userIdentity') || '{}').email || '');
-    if (email === null) return;
-    localStorage.setItem('userIdentity', JSON.stringify({ name: name.trim(), email: email.trim() }));
-    loadIdentity();
-  }
-  loadIdentity();
+const state = {
+  config: null,
+  contacts: [],
+  unmatchedJoins: [],
+  channels: [],
+  jobs: [],
+  editing: null,
+  jobTimers: new Map(),
+};
 
-  // ── State ────────────────────────────────────────────────────────────────
-  let allContacts   = [];
-  let allActivities = [];
-  let editingId     = null;
-  let deleteTarget  = null;
-  let deleteName    = '';
-  let sortCol       = 'name';   // 'name' | 'promo'
-  let sortDir       = 'asc';    // 'asc' | 'desc'
+const els = {
+  contactsBody: document.getElementById('contactsBody'),
+  unmatchedBody: document.getElementById('unmatchedBody'),
+  channelsBody: document.getElementById('channelsBody'),
+  jobsBody: document.getElementById('jobsBody'),
+  contactsCount: document.getElementById('contactsCount'),
+  joinsCount: document.getElementById('joinsCount'),
+  workerPill: document.getElementById('workerPill'),
+  workerHint: document.getElementById('workerHint'),
+  configStatus: document.getElementById('configStatus'),
+  searchInput: document.getElementById('searchInput'),
+  resultsLabel: document.getElementById('resultsLabel'),
+  channelsNotice: document.getElementById('channelsNotice'),
+  modal: document.getElementById('contactModal'),
+  modalTitle: document.getElementById('modalTitle'),
+  modalMeta: document.getElementById('modalMeta'),
+  fullName: document.getElementById('fullName'),
+  tags: document.getElementById('tags'),
+  notes: document.getElementById('notes'),
+  accountsContainer: document.getElementById('accountsContainer'),
+  deleteContactBtn: document.getElementById('deleteContactBtn'),
+};
 
-  function setSort(col) {
-    if (sortCol === col) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
-    else { sortCol = col; sortDir = 'asc'; }
-    ['th-name','th-promo'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) { el.classList.remove('asc','desc'); }
-    });
-    const active = document.getElementById('th-' + col);
-    if (active) active.classList.add(sortDir);
-    renderContacts();
-  }
-  // Set initial arrow state
-  document.addEventListener('DOMContentLoaded', () => {
-    const el = document.getElementById('th-name');
-    if (el) el.classList.add('asc');
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
+}
+
+async function api(url, options = {}) {
+  const response = await fetch(url, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Request failed.');
+  return data;
+}
+
+function renderConfigStatus() {
+  const items = [
+    ['Contacts sheet', state.config?.contactsConfigured, 'CONTACTS_SHEET_ID'],
+    ['Telegram bot', state.config?.telegramBotConfigured, 'TELEGRAM_BOT_TOKEN'],
+    ['Telethon worker', state.config?.telegramWorkerConfigured, 'TELEGRAM_WORKER_URL'],
+  ];
+  els.configStatus.innerHTML = items.map(([label, ready, key]) => `
+    <div class="notice ${ready ? 'info' : 'warn'}">
+      <strong>${escapeHtml(label)}</strong><br>
+      ${ready ? `${escapeHtml(key)} is configured.` : `${escapeHtml(key)} is missing or not reachable yet.`}
+    </div>
+  `).join('');
+  els.workerPill.className = `pill ${state.config?.telegramWorkerConfigured ? 'ok' : 'warn'}`;
+  els.workerPill.textContent = state.config?.telegramWorkerConfigured ? 'Worker connected' : 'Worker not configured';
+  els.workerHint.textContent = state.config?.telegramWorkerConfigured
+    ? 'Moderators can sync channels and fetch members from this page.'
+    : 'Contacts and join tracking still work without the worker.';
+  els.channelsNotice.className = `notice ${state.config?.telegramWorkerConfigured ? 'info' : 'warn'}`;
+  els.channelsNotice.innerHTML = state.config?.telegramWorkerConfigured
+    ? 'Use "Sync channel list" to refresh the Telethon-visible channels cache, then fetch members channel by channel.'
+    : 'The worker is not connected. Channel browsing and member backfills stay disabled until TELEGRAM_WORKER_URL is configured.';
+}
+
+function getFilteredContacts() {
+  const query = els.searchInput.value.trim().toLowerCase();
+  if (!query) return state.contacts;
+  return state.contacts.filter((contact) => {
+    const haystack = [
+      contact.fullName,
+      contact.notes,
+      contact.tags,
+      ...contact.accounts.flatMap((account) => [account.type, account.value, account.tgUsername, account.tgUserId, account.tgDisplayName]),
+      ...contact.joins.flatMap((join) => [join.channelName, join.channelUsername, join.tgUsername]),
+    ].join(' ').toLowerCase();
+    return haystack.includes(query);
   });
+}
 
-  // ── Validation helpers ───────────────────────────────────────────────────
-  function isValidEmail(s) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+function renderContacts() {
+  const contacts = getFilteredContacts();
+  els.contactsCount.textContent = state.contacts.length;
+  els.joinsCount.textContent = state.unmatchedJoins.length;
+  els.resultsLabel.textContent = `${contacts.length} contact${contacts.length === 1 ? '' : 's'}`;
+  if (!contacts.length) {
+    els.contactsBody.innerHTML = `<tr><td colspan="5" class="empty">No contacts match the current search.</td></tr>`;
+    return;
   }
-  function isValidTgHandle(s) {
-    if (!s) return true; // optional
-    return /^@[a-zA-Z0-9_]{3,}$/.test(s) || /^\+?[0-9]{7,15}$/.test(s);
+  els.contactsBody.innerHTML = contacts.map((contact) => `
+    <tr>
+      <td>
+        <strong>${escapeHtml(contact.fullName)}</strong><br>
+        <span class="small">${escapeHtml(contact.notes || 'No notes')}</span>
+        ${contact.tags ? `<div style="margin-top:6px;">${contact.tags.split(',').filter(Boolean).map((tag) => `<span class="tag">${escapeHtml(tag.trim())}</span>`).join('')}</div>` : ''}
+      </td>
+      <td>${contact.accounts.length ? contact.accounts.map((account) => `<div style="margin-bottom:6px;"><strong>${escapeHtml(account.type)}</strong>: ${escapeHtml(account.value || account.tgUsername || account.tgUserId || account.tgDisplayName || '')}</div>`).join('') : '<span class="small">No linked accounts</span>'}</td>
+      <td>${contact.joins.length ? contact.joins.map((join) => `<span class="tag join">${escapeHtml(join.channelName || join.channelUsername || 'Joined')}</span>`).join('') : '<span class="small">No matched joins</span>'}</td>
+      <td><span class="small">${escapeHtml(contact.updatedAt || contact.createdAt || '')}</span></td>
+      <td><button class="btn" type="button" onclick='openContactModal(${JSON.stringify(contact.id)})'>Edit</button></td>
+    </tr>
+  `).join('');
+}
+
+function renderUnmatchedJoins() {
+  if (!state.unmatchedJoins.length) {
+    els.unmatchedBody.innerHTML = '<div class="empty">No unmatched joiners right now.</div>';
+    return;
   }
-
-  // ── Load ─────────────────────────────────────────────────────────────────
-  async function loadAll() {
-    try {
-      const [cRes, aRes, cfgRes] = await Promise.all([
-        fetch('/api/contacts').then(r => r.json()),
-        fetch('/api/contacts/activities').then(r => r.json()),
-        fetch('/api/contacts/config').then(r => r.json()).catch(() => ({ telegramConfigured: false })),
-      ]);
-      allContacts   = cRes.contacts   || [];
-      allActivities = aRes.activities || [];
-      const hasJoins = allActivities.some(a => a.Action === 'joined_channel');
-      const banner   = document.getElementById('setupBanner');
-      const bannerMsg = document.getElementById('setupBannerMsg');
-      if (!cfgRes.telegramConfigured) {
-        bannerMsg.innerHTML = '<strong>Telegram bot non configuré.</strong> Pour activer le suivi automatique des rejoignants, ajoutez la variable d\'environnement <code>TELEGRAM_BOT_TOKEN</code> (et <code>TELEGRAM_WEBHOOK_SECRET</code>) puis enregistrez le webhook : <code>POST https://api.telegram.org/bot&lt;TOKEN&gt;/setWebhook?url=https://votre-app.railway.app/api/telegram/webhook&secret_token=&lt;SECRET&gt;</code>';
-        banner.style.display = 'block';
-      } else if (!hasJoins) {
-        bannerMsg.innerHTML = '<strong>Bot configuré — en attente du premier rejoignant.</strong> Si aucun événement n\'arrive, vérifiez que le bot est admin dans votre channel, et que le webhook est bien enregistré avec <code>allowed_updates=["chat_member"]</code>.';
-        banner.style.display = 'block';
-      } else {
-        banner.style.display = 'none';
-      }
-      populatePromoFilter();
-      renderStats();
-      renderContacts();
-      renderUnlinked();
-    } catch (e) {
-      document.getElementById('loadingState').innerHTML =
-        `<p style="color:var(--red-text);padding:20px">Erreur de chargement : ${e.message}</p>`;
-    }
-  }
-
-  function populatePromoFilter() {
-    const promos = [...new Set(allContacts.map(c => c.Promo).filter(Boolean))].sort();
-    const sel = document.getElementById('promoFilter');
-    const cur = sel.value;
-    sel.innerHTML = '<option value="">Toutes les promos</option>' +
-      promos.map(p => `<option${p === cur ? ' selected' : ''}>${p}</option>`).join('');
-  }
-
-  function renderStats() {
-    const total  = allContacts.length;
-    const vip    = allContacts.filter(c => c.VIP === 'TRUE').length;
-    const tg     = allContacts.filter(c => c.accounts && c.accounts.length > 0).length;
-    const joined = allContacts.filter(c => getJoinedChannels(c).length > 0).length;
-    document.getElementById('statTotal').textContent  = total;
-    document.getElementById('statVip').textContent    = vip;
-    document.getElementById('statTg').textContent     = tg;
-    document.getElementById('statJoined').textContent = joined;
-  }
-
-  // Match join events to a contact by ID, TG_User_ID, or TG_Username
-  function getJoinedChannels(contact) {
-    const cid      = contact.ID_Contact || '';
-    const userIds  = new Set((contact.accounts || []).map(a => a.TG_User_ID).filter(Boolean));
-    const handles  = new Set(
-      (contact.accounts || [])
-        .map(a => (a.TG_Username || '').replace('@','').toLowerCase())
-        .filter(Boolean)
-    );
-    return [...new Set(
-      allActivities
-        .filter(a =>
-          a.Action === 'joined_channel' &&
-          (
-            (cid && a.ID_Contact === cid) ||
-            (a.TG_User_ID && userIds.has(a.TG_User_ID)) ||
-            (a.TG_Username && handles.has(a.TG_Username.replace('@','').toLowerCase()))
-          )
-        )
-        .map(a => a.Channel)
-    )];
-  }
-
-  function renderContacts() {
-    const q     = (document.getElementById('searchInput').value || '').toLowerCase();
-    const promo = document.getElementById('promoFilter').value;
-    const vip   = document.getElementById('vipFilter').value;
-
-    let filtered = allContacts.filter(c => {
-      if (promo && c.Promo !== promo) return false;
-      if (vip === 'vip' && c.VIP !== 'TRUE') return false;
-      if (!q) return true;
-      const haystack = [
-        c['Nom (en francais)'] || c.Nom || '',
-        c['Prénom (en francais)'] || c.Prenom || c.Prénom || '',
-        c.TLG_Name || '',
-        ...(c.emails   || []).map(e => e.Email       || ''),
-        ...(c.accounts || []).map(a => a.TG_Username || ''),
-        c['Email Address'] || '',
-        c['Archive_Tlg_Contacts'] || '',
-      ].join(' ').toLowerCase();
-      return haystack.includes(q);
-    });
-
-    // Apply column sort
-    filtered = [...filtered].sort((a, b) => {
-      let va = '', vb = '';
-      if (sortCol === 'name') {
-        va = [(a['Prénom (en francais)']||a.Prenom||a.Prénom||'').trim(), (a['Nom (en francais)']||a.Nom||'').trim()].join(' ').toLowerCase();
-        vb = [(b['Prénom (en francais)']||b.Prenom||b.Prénom||'').trim(), (b['Nom (en francais)']||b.Nom||'').trim()].join(' ').toLowerCase();
-      } else if (sortCol === 'promo') {
-        va = (a.Promo || '').toLowerCase();
-        vb = (b.Promo || '').toLowerCase();
-      }
-      if (va < vb) return sortDir === 'asc' ? -1 : 1;
-      if (va > vb) return sortDir === 'asc' ?  1 : -1;
-      return 0;
-    });
-
-    document.getElementById('loadingState').style.display = 'none';
-    const empty = document.getElementById('emptyState');
-    const table = document.getElementById('contactsTable');
-
-    if (!filtered.length) { empty.style.display = 'block'; table.style.display = 'none'; return; }
-    empty.style.display = 'none'; table.style.display = 'table';
-
-    const tbody = document.getElementById('contactsTbody');
-    tbody.innerHTML = filtered.map(c => {
-      const nom      = c['Nom (en francais)'] || c.Nom || '';
-      const prenom   = c['Prénom (en francais)'] || c.Prenom || c.Prénom || '';
-      const fullName = [prenom.trim(), nom.trim()].filter(Boolean).join(' ') || '—';
-      const cid      = c.ID_Contact || '';
-      const promoB   = c.Promo ? `<span class="badge badge-blue">${esc(c.Promo)}</span>` : '—';
-      const vipS     = c.VIP === 'TRUE' ? '<span class="vip-star">⭐</span>' : '';
-      const wilaya   = c.Wilaya || '—';
-
-      const emails = c.emails || [];
-      const emailH = emails.length
-        ? `<div class="chip-list">${emails.slice(0,2).map(e => `<span class="chip chip-email" title="${esc(e.Email)}">${esc(e.Email.split('@')[0])}@…</span>`).join('')}${emails.length > 2 ? `<span class="chip">+${emails.length-2}</span>` : ''}</div>`
-        : (c['Email Address'] ? `<span class="chip chip-email" title="${esc(c['Email Address'])}">${esc(c['Email Address'].split('@')[0])}@…</span>` : '—');
-
-      const accounts = c.accounts || [];
-      const tgH = accounts.length
-        ? `<div class="chip-list">${accounts.map(a => `<span class="chip chip-tg">${esc(a.TG_Username||'?')}</span>`).join('')}</div>`
-        : (c['Archive_Tlg_Contacts'] ? `<span class="chip chip-tg">${esc(c['Archive_Tlg_Contacts'])}</span>` : '—');
-
-      const channels = getJoinedChannels(c);
-      const chH = channels.length
-        ? `<div class="joined-list">${channels.map(ch => `<span class="joined-badge">${esc(ch)}</span>`).join('')}</div>`
-        : '—';
-
-      return `<tr>
-        <td class="col-name">
-          <div class="contact-name">${esc(fullName)}${vipS}</div>
-          ${cid ? `<div class="contact-id">${esc(cid)}</div>` : ''}
-        </td>
-        <td>${promoB}</td>
-        <td>${esc(wilaya)}</td>
-        <td>${emailH}</td>
-        <td>${tgH}</td>
-        <td>${chH}</td>
-        <td class="col-actions">
-          <button class="btn btn-sm" onclick='editContact(${JSON.stringify(cid)})' title="Modifier">✏️</button>
-          <button class="btn btn-sm btn-danger" onclick='confirmDelete(${JSON.stringify(cid)},${JSON.stringify(fullName)})' title="Supprimer">🗑</button>
-        </td>
-      </tr>`;
-    }).join('');
-  }
-
-  function renderUnlinked() {
-    const unlinked = allActivities.filter(a => a.Action === 'joined_channel' && !a.ID_Contact);
-    const section  = document.getElementById('unlinkedSection');
-    if (!unlinked.length) { section.style.display = 'none'; return; }
-    section.style.display = 'block';
-    document.getElementById('unlinkedCount').textContent = unlinked.length;
-
-    const contactOptions = allContacts.map(c => {
-      const nom    = c['Nom (en francais)'] || c.Nom || '';
-      const prenom = c['Prénom (en francais)'] || c.Prenom || c.Prénom || '';
-      return `<option value="${esc(c.ID_Contact)}">${esc([prenom,nom].filter(Boolean).join(' '))} (${esc(c.ID_Contact)})</option>`;
-    }).join('');
-
-    document.getElementById('unlinkedBody').innerHTML = unlinked.map(a => `
-      <div class="unlinked-row">
-        <div>
-          <div class="unlinked-tg">${esc(a.TG_Username||a.TG_User_ID||'?')}</div>
-          <div class="unlinked-meta">${esc(a.Channel)} · ${esc((a.Timestamp||'').slice(0,10))}</div>
-        </div>
-        <select class="link-select" id="link-${a._rowIndex}">
-          <option value="">— lier à un contact —</option>
-          ${contactOptions}
+  const options = state.contacts.map((contact) => `<option value="${escapeHtml(contact.id)}">${escapeHtml(contact.fullName)}</option>`).join('');
+  els.unmatchedBody.innerHTML = state.unmatchedJoins.map((join) => `
+    <div class="panel" style="padding:12px;">
+      <strong>${escapeHtml(join.tgDisplayName || join.tgUsername || join.tgUserId || 'Unknown joiner')}</strong>
+      <div class="small" style="margin-top:4px;">${escapeHtml(join.channelName || join.channelUsername || 'Unknown channel')} • ${escapeHtml(join.joinedAt || '')}</div>
+      <div class="controls" style="margin-top:10px;">
+        <select id="joinSelect_${join.id}">
+          <option value="">Choose contact…</option>
+          ${options}
         </select>
-        <button class="btn btn-sm btn-primary" onclick="linkActivity(${a._rowIndex})">Lier</button>
+        <button class="btn" onclick='linkJoin(${JSON.stringify(join.id)})'>Link</button>
       </div>
-    `).join('');
+    </div>
+  `).join('');
+}
+
+function renderChannels() {
+  if (!state.channels.length) {
+    els.channelsBody.innerHTML = '<tr><td colspan="5" class="empty">No channels cached yet.</td></tr>';
+    return;
   }
+  els.channelsBody.innerHTML = state.channels.map((channel) => `
+    <tr>
+      <td><strong>${escapeHtml(channel.name || channel.username || channel.id)}</strong><br><span class="small">${escapeHtml(channel.username || channel.id || '')}</span></td>
+      <td>${escapeHtml(channel.type || '')}</td>
+      <td>${escapeHtml(channel.membersCount || '')}</td>
+      <td>${escapeHtml(channel.lastSync || '')}</td>
+      <td><button class="btn" ${state.config?.telegramWorkerConfigured ? '' : 'disabled'} onclick='fetchMembers(${JSON.stringify(channel.id || "")}, ${JSON.stringify(channel.username || "")}, ${JSON.stringify(channel.name || "")})'>Fetch members</button></td>
+    </tr>
+  `).join('');
+}
 
-  function toggleUnlinked() {
-    const body = document.getElementById('unlinkedBody');
-    const chev = document.getElementById('unlinkedChevron');
-    const hidden = body.style.display === 'none';
-    body.style.display = hidden ? 'block' : 'none';
-    chev.textContent = hidden ? '▼' : '▶';
+function renderJobs() {
+  if (!state.jobs.length) {
+    els.jobsBody.innerHTML = '<div class="empty">No worker jobs recorded yet.</div>';
+    return;
   }
+  els.jobsBody.innerHTML = state.jobs.slice().reverse().slice(0, 8).map((job) => {
+    const progress = Number(job.progress || 0);
+    const total = Number(job.total || 0);
+    const pct = total > 0 ? Math.min(100, Math.round((progress / total) * 100)) : (job.status === 'done' ? 100 : 0);
+    return `
+      <div class="job-row">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+          <div>
+            <strong>${escapeHtml(job.type || 'job')}</strong>
+            <div class="small">${escapeHtml(job.channel || '')}</div>
+          </div>
+          <span class="pill ${job.status === 'done' ? 'ok' : job.status === 'error' ? 'err' : 'warn'}">${escapeHtml(job.status || 'pending')}</span>
+        </div>
+        <div class="small" style="margin-top:6px;">${escapeHtml(job.summary || job.error || '')}</div>
+        <div class="progress"><div style="width:${pct}%;"></div></div>
+      </div>
+    `;
+  }).join('');
+}
 
-  async function linkActivity(rowIndex) {
-    const sel = document.getElementById(`link-${rowIndex}`);
-    if (!sel.value) return notify('Sélectionnez un contact', 'error');
-    const contactId = sel.value;
-    const contact   = allContacts.find(c => c.ID_Contact === contactId);
-    const accountId = contact && contact.accounts && contact.accounts[0] ? contact.accounts[0].ID_Telegram : '';
-    try {
-      const r = await fetch('/api/contacts/link-activity', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ activityRowIndex: rowIndex, contactId, accountId }),
-      });
-      if (!r.ok) throw new Error((await r.json()).error);
-      notify('Lien enregistré', 'success');
-      await loadAll();
-    } catch (e) { notify(e.message, 'error'); }
+function makeAccountRow(account = {}) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'account-row';
+  wrapper.innerHTML = `
+    <select class="account-type">
+      <option value="telegram">telegram</option>
+      <option value="email">email</option>
+      <option value="phone">phone</option>
+      <option value="other">other</option>
+    </select>
+    <input class="account-value" placeholder="@username / email / phone">
+    <input class="account-user-id" placeholder="TG user id">
+    <input class="account-display" placeholder="Display name">
+    <button class="btn danger" type="button">Remove</button>
+  `;
+  wrapper.dataset.id = account.id || '';
+  wrapper.querySelector('.account-type').value = account.type || 'telegram';
+  wrapper.querySelector('.account-value').value = account.value || '';
+  wrapper.querySelector('.account-user-id').value = account.tgUserId || '';
+  wrapper.querySelector('.account-display').value = account.tgDisplayName || '';
+  wrapper.querySelector('button').addEventListener('click', () => wrapper.remove());
+  els.accountsContainer.appendChild(wrapper);
+}
+
+function collectAccounts() {
+  return [...els.accountsContainer.querySelectorAll('.account-row')].map((row) => ({
+    id: row.dataset.id || '',
+    type: row.querySelector('.account-type').value,
+    value: row.querySelector('.account-value').value.trim(),
+    tgUserId: row.querySelector('.account-user-id').value.trim(),
+    tgDisplayName: row.querySelector('.account-display').value.trim(),
+    source: 'manual',
+  })).filter((account) => account.value || account.tgUserId || account.tgDisplayName);
+}
+
+function openContactModal(contactId = null) {
+  const contact = state.contacts.find((entry) => entry.id === contactId) || null;
+  state.editing = contact;
+  els.modalTitle.textContent = contact ? 'Edit contact' : 'Add contact';
+  els.modalMeta.textContent = contact ? `Created ${contact.createdAt || ''}` : 'New contact';
+  els.fullName.value = contact?.fullName || '';
+  els.tags.value = contact?.tags || '';
+  els.notes.value = contact?.notes || '';
+  els.accountsContainer.innerHTML = '';
+  (contact?.accounts?.length ? contact.accounts : [{}]).forEach((account) => makeAccountRow(account));
+  els.deleteContactBtn.style.display = contact ? 'inline-flex' : 'none';
+  els.modal.classList.add('open');
+}
+
+function closeContactModal() {
+  els.modal.classList.remove('open');
+  state.editing = null;
+}
+
+async function saveContact() {
+  const fullName = els.fullName.value.trim();
+  if (!fullName) {
+    alert('Full name is required.');
+    return;
   }
-
-  // ── Drawer ────────────────────────────────────────────────────────────────
-  function _addEmailRowToList(list, value = '', isPrimary = false) {
-    const isFirst = list.children.length === 0;
-    const div = document.createElement('div');
-    div.className = 'dyn-row';
-    div.innerHTML = `
-      <input type="radio" class="primary-radio" name="primaryEmail" ${isFirst || isPrimary ? 'checked' : ''} title="Primaire">
-      <input type="text" class="email-input" placeholder="email@gmail.com" value="${esc(value)}">
-      <button class="dyn-remove" onclick="this.parentElement.remove()" title="Supprimer">×</button>`;
-    list.appendChild(div);
+  const payload = {
+    fullName,
+    tags: els.tags.value.trim(),
+    notes: els.notes.value.trim(),
+    updatedBy: 'web-ui',
+    accounts: collectAccounts(),
+  };
+  if (state.editing) {
+    await api(`/api/contacts/${state.editing.rowIndex}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } else {
+    await api('/api/contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
   }
+  closeContactModal();
+  await loadAll();
+}
 
-  function _addAccountRowToList(list, username = '', userId = '') {
-    const div = document.createElement('div');
-    div.className = 'dyn-row';
-    div.style.flexWrap = 'wrap';
-    div.innerHTML = `
-      <input type="text" class="tg-username-input" placeholder="@username" value="${esc(username)}" style="flex:1;min-width:120px">
-      <input type="text" class="tg-userid-input" placeholder="TG User ID (optionnel)" value="${esc(userId)}" style="flex:1;min-width:120px">
-      <button class="dyn-remove" onclick="this.parentElement.remove()" title="Supprimer">×</button>`;
-    list.appendChild(div);
+async function deleteContact() {
+  if (!state.editing || !confirm(`Delete ${state.editing.fullName}?`)) return;
+  await api(`/api/contacts/${state.editing.rowIndex}`, { method: 'DELETE' });
+  closeContactModal();
+  await loadAll();
+}
+
+async function linkJoin(joinId) {
+  const select = document.getElementById(`joinSelect_${joinId}`);
+  if (!select?.value) {
+    alert('Choose a contact first.');
+    return;
   }
+  await api(`/api/telegram/joins/${joinId}/link`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contactId: select.value }),
+  });
+  await loadAll();
+}
 
-  function openDrawer(contact) {
-    editingId = contact ? contact.ID_Contact : null;
-    document.getElementById('drawerTitle').textContent = editingId ? 'Modifier le contact' : 'Ajouter un contact';
-    document.getElementById('fPrenom').value  = contact ? (contact['Prénom (en francais)'] || contact.Prenom || contact.Prénom || '').trim() : '';
-    document.getElementById('fNom').value     = contact ? (contact['Nom (en francais)'] || contact.Nom || '').trim() : '';
-    document.getElementById('fTlgName').value = contact ? (contact.TLG_Name || '') : '';
-    document.getElementById('fPromo').value   = contact ? (contact.Promo || '') : '';
-    document.getElementById('fWilaya').value  = contact ? (contact.Wilaya || '') : '';
-    document.getElementById('fCommune').value = contact ? (contact.Commune || '') : '';
-    document.getElementById('fTag').value     = contact ? (contact.Tag || '') : '';
-    document.getElementById('fVip').checked   = contact ? contact.VIP === 'TRUE' : false;
+async function runJob(type, payload = {}) {
+  if (!state.config?.telegramWorkerConfigured) {
+    alert('TELEGRAM_WORKER_URL is not configured yet.');
+    return;
+  }
+  const result = await api('/api/telegram/jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type, ...payload }),
+  });
+  if (result.jobId) pollJob(result.jobId);
+  await loadAll();
+}
 
-    // Build unified editable email list
-    const emailList = document.getElementById('allEmailsList');
-    emailList.innerHTML = '';
-    if (contact && contact.emails && contact.emails.length) {
-      contact.emails.forEach(e => _addEmailRowToList(emailList, e.Email, e.Is_Primary === 'TRUE'));
+async function pollJob(jobId) {
+  clearTimeout(state.jobTimers.get(jobId));
+  try {
+    const result = await api(`/api/telegram/jobs/${jobId}`);
+    if (!['done', 'error'].includes(result.status)) {
+      state.jobTimers.set(jobId, setTimeout(() => pollJob(jobId), 3000));
     } else {
-      _addEmailRowToList(emailList); // default blank row
-    }
-
-    // Build unified editable account list
-    const accountList = document.getElementById('allAccountsList');
-    accountList.innerHTML = '';
-    if (contact && contact.accounts && contact.accounts.length) {
-      contact.accounts.forEach(a => _addAccountRowToList(accountList, a.TG_Username, a.TG_User_ID));
-    } else {
-      _addAccountRowToList(accountList); // default blank row
-    }
-
-    document.getElementById('drawer').classList.add('open');
-    document.getElementById('drawerOverlay').classList.add('open');
-    document.getElementById('fPrenom').focus();
-  }
-
-  function closeDrawer() {
-    document.getElementById('drawer').classList.remove('open');
-    document.getElementById('drawerOverlay').classList.remove('open');
-    editingId = null;
-  }
-
-  function addEmailRow() {
-    _addEmailRowToList(document.getElementById('allEmailsList'));
-  }
-
-  function addAccountRow() {
-    _addAccountRowToList(document.getElementById('allAccountsList'));
-  }
-
-  function _collectEmails() {
-    const rows = document.querySelectorAll('#allEmailsList .dyn-row');
-    return [...rows].map((row, i) => ({
-      email: row.querySelector('.email-input').value.trim(),
-      isPrimary: row.querySelector('.primary-radio') ? row.querySelector('.primary-radio').checked : i === 0,
-    })).filter(e => e.email);
-  }
-
-  function _collectAccounts() {
-    const rows = document.querySelectorAll('#allAccountsList .dyn-row');
-    return [...rows].map(row => ({
-      tgUsername: row.querySelector('.tg-username-input').value.trim(),
-      tgUserId:   row.querySelector('.tg-userid-input').value.trim(),
-    })).filter(a => a.tgUsername || a.tgUserId);
-  }
-
-  async function saveContact() {
-    const prenom = document.getElementById('fPrenom').value.trim();
-    const nom    = document.getElementById('fNom').value.trim();
-    if (!prenom && !nom) { notify('Prénom ou Nom requis', 'error'); return; }
-
-    // Validate emails
-    const emails = _collectEmails();
-    for (const e of emails) {
-      if (!isValidEmail(e.email)) { notify(`Email invalide : ${e.email}`, 'error'); return; }
-    }
-
-    // Validate Telegram handles
-    const accounts = _collectAccounts();
-    for (const a of accounts) {
-      if (a.tgUsername && !isValidTgHandle(a.tgUsername)) {
-        notify(`Handle Telegram invalide : ${a.tgUsername} (doit commencer par @)`, 'error'); return;
-      }
-    }
-
-    const body = {
-      nom, prenom,
-      tlgName : document.getElementById('fTlgName').value.trim(),
-      promo   : document.getElementById('fPromo').value,
-      wilaya  : document.getElementById('fWilaya').value.trim(),
-      commune : document.getElementById('fCommune').value.trim(),
-      vip     : document.getElementById('fVip').checked,
-      tag     : document.getElementById('fTag').value.trim(),
-    };
-
-    const saveBtn = document.getElementById('saveBtn');
-    saveBtn.disabled = true; saveBtn.textContent = 'Enregistrement…';
-
-    try {
-      if (editingId) {
-        // 1. Update core fields
-        const r = await fetch(`/api/contacts/${encodeURIComponent(editingId)}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-        });
-        if (!r.ok) throw new Error((await r.json()).error);
-        // 2. Replace all emails: delete-all then re-add
-        await fetch(`/api/contacts/${encodeURIComponent(editingId)}/all-emails`, { method: 'DELETE' });
-        for (const e of emails) {
-          await fetch(`/api/contacts/${encodeURIComponent(editingId)}/emails`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(e),
-          });
-        }
-        // 3. Replace all accounts: delete-all then re-add
-        await fetch(`/api/contacts/${encodeURIComponent(editingId)}/all-accounts`, { method: 'DELETE' });
-        for (const a of accounts) {
-          await fetch(`/api/contacts/${encodeURIComponent(editingId)}/accounts`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(a),
-          });
-        }
-        notify('Contact mis à jour', 'success');
-      } else {
-        body.emails   = emails;
-        body.accounts = accounts;
-        const r = await fetch('/api/contacts', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-        });
-        if (!r.ok) throw new Error((await r.json()).error);
-        notify('Contact créé', 'success');
-      }
-      closeDrawer();
       await loadAll();
-    } catch (e) {
-      notify(e.message, 'error');
-    } finally {
-      saveBtn.disabled = false; saveBtn.textContent = 'Enregistrer';
     }
+  } catch (error) {
+    state.jobTimers.set(jobId, setTimeout(() => pollJob(jobId), 4000));
   }
+}
 
-  function editContact(contactId) {
-    const contact = allContacts.find(c => c.ID_Contact === contactId);
-    if (!contact) return notify('Contact introuvable', 'error');
-    openDrawer(contact);
-  }
+async function fetchMembers(channelId, channelUsername, channelName) {
+  await runJob('fetch-members', { channelId, channelUsername, channelName });
+}
 
-  // ── Delete ────────────────────────────────────────────────────────────────
-  function confirmDelete(id, name) {
-    deleteTarget = id; deleteName = name;
-    document.getElementById('confirmMsg').textContent =
-      `Supprimer "${name}" et tous ses emails / comptes Telegram associés ?`;
-    document.getElementById('confirmModal').classList.add('open');
-    document.getElementById('confirmOkBtn').onclick = doDelete;
-  }
-  function closeConfirm() {
-    document.getElementById('confirmModal').classList.remove('open');
-    deleteTarget = null;
-  }
-  async function doDelete() {
-    if (!deleteTarget) return;
-    closeConfirm();
-    try {
-      const r = await fetch(`/api/contacts/${encodeURIComponent(deleteTarget)}`, { method: 'DELETE' });
-      if (!r.ok) throw new Error((await r.json()).error);
-      notify(`"${deleteName}" supprimé`, 'success');
-      await loadAll();
-    } catch (e) { notify(e.message, 'error'); }
-  }
+async function loadConfig() {
+  state.config = await api('/api/config');
+  renderConfigStatus();
+}
 
-  // ── Notification ──────────────────────────────────────────────────────────
-  let notifTimer;
-  function notify(msg, type = 'info') {
-    const el = document.getElementById('notif');
-    el.textContent = msg; el.className = `notif ${type} show`;
-    clearTimeout(notifTimer);
-    notifTimer = setTimeout(() => { el.classList.remove('show'); }, 3500);
-  }
+async function loadAll() {
+  const data = await api('/api/contacts');
+  state.contacts = data.contacts || [];
+  state.unmatchedJoins = data.unmatchedJoins || [];
+  state.channels = data.channels || [];
+  state.jobs = data.jobs || [];
+  renderContacts();
+  renderUnmatchedJoins();
+  renderChannels();
+  renderJobs();
+}
 
-  // ── Utility ───────────────────────────────────────────────────────────────
-  function esc(s) {
-    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
+document.getElementById('addContactBtn').addEventListener('click', () => openContactModal());
+document.getElementById('closeModalBtn').addEventListener('click', closeContactModal);
+document.getElementById('saveContactBtn').addEventListener('click', saveContact);
+document.getElementById('deleteContactBtn').addEventListener('click', deleteContact);
+document.getElementById('addAccountBtn').addEventListener('click', () => makeAccountRow({}));
+document.getElementById('refreshBtn').addEventListener('click', loadAll);
+document.getElementById('reloadChannelsBtn').addEventListener('click', loadAll);
+document.getElementById('syncChannelsBtn').addEventListener('click', () => runJob('list-channels'));
+els.searchInput.addEventListener('input', renderContacts);
+els.modal.addEventListener('click', (event) => {
+  if (event.target === els.modal) closeContactModal();
+});
 
-  // ── Init ──────────────────────────────────────────────────────────────────
-  loadAll();
+window.openContactModal = openContactModal;
+window.linkJoin = linkJoin;
+window.fetchMembers = fetchMembers;
+
+(async function init() {
+  try {
+    await loadConfig();
+    await loadAll();
+  } catch (error) {
+    document.body.innerHTML = `<div class="page"><div class="panel notice err">Could not load Contacts UI: ${escapeHtml(error.message)}</div></div>`;
+  }
+})();
 </script>
 </body>
 </html>

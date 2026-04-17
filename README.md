@@ -19,6 +19,12 @@ A web-based dashboard for tracking the digitization progress of medical exams (Q
 | `SERVICE_ACCOUNT_JSON` | Full JSON of the Google service account key |
 | `DRIVE_FOLDER_ID` | Google Drive folder ID for PDF uploads |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID for frontend sign-in |
+| `CONTACTS_SHEET_ID` | Google Sheets spreadsheet ID for contacts, joins, channels, and jobs |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token used for webhook-based join tracking |
+| `TELEGRAM_WORKER_URL` | Base URL of the deployed Telethon worker service |
+| `TELEGRAM_API_ID` | Telegram API ID for the worker service |
+| `TELEGRAM_API_HASH` | Telegram API hash for the worker service |
+| `TELEGRAM_SESSION` | Telethon StringSession used by the worker service |
 
 ## Documentation
 
