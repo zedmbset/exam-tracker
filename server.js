@@ -856,6 +856,7 @@ app.get('/api/telegram/jobs/:jobId', async (req, res) => {
 
 // ─── CONTACTS MINI-APP ───────────────────────────────────────────────────────
 
+/*
 const CONTACTS_SHEET_ID = process.env.CONTACTS_SHEET_ID || '1tsP9abcf5NsIqNV-K_qts_RncpDdSPn3ElAPeY6YkdU';
 const TELEGRAM_BOT_TOKEN    = process.env.TELEGRAM_BOT_TOKEN    || '';
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || '';
@@ -1180,6 +1181,7 @@ app.get('/api/contacts/config', (req, res) => {
 
 // ─── END CONTACTS MINI-APP ────────────────────────────────────────────────────
 
+*/
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Exam Tracker backend running on port ${PORT}`);
