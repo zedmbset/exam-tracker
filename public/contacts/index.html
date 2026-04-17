@@ -315,17 +315,15 @@
 
     <div class="form-section">
       <div class="form-section-title">Emails</div>
-      <div id="existingEmailsList"></div>
-      <div class="dyn-list" id="newEmailsList"></div>
+      <div class="dyn-list" id="allEmailsList"></div>
       <button class="add-row-btn" onclick="addEmailRow()">+ Ajouter un email</button>
     </div>
 
     <div class="form-section">
       <div class="form-section-title">Comptes Telegram</div>
-      <div id="existingAccountsList"></div>
-      <div class="dyn-list" id="newAccountsList"></div>
+      <div class="dyn-list" id="allAccountsList"></div>
       <button class="add-row-btn" onclick="addAccountRow()">+ Ajouter un compte Telegram</button>
-      <p style="font-size:11px;color:var(--text3);margin-top:8px">Le TG User ID numérique sera complété automatiquement par le bot une fois le contact rejoint.</p>
+      <p style="font-size:11px;color:var(--text3);margin-top:8px">Le handle doit commencer par @ (ex: @username). Le TG User ID sera complété automatiquement par le bot.</p>
     </div>
   </div>
   <div class="drawer-footer">
@@ -350,7 +348,7 @@
 <div class="notif" id="notif"></div>
 
 <script>
-  // ── Identity (shared with main app) ──────────────────────────────────────
+  // ── Identity ─────────────────────────────────────────────────────────────
   function loadIdentity() {
     const id = JSON.parse(localStorage.getItem('userIdentity') || 'null');
     const lbl = document.getElementById('identityLabel');
@@ -373,15 +371,27 @@
   let deleteTarget  = null;
   let deleteName    = '';
 
+  // ── Validation helpers ───────────────────────────────────────────────────
+  function isValidEmail(s) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+  }
+  function isValidTgHandle(s) {
+    if (!s) return true; // optional
+    return /^@[a-zA-Z0-9_]{3,}$/.test(s) || /^\+?[0-9]{7,15}$/.test(s);
+  }
+
   // ── Load ─────────────────────────────────────────────────────────────────
   async function loadAll() {
     try {
-      const [cRes, aRes] = await Promise.all([
+      const [cRes, aRes, cfgRes] = await Promise.all([
         fetch('/api/contacts').then(r => r.json()),
         fetch('/api/contacts/activities').then(r => r.json()),
+        fetch('/api/contacts/config').then(r => r.json()).catch(() => ({ telegramConfigured: false })),
       ]);
       allContacts   = cRes.contacts   || [];
       allActivities = aRes.activities || [];
+      document.getElementById('setupBanner').style.display =
+        cfgRes.telegramConfigured ? 'none' : 'block';
       populatePromoFilter();
       renderStats();
       renderContacts();
@@ -404,16 +414,33 @@
     const total  = allContacts.length;
     const vip    = allContacts.filter(c => c.VIP === 'TRUE').length;
     const tg     = allContacts.filter(c => c.accounts && c.accounts.length > 0).length;
-    const joined = new Set(allActivities.filter(a => a.ID_Contact).map(a => a.ID_Contact)).size;
+    const joined = allContacts.filter(c => getJoinedChannels(c).length > 0).length;
     document.getElementById('statTotal').textContent  = total;
     document.getElementById('statVip').textContent    = vip;
     document.getElementById('statTg').textContent     = tg;
     document.getElementById('statJoined').textContent = joined;
   }
 
-  function getJoinedChannels(contactId) {
+  // Match join events to a contact by ID, TG_User_ID, or TG_Username
+  function getJoinedChannels(contact) {
+    const cid      = contact.ID_Contact || '';
+    const userIds  = new Set((contact.accounts || []).map(a => a.TG_User_ID).filter(Boolean));
+    const handles  = new Set(
+      (contact.accounts || [])
+        .map(a => (a.TG_Username || '').replace('@','').toLowerCase())
+        .filter(Boolean)
+    );
     return [...new Set(
-      allActivities.filter(a => a.ID_Contact === contactId && a.Action === 'joined_channel').map(a => a.Channel)
+      allActivities
+        .filter(a =>
+          a.Action === 'joined_channel' &&
+          (
+            (cid && a.ID_Contact === cid) ||
+            (a.TG_User_ID && userIds.has(a.TG_User_ID)) ||
+            (a.TG_Username && handles.has(a.TG_Username.replace('@','').toLowerCase()))
+          )
+        )
+        .map(a => a.Channel)
     )];
   }
 
@@ -422,7 +449,7 @@
     const promo = document.getElementById('promoFilter').value;
     const vip   = document.getElementById('vipFilter').value;
 
-    let filtered = allContacts.filter(c => {
+    const filtered = allContacts.filter(c => {
       if (promo && c.Promo !== promo) return false;
       if (vip === 'vip' && c.VIP !== 'TRUE') return false;
       if (!q) return true;
@@ -430,42 +457,42 @@
         c['Nom (en francais)'] || c.Nom || '',
         c['Prénom (en francais)'] || c.Prenom || c.Prénom || '',
         c.TLG_Name || '',
-        ...(c.emails   || []).map(e => e.Email   || ''),
+        ...(c.emails   || []).map(e => e.Email       || ''),
         ...(c.accounts || []).map(a => a.TG_Username || ''),
+        c['Email Address'] || '',
+        c['Archive_Tlg_Contacts'] || '',
       ].join(' ').toLowerCase();
       return haystack.includes(q);
     });
 
-    document.getElementById('loadingState').style.display  = 'none';
+    document.getElementById('loadingState').style.display = 'none';
     const empty = document.getElementById('emptyState');
     const table = document.getElementById('contactsTable');
 
-    if (!filtered.length) {
-      empty.style.display = 'block'; table.style.display = 'none'; return;
-    }
+    if (!filtered.length) { empty.style.display = 'block'; table.style.display = 'none'; return; }
     empty.style.display = 'none'; table.style.display = 'table';
 
     const tbody = document.getElementById('contactsTbody');
     tbody.innerHTML = filtered.map(c => {
-      const nom    = c['Nom (en francais)'] || c.Nom || '';
-      const prenom = c['Prénom (en francais)'] || c.Prenom || c.Prénom || '';
+      const nom      = c['Nom (en francais)'] || c.Nom || '';
+      const prenom   = c['Prénom (en francais)'] || c.Prenom || c.Prénom || '';
       const fullName = [prenom.trim(), nom.trim()].filter(Boolean).join(' ') || '—';
-      const cid    = c.ID_Contact || '';
-      const promoB = c.Promo ? `<span class="badge badge-blue">${esc(c.Promo)}</span>` : '—';
-      const vipS   = c.VIP === 'TRUE' ? '<span class="vip-star">⭐</span>' : '';
-      const wilaya = c.Wilaya || '—';
+      const cid      = c.ID_Contact || '';
+      const promoB   = c.Promo ? `<span class="badge badge-blue">${esc(c.Promo)}</span>` : '—';
+      const vipS     = c.VIP === 'TRUE' ? '<span class="vip-star">⭐</span>' : '';
+      const wilaya   = c.Wilaya || '—';
 
-      const emails = (c.emails || []);
+      const emails = c.emails || [];
       const emailH = emails.length
         ? `<div class="chip-list">${emails.slice(0,2).map(e => `<span class="chip chip-email" title="${esc(e.Email)}">${esc(e.Email.split('@')[0])}@…</span>`).join('')}${emails.length > 2 ? `<span class="chip">+${emails.length-2}</span>` : ''}</div>`
         : (c['Email Address'] ? `<span class="chip chip-email" title="${esc(c['Email Address'])}">${esc(c['Email Address'].split('@')[0])}@…</span>` : '—');
 
-      const accounts = (c.accounts || []);
+      const accounts = c.accounts || [];
       const tgH = accounts.length
-        ? `<div class="chip-list">${accounts.map(a => `<span class="chip chip-tg">${esc(a.TG_Username||'no @')}</span>`).join('')}</div>`
+        ? `<div class="chip-list">${accounts.map(a => `<span class="chip chip-tg">${esc(a.TG_Username||'?')}</span>`).join('')}</div>`
         : (c['Archive_Tlg_Contacts'] ? `<span class="chip chip-tg">${esc(c['Archive_Tlg_Contacts'])}</span>` : '—');
 
-      const channels = getJoinedChannels(cid);
+      const channels = getJoinedChannels(c);
       const chH = channels.length
         ? `<div class="joined-list">${channels.map(ch => `<span class="joined-badge">${esc(ch)}</span>`).join('')}</div>`
         : '—';
@@ -482,7 +509,7 @@
         <td>${chH}</td>
         <td class="col-actions">
           <button class="btn btn-sm" onclick='editContact(${JSON.stringify(cid)})' title="Modifier">✏️</button>
-          <button class="btn btn-sm btn-danger" onclick='confirmDelete(${JSON.stringify(cid)}, ${JSON.stringify(fullName)})' title="Supprimer">🗑</button>
+          <button class="btn btn-sm btn-danger" onclick='confirmDelete(${JSON.stringify(cid)},${JSON.stringify(fullName)})' title="Supprimer">🗑</button>
         </td>
       </tr>`;
     }).join('');
@@ -498,14 +525,14 @@
     const contactOptions = allContacts.map(c => {
       const nom    = c['Nom (en francais)'] || c.Nom || '';
       const prenom = c['Prénom (en francais)'] || c.Prenom || c.Prénom || '';
-      return `<option value="${esc(c.ID_Contact)}">${esc([prenom, nom].filter(Boolean).join(' '))} (${esc(c.ID_Contact)})</option>`;
+      return `<option value="${esc(c.ID_Contact)}">${esc([prenom,nom].filter(Boolean).join(' '))} (${esc(c.ID_Contact)})</option>`;
     }).join('');
 
     document.getElementById('unlinkedBody').innerHTML = unlinked.map(a => `
       <div class="unlinked-row">
         <div>
           <div class="unlinked-tg">${esc(a.TG_Username||a.TG_User_ID||'?')}</div>
-          <div class="unlinked-meta">${esc(a.Channel)} · ${esc(a.Timestamp ? a.Timestamp.slice(0,10) : '')}</div>
+          <div class="unlinked-meta">${esc(a.Channel)} · ${esc((a.Timestamp||'').slice(0,10))}</div>
         </div>
         <select class="link-select" id="link-${a._rowIndex}">
           <option value="">— lier à un contact —</option>
@@ -542,6 +569,28 @@
   }
 
   // ── Drawer ────────────────────────────────────────────────────────────────
+  function _addEmailRowToList(list, value = '', isPrimary = false) {
+    const isFirst = list.children.length === 0;
+    const div = document.createElement('div');
+    div.className = 'dyn-row';
+    div.innerHTML = `
+      <input type="radio" class="primary-radio" name="primaryEmail" ${isFirst || isPrimary ? 'checked' : ''} title="Primaire">
+      <input type="text" class="email-input" placeholder="email@gmail.com" value="${esc(value)}">
+      <button class="dyn-remove" onclick="this.parentElement.remove()" title="Supprimer">×</button>`;
+    list.appendChild(div);
+  }
+
+  function _addAccountRowToList(list, username = '', userId = '') {
+    const div = document.createElement('div');
+    div.className = 'dyn-row';
+    div.style.flexWrap = 'wrap';
+    div.innerHTML = `
+      <input type="text" class="tg-username-input" placeholder="@username" value="${esc(username)}" style="flex:1;min-width:120px">
+      <input type="text" class="tg-userid-input" placeholder="TG User ID (optionnel)" value="${esc(userId)}" style="flex:1;min-width:120px">
+      <button class="dyn-remove" onclick="this.parentElement.remove()" title="Supprimer">×</button>`;
+    list.appendChild(div);
+  }
+
   function openDrawer(contact) {
     editingId = contact ? contact.ID_Contact : null;
     document.getElementById('drawerTitle').textContent = editingId ? 'Modifier le contact' : 'Ajouter un contact';
@@ -554,35 +603,23 @@
     document.getElementById('fTag').value     = contact ? (contact.Tag || '') : '';
     document.getElementById('fVip').checked   = contact ? contact.VIP === 'TRUE' : false;
 
-    // Existing emails
-    const existingEmails = document.getElementById('existingEmailsList');
-    existingEmails.innerHTML = '';
-    if (contact && contact.emails) {
-      contact.emails.forEach(e => {
-        existingEmails.innerHTML += `
-          <div class="existing-item" id="ei-${e.ID_Email}">
-            <div class="item-label">${esc(e.Email)}</div>
-            ${e.Is_Primary === 'TRUE' ? '<span class="primary-tag">Primaire</span>' : ''}
-            <button class="dyn-remove" onclick="removeExistingEmail('${e.ID_Email}')" title="Supprimer">×</button>
-          </div>`;
-      });
+    // Build unified editable email list
+    const emailList = document.getElementById('allEmailsList');
+    emailList.innerHTML = '';
+    if (contact && contact.emails && contact.emails.length) {
+      contact.emails.forEach(e => _addEmailRowToList(emailList, e.Email, e.Is_Primary === 'TRUE'));
+    } else {
+      _addEmailRowToList(emailList); // default blank row
     }
-    document.getElementById('newEmailsList').innerHTML = '';
 
-    // Existing accounts
-    const existingAccounts = document.getElementById('existingAccountsList');
-    existingAccounts.innerHTML = '';
-    if (contact && contact.accounts) {
-      contact.accounts.forEach(a => {
-        existingAccounts.innerHTML += `
-          <div class="existing-item" id="ai-${a.ID_Telegram}">
-            <div class="item-label">${esc(a.TG_Username || '—')}</div>
-            ${a.TG_User_ID ? `<span class="primary-tag">#${esc(a.TG_User_ID)}</span>` : ''}
-            <button class="dyn-remove" onclick="removeExistingAccount('${a.ID_Telegram}')" title="Supprimer">×</button>
-          </div>`;
-      });
+    // Build unified editable account list
+    const accountList = document.getElementById('allAccountsList');
+    accountList.innerHTML = '';
+    if (contact && contact.accounts && contact.accounts.length) {
+      contact.accounts.forEach(a => _addAccountRowToList(accountList, a.TG_Username, a.TG_User_ID));
+    } else {
+      _addAccountRowToList(accountList); // default blank row
     }
-    document.getElementById('newAccountsList').innerHTML = '';
 
     document.getElementById('drawer').classList.add('open');
     document.getElementById('drawerOverlay').classList.add('open');
@@ -596,55 +633,50 @@
   }
 
   function addEmailRow() {
-    const list = document.getElementById('newEmailsList');
-    const idx  = list.children.length;
-    const div  = document.createElement('div');
-    div.className = 'dyn-row';
-    div.innerHTML = `
-      <input type="radio" class="primary-radio" name="primaryEmail" value="${idx}" ${idx === 0 ? 'checked' : ''} title="Marquer comme primaire">
-      <input type="email" class="email-input" placeholder="email@gmail.com" required>
-      <button class="dyn-remove" onclick="this.parentElement.remove()" title="Supprimer">×</button>`;
-    list.appendChild(div);
+    _addEmailRowToList(document.getElementById('allEmailsList'));
   }
 
   function addAccountRow() {
-    const list = document.getElementById('newAccountsList');
-    const div  = document.createElement('div');
-    div.className = 'dyn-row';
-    div.style.flexWrap = 'wrap';
-    div.innerHTML = `
-      <input type="text" class="tg-username-input" placeholder="@username" style="flex:1;min-width:120px">
-      <input type="text" class="tg-userid-input" placeholder="TG User ID (optionnel)" style="flex:1;min-width:120px">
-      <button class="dyn-remove" onclick="this.parentElement.remove()" title="Supprimer">×</button>`;
-    list.appendChild(div);
+    _addAccountRowToList(document.getElementById('allAccountsList'));
   }
 
-  async function removeExistingEmail(emailId) {
-    if (!confirm('Supprimer cet email ?')) return;
-    try {
-      await fetch(`/api/contacts/emails/${encodeURIComponent(emailId)}`, { method: 'DELETE' });
-      document.getElementById(`ei-${emailId}`).remove();
-      notify('Email supprimé', 'success');
-    } catch (e) { notify(e.message, 'error'); }
+  function _collectEmails() {
+    const rows = document.querySelectorAll('#allEmailsList .dyn-row');
+    return [...rows].map((row, i) => ({
+      email: row.querySelector('.email-input').value.trim(),
+      isPrimary: row.querySelector('.primary-radio') ? row.querySelector('.primary-radio').checked : i === 0,
+    })).filter(e => e.email);
   }
 
-  async function removeExistingAccount(accountId) {
-    if (!confirm('Supprimer ce compte Telegram ?')) return;
-    try {
-      await fetch(`/api/contacts/accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' });
-      document.getElementById(`ai-${accountId}`).remove();
-      notify('Compte supprimé', 'success');
-    } catch (e) { notify(e.message, 'error'); }
+  function _collectAccounts() {
+    const rows = document.querySelectorAll('#allAccountsList .dyn-row');
+    return [...rows].map(row => ({
+      tgUsername: row.querySelector('.tg-username-input').value.trim(),
+      tgUserId:   row.querySelector('.tg-userid-input').value.trim(),
+    })).filter(a => a.tgUsername || a.tgUserId);
   }
 
   async function saveContact() {
-    const prenom  = document.getElementById('fPrenom').value.trim();
-    const nom     = document.getElementById('fNom').value.trim();
+    const prenom = document.getElementById('fPrenom').value.trim();
+    const nom    = document.getElementById('fNom').value.trim();
     if (!prenom && !nom) { notify('Prénom ou Nom requis', 'error'); return; }
 
+    // Validate emails
+    const emails = _collectEmails();
+    for (const e of emails) {
+      if (!isValidEmail(e.email)) { notify(`Email invalide : ${e.email}`, 'error'); return; }
+    }
+
+    // Validate Telegram handles
+    const accounts = _collectAccounts();
+    for (const a of accounts) {
+      if (a.tgUsername && !isValidTgHandle(a.tgUsername)) {
+        notify(`Handle Telegram invalide : ${a.tgUsername} (doit commencer par @)`, 'error'); return;
+      }
+    }
+
     const body = {
-      nom,
-      prenom,
+      nom, prenom,
       tlgName : document.getElementById('fTlgName').value.trim(),
       promo   : document.getElementById('fPromo').value,
       wilaya  : document.getElementById('fWilaya').value.trim(),
@@ -653,45 +685,34 @@
       tag     : document.getElementById('fTag').value.trim(),
     };
 
-    // Collect new emails
-    const primaryRadio  = document.querySelector('input[name="primaryEmail"]:checked');
-    const primaryIdx    = primaryRadio ? parseInt(primaryRadio.value) : 0;
-    const emailInputs   = document.querySelectorAll('#newEmailsList .email-input');
-    body.emails = [...emailInputs].map((inp, i) => ({
-      email: inp.value.trim(), isPrimary: i === primaryIdx,
-    })).filter(e => e.email);
-
-    // Collect new accounts
-    const usernameInputs = document.querySelectorAll('#newAccountsList .tg-username-input');
-    const useridInputs   = document.querySelectorAll('#newAccountsList .tg-userid-input');
-    body.accounts = [...usernameInputs].map((inp, i) => ({
-      tgUsername: inp.value.trim(), tgUserId: useridInputs[i] ? useridInputs[i].value.trim() : '',
-    })).filter(a => a.tgUsername || a.tgUserId);
-
     const saveBtn = document.getElementById('saveBtn');
     saveBtn.disabled = true; saveBtn.textContent = 'Enregistrement…';
 
     try {
       if (editingId) {
-        // Save core fields
+        // 1. Update core fields
         const r = await fetch(`/api/contacts/${encodeURIComponent(editingId)}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
         });
         if (!r.ok) throw new Error((await r.json()).error);
-        // Add new emails
-        for (const e of body.emails) {
+        // 2. Replace all emails: delete-all then re-add
+        await fetch(`/api/contacts/${encodeURIComponent(editingId)}/all-emails`, { method: 'DELETE' });
+        for (const e of emails) {
           await fetch(`/api/contacts/${encodeURIComponent(editingId)}/emails`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(e),
           });
         }
-        // Add new accounts
-        for (const a of body.accounts) {
+        // 3. Replace all accounts: delete-all then re-add
+        await fetch(`/api/contacts/${encodeURIComponent(editingId)}/all-accounts`, { method: 'DELETE' });
+        for (const a of accounts) {
           await fetch(`/api/contacts/${encodeURIComponent(editingId)}/accounts`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(a),
           });
         }
         notify('Contact mis à jour', 'success');
       } else {
+        body.emails   = emails;
+        body.accounts = accounts;
         const r = await fetch('/api/contacts', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
         });
@@ -721,12 +742,10 @@
     document.getElementById('confirmModal').classList.add('open');
     document.getElementById('confirmOkBtn').onclick = doDelete;
   }
-
   function closeConfirm() {
     document.getElementById('confirmModal').classList.remove('open');
     deleteTarget = null;
   }
-
   async function doDelete() {
     if (!deleteTarget) return;
     closeConfirm();

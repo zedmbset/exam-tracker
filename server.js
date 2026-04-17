@@ -322,12 +322,18 @@ app.get('/api/config', (req, res) => {
 // ─── CONTACTS MINI-APP ───────────────────────────────────────────────────────
 
 const CONTACTS_SHEET_ID = process.env.CONTACTS_SHEET_ID || '1tsP9abcf5NsIqNV-K_qts_RncpDdSPn3ElAPeY6YkdU';
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TELEGRAM_BOT_TOKEN    = process.env.TELEGRAM_BOT_TOKEN    || '';
+const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || '';
 
 const CTAB  = 'ZED_Contacts';
 const ETAB  = 'ZED_Emails';
 const ATAB  = 'ZED_Accounts';
 const XATAB = 'ZED_Activities';
+
+const CTAB_HEADERS  = ['ID_Contact','Timestamp','Email Address','Nom (en francais)','Prénom (en francais)','TLG_Name','Username','Official phone number','Archive_Tlg_Contacts','Wilaya','Commune','Archive_adresse','Promo','VIP','Tag'];
+const ETAB_HEADERS  = ['ID_Email','ID_Contact','Email','Is_Primary'];
+const ATAB_HEADERS  = ['ID_Telegram','ID_Contact','TG_User_ID','TG_Username'];
+const XATAB_HEADERS = ['ID_Activity','ID_Contact','ID_Telegram','TG_User_ID','TG_Username','Action','Channel','Timestamp'];
 
 async function csRead(tab) {
   try {
@@ -386,7 +392,11 @@ async function csEnsureTab(tabName, headers) {
         body: JSON.stringify({ requests: [{ addSheet: { properties: { title: tabName } } }] }),
       }
     );
-    if (headers) await csAppend(tabName, headers);
+  }
+  // Always ensure headers exist (handles both new and previously-empty tabs)
+  if (headers) {
+    const rows = await csRead(tabName);
+    if (!rows.length) await csAppend(tabName, headers);
   }
 }
 
@@ -438,6 +448,12 @@ app.get('/api/contacts/activities', async (req, res) => {
 // POST /api/contacts
 app.post('/api/contacts', async (req, res) => {
   try {
+    // Ensure all tabs exist with headers before first write
+    await Promise.all([
+      csEnsureTab(CTAB, CTAB_HEADERS),
+      csEnsureTab(ETAB, ETAB_HEADERS),
+      csEnsureTab(ATAB, ATAB_HEADERS),
+    ]);
     const [contactRows, emailRows, accountRows] = await Promise.all([
       csRead(CTAB), csRead(ETAB), csRead(ATAB),
     ]);
@@ -539,6 +555,30 @@ app.delete('/api/contacts/accounts/:accountId', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// DELETE /api/contacts/:id/all-emails  (used by edit-mode save to replace all emails)
+app.delete('/api/contacts/:id/all-emails', async (req, res) => {
+  try {
+    const eRows = await csRead(ETAB);
+    const id = req.params.id;
+    for (let i = 1; i < eRows.length; i++) {
+      if ((eRows[i][1]||'') === id) await csUpdate(ETAB, i + 1, ['', '', '', '']);
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/contacts/:id/all-accounts  (used by edit-mode save to replace all accounts)
+app.delete('/api/contacts/:id/all-accounts', async (req, res) => {
+  try {
+    const aRows = await csRead(ATAB);
+    const id = req.params.id;
+    for (let i = 1; i < aRows.length; i++) {
+      if ((aRows[i][1]||'') === id) await csUpdate(ATAB, i + 1, ['', '', '', '']);
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // DELETE /api/contacts/:id
 app.delete('/api/contacts/:id', async (req, res) => {
   try {
@@ -559,7 +599,14 @@ app.delete('/api/contacts/:id', async (req, res) => {
 
 // POST /api/telegram/webhook
 app.post('/api/telegram/webhook', async (req, res) => {
-  res.json({ ok: true }); // respond immediately
+  // Validate secret token header (if TELEGRAM_WEBHOOK_SECRET is configured)
+  if (TELEGRAM_WEBHOOK_SECRET) {
+    const provided = req.headers['x-telegram-bot-api-secret-token'] || '';
+    if (provided !== TELEGRAM_WEBHOOK_SECRET) {
+      return res.status(403).json({ ok: false, error: 'Invalid webhook secret' });
+    }
+  }
+  res.json({ ok: true }); // always respond 200 immediately
   try {
     const update = req.body;
     const member = update.chat_member || update.my_chat_member;
@@ -572,8 +619,12 @@ app.post('/api/telegram/webhook', async (req, res) => {
     const tgUserId = String(tgUser.id);
     const tgUsername = tgUser.username ? `@${tgUser.username}` : (tgUser.first_name || '');
     const aRows = await csRead(ATAB);
-    const matchRow = aRows.slice(1).find(r => String(r[2]) === tgUserId);
-    await csEnsureTab(XATAB, ['ID_Activity','ID_Contact','ID_Telegram','TG_User_ID','TG_Username','Action','Channel','Timestamp']);
+    // Match by TG_User_ID first, then fall back to username match
+    const matchRow = aRows.slice(1).find(r =>
+      (r[2] && String(r[2]) === tgUserId) ||
+      (tgUser.username && r[3] && r[3].replace('@','').toLowerCase() === tgUser.username.toLowerCase())
+    );
+    await csEnsureTab(XATAB, XATAB_HEADERS);
     const actRows = await csRead(XATAB);
     const actId = nextId('A-', actRows.slice(1).map(r => r[0]));
     await csAppend(XATAB, [
@@ -585,6 +636,11 @@ app.post('/api/telegram/webhook', async (req, res) => {
       new Date().toISOString(),
     ]);
   } catch (e) { console.error('TG webhook error:', e.message); }
+});
+
+// GET /api/contacts/config — expose bot configuration state
+app.get('/api/contacts/config', (req, res) => {
+  res.json({ telegramConfigured: !!TELEGRAM_BOT_TOKEN });
 });
 
 // ─── END CONTACTS MINI-APP ────────────────────────────────────────────────────
