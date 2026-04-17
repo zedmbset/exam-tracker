@@ -16,6 +16,16 @@ A Node.js/Express web application for tracking the digitization progress of exam
 - `docs/` - Project documentation and data schemas
 - `docs/plans/` - Task plans created by AI models (Replit, Codex, ChatGPT, Claude, etc.)
 
+## Rules for AI models — GitHub pushes
+Push to GitHub **at the end of each completed task** (not after every individual file edit). A task is complete when all related changes are done and working. Use a clear commit message that summarises what changed.
+
+Push command to use (the token header form is the one that works reliably):
+```bash
+git push https://x-access-token:${GITHUB_TOKEN}@github.com/zedmbset/exam-tracker.git main
+```
+
+Do NOT push after every file save — that floods Railway with unnecessary redeploys and clutters the Git history.
+
 ## Rules for AI models — Plan storage
 **Whenever any AI model (Replit Agent, Codex, ChatGPT, Claude, or any other) creates a task plan or feature plan, it MUST be saved as a markdown file inside `docs/plans/`.**
 

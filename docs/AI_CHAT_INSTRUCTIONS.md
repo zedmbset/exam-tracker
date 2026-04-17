@@ -25,10 +25,11 @@ This file stores persistent working preferences for AI assistants working on thi
 The correct column indices (0-based) are defined in `docs/SCHEMA.md`. The authoritative mapping is in `public/exam.html` COLS object. Always use that as the source of truth, not older duplicated references.
 
 ### Git / GitHub
-- Push to GitHub using the `GITHUB_TOKEN` secret and the script pattern:
+- Push to GitHub using the `GITHUB_TOKEN` secret with this exact pattern (the only one that works reliably):
   ```bash
-  git -c url.https://$GITHUB_TOKEN@github.com/.insteadOf=https://github.com/ push origin main
+  git push https://x-access-token:${GITHUB_TOKEN}@github.com/zedmbset/exam-tracker.git main
   ```
+- **When to push**: at the end of each completed task — when all related changes are done and working. Do NOT push after every individual file edit. Pushing too often triggers unnecessary Railway redeploys and clutters the Git history.
 - Always do a fetch before pushing to avoid force-push situations
 - The remote is: `https://github.com/zedmbset/exam-tracker`
 
