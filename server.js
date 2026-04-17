@@ -694,7 +694,7 @@ app.put('/api/sheet/:rowIndex', async (req, res) => {
     await updateSheetValues(token, SHEET_ID, `${SHEET_TAB}!A${rowIndex}`, [cells]);
     res.json({ ok: true });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    sendSafeError(res, 500, error);
   }
 });
 
@@ -705,7 +705,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const uploaded = await uploadBufferToDrive(req.file.buffer, req.body.filename || req.file.originalname, token);
     res.json({ url: uploaded.url });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    sendSafeError(res, 500, error);
   }
 });
 
@@ -734,7 +734,7 @@ app.post('/api/report-pdf', async (req, res) => {
     const uploaded = await uploadBufferToDrive(pdfBuffer, filename, token);
     res.json({ type, filename, url: uploaded.url });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    sendSafeError(res, 500, error);
   }
 });
 
@@ -764,7 +764,7 @@ app.get('/api/drive-meta', async (req, res) => {
     const token = await getOwnerDriveAccessToken();
     res.json(await getDriveFileMeta(fileId, token));
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    sendSafeError(res, 500, error);
   }
 });
 
@@ -813,7 +813,7 @@ app.get('/api/contacts', async (req, res) => {
       })),
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    sendSafeError(res, 500, error);
   }
 });
 
