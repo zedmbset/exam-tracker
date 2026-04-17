@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import signal
 import threading
 from datetime import datetime, timezone
@@ -33,6 +34,15 @@ CLIENT_LOCK = threading.Lock()
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
+
+
+def redact_sensitive_text(value):
+    text = str(value or "")
+    text = re.sub(r"Bearer\s+[A-Za-z0-9._\-~+/=]+", "Bearer [REDACTED]", text)
+    text = re.sub(r"([?&](?:token|access_token|refresh_token|key|secret|password)=)[^&\s]+", r"\1[REDACTED]", text)
+    text = re.sub(r"\b[a-f0-9]{32,}\b", "[REDACTED]", text)
+    text = re.sub(r"\b[A-Za-z0-9+/_-]{40,}={0,2}\b", "[REDACTED]", text)
+    return text[:500]
 
 
 def get_store():
@@ -68,8 +78,8 @@ def persist_job(job):
             "Total": str(job["total"]),
             "Started": job["started"],
             "Finished": job["finished"],
-            "Error": job["error"],
-            "Summary_JSON": job["summary"],
+            "Error": redact_sensitive_text(job["error"]),
+            "Summary_JSON": redact_sensitive_text(job["summary"]),
             "Worker_Job_ID": job["jobId"],
         }
     )
@@ -154,7 +164,8 @@ def run_async_job(job_id, coroutine_factory):
         try:
             run_async(coroutine_factory())
         except Exception as error:
-            set_job(job_id, status="error", error=str(error), finished=now_iso(), summary=str(error))
+            message = redact_sensitive_text(error)
+            set_job(job_id, status="error", error=message, finished=now_iso(), summary=message)
 
     thread = threading.Thread(target=runner, daemon=True)
     thread.start()
@@ -254,7 +265,10 @@ def get_job(job_id):
     with LOCK:
         job = JOBS.get(job_id)
     if job:
-        return jsonify(job)
+        snapshot = dict(job)
+        snapshot["error"] = redact_sensitive_text(snapshot.get("error"))
+        snapshot["summary"] = redact_sensitive_text(snapshot.get("summary"))
+        return jsonify(snapshot)
 
     store = get_store()
     rows, _ = store.get_rows("ZED_Jobs")
@@ -270,8 +284,8 @@ def get_job(job_id):
                     "total": int(str(row.get("Total", "0") or "0")),
                     "started": row.get("Started", ""),
                     "finished": row.get("Finished", ""),
-                    "error": row.get("Error", ""),
-                    "summary": row.get("Summary_JSON", ""),
+                    "error": redact_sensitive_text(row.get("Error", "")),
+                    "summary": redact_sensitive_text(row.get("Summary_JSON", "")),
                 }
             )
     return jsonify({"error": "Job not found."}), 404

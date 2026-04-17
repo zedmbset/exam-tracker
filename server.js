@@ -30,6 +30,7 @@ app.get('/exam', (req, res) => {
 
 app.get(['/contacts', '/contacts/'], (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  ensureContactsSessionCookie(req, res);
   res.sendFile(`${__dirname}/public/contacts/index.html`);
 });
 
@@ -47,6 +48,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || '';
 const APP_URL = (process.env.APP_URL || '').trim().replace(/\/+$/, '');
 const WORKER_AUTH_TOKEN = process.env.WORKER_AUTH_TOKEN || '';
+const CONTACTS_SESSION_SECRET = process.env.CONTACTS_SESSION_SECRET || SERVICE_ACCOUNT.private_key_id || '';
 const RAW_TELEGRAM_WORKER_URL = (process.env.TELEGRAM_WORKER_URL || '').trim();
 const TELEGRAM_WORKER_URL = RAW_TELEGRAM_WORKER_URL.replace(/\/+$/, '');
 const WORKER_URL_VALID = !TELEGRAM_WORKER_URL || /^https?:\/\//i.test(TELEGRAM_WORKER_URL);
@@ -56,6 +58,11 @@ const WORKER_PROXY_ERROR = WORKER_URL_VALID
 
 if (!WORKER_URL_VALID) {
   console.error(WORKER_PROXY_ERROR);
+}
+if (TELEGRAM_WEBHOOK_SECRET) {
+  console.log('Telegram webhook secret is configured.');
+} else {
+  console.error('TELEGRAM_WEBHOOK_SECRET is missing. Telegram webhook requests will fail closed and webhook registration is disabled.');
 }
 
 const CONTACTS_HEADERS = {
@@ -85,6 +92,67 @@ function base64url(buf) {
 
 function makeId(prefix) {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function redactSensitiveText(input) {
+  return String(input || '')
+    .replace(/Bearer\s+[A-Za-z0-9._\-~+/=]+/gi, 'Bearer [REDACTED]')
+    .replace(/([?&](?:token|access_token|refresh_token|key|secret|password)=)[^&\s]+/gi, '$1[REDACTED]')
+    .replace(/\b[a-f0-9]{32,}\b/gi, '[REDACTED]')
+    .replace(/\b[A-Za-z0-9+/_-]{40,}={0,2}\b/g, '[REDACTED]')
+    .slice(0, 500);
+}
+
+function safeErrorMessage(error) {
+  return redactSensitiveText(error?.message || error || 'Unexpected error.');
+}
+
+function parseCookies(req) {
+  const header = req.headers.cookie || '';
+  return header.split(';').reduce((acc, part) => {
+    const [key, ...rest] = part.trim().split('=');
+    if (!key) return acc;
+    acc[key] = decodeURIComponent(rest.join('=') || '');
+    return acc;
+  }, {});
+}
+
+function signSessionPayload(payload) {
+  return crypto.createHmac('sha256', CONTACTS_SESSION_SECRET).update(payload).digest('hex');
+}
+
+function createContactsSessionToken() {
+  const expiresAt = Date.now() + 12 * 60 * 60 * 1000;
+  const nonce = crypto.randomBytes(12).toString('hex');
+  const payload = `${expiresAt}.${nonce}`;
+  return `${payload}.${signSessionPayload(payload)}`;
+}
+
+function verifyContactsSessionToken(token) {
+  if (!CONTACTS_SESSION_SECRET) return false;
+  const [expiresAtRaw, nonce, signature] = String(token || '').split('.');
+  if (!expiresAtRaw || !nonce || !signature) return false;
+  const payload = `${expiresAtRaw}.${nonce}`;
+  const expected = signSessionPayload(payload);
+  const left = Buffer.from(signature);
+  const right = Buffer.from(expected);
+  if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return false;
+  return Number(expiresAtRaw) > Date.now();
+}
+
+function ensureContactsSessionCookie(req, res) {
+  const cookies = parseCookies(req);
+  if (verifyContactsSessionToken(cookies.ct_session)) return;
+  const token = createContactsSessionToken();
+  res.append('Set-Cookie', `ct_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200`);
+}
+
+function requireContactsSession(req, res, next) {
+  const cookies = parseCookies(req);
+  if (!verifyContactsSessionToken(cookies.ct_session)) {
+    return res.status(401).json({ error: 'Contacts session is missing or expired. Reload the contacts page and try again.' });
+  }
+  return next();
 }
 
 function colToLetter(index) {
@@ -344,6 +412,26 @@ function makeContactVersion(contact) {
   return compactString(contact.Updated_At);
 }
 
+function extractAppendedRowIndex(result) {
+  const range = result?.updates?.updatedRange || '';
+  const match = range.match(/![A-Z]+(\d+):/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+async function rollbackSheetChanges(token, changes) {
+  for (const change of changes.slice().reverse()) {
+    try {
+      if (change.kind === 'restore') {
+        await updateSheetObject(token, CONTACTS_SHEET_ID, change.tabName, change.headers, change.rowIndex, change.row);
+      } else if (change.kind === 'clear') {
+        await clearSheetRow(token, CONTACTS_SHEET_ID, change.tabName, change.headers, change.rowIndex);
+      }
+    } catch (rollbackError) {
+      console.error(`Rollback failed for ${change.tabName} row ${change.rowIndex}: ${safeErrorMessage(rollbackError)}`);
+    }
+  }
+}
+
 async function loadContactsState(token) {
   await ensureContactsInfra(token);
   const contacts = await loadSheetObjects(token, CONTACTS_SHEET_ID, 'ZED_Contacts', CONTACTS_HEADERS.ZED_Contacts);
@@ -448,6 +536,10 @@ function assertContactVersion(contact, expectedVersion) {
     error.statusCode = 409;
     throw error;
   }
+}
+
+function sendSafeError(res, statusCode, error, fallbackMessage = 'Unexpected error.') {
+  return res.status(statusCode).json({ error: safeErrorMessage(error) || fallbackMessage });
 }
 
 function matchJoinToContactId(join, accounts) {
@@ -577,12 +669,20 @@ async function proxyWorker(path, method = 'GET', body = null) {
   return data;
 }
 
+app.use('/api/contacts', requireContactsSession);
+app.use('/api/telegram/joins', requireContactsSession);
+app.use('/api/telegram/bot-info', requireContactsSession);
+app.use('/api/telegram/webhook-info', requireContactsSession);
+app.use('/api/telegram/register-webhook', requireContactsSession);
+app.use('/api/telegram/channels', requireContactsSession);
+app.use('/api/telegram/jobs', requireContactsSession);
+
 app.get('/api/sheet', async (req, res) => {
   try {
     const token = await getAccessToken();
     res.json(await googleJson(buildSheetsUrl(SHEET_ID, SHEET_TAB), { headers: { Authorization: `Bearer ${token}` } }));
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    sendSafeError(res, 500, error);
   }
 });
 
@@ -752,7 +852,7 @@ app.post('/api/contacts', async (req, res) => {
     }
     res.json({ ok: true, id: contactId });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    sendSafeError(res, 400, error);
   }
 });
 
@@ -767,6 +867,8 @@ app.put('/api/contacts/:rowIndex', async (req, res) => {
     assertContactVersion(contact, req.body?.version);
 
     const timestamp = nowIso();
+    const originalContact = { ...contact };
+    const rollbackChanges = [];
     contact.Full_Name = payload.fullName;
     contact.Notes = payload.notes;
     contact.Tags = payload.tags;
@@ -795,36 +897,56 @@ app.put('/api/contacts/:rowIndex', async (req, res) => {
       };
     });
 
+    const allAccounts = refreshedAccounts.concat(state.accounts.filter((account) => account.ID_Contact !== contact.ID_Contact));
+    const joinsToUpdate = [];
     for (const join of state.joins) {
-      if (join.Matched_ID_Contact === contact.ID_Contact || !join.Matched_ID_Contact) {
-        join.Matched_ID_Contact = matchJoinToContactId(join, refreshedAccounts.concat(state.accounts.filter((account) => account.ID_Contact !== contact.ID_Contact)));
+      const nextMatch = (join.Matched_ID_Contact === contact.ID_Contact || !join.Matched_ID_Contact)
+        ? matchJoinToContactId(join, allAccounts)
+        : join.Matched_ID_Contact;
+      if (join.Matched_ID_Contact !== nextMatch) {
+        joinsToUpdate.push({ original: { ...join }, updated: { ...join, Matched_ID_Contact: nextMatch } });
+        join.Matched_ID_Contact = nextMatch;
       }
     }
 
-    await updateSheetObject(token, CONTACTS_SHEET_ID, 'ZED_Contacts', CONTACTS_HEADERS.ZED_Contacts, contact._rowIndex, contact);
+    try {
+      rollbackChanges.push({ kind: 'restore', tabName: 'ZED_Contacts', headers: CONTACTS_HEADERS.ZED_Contacts, rowIndex: contact._rowIndex, row: originalContact });
+      await updateSheetObject(token, CONTACTS_SHEET_ID, 'ZED_Contacts', CONTACTS_HEADERS.ZED_Contacts, contact._rowIndex, contact);
 
-    for (const account of refreshedAccounts) {
-      if (account._rowIndex) {
-        await updateSheetObject(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, account._rowIndex, account);
-      } else {
-        await appendSheetObject(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, account);
+      for (const account of refreshedAccounts) {
+        if (account._rowIndex) {
+          const original = existingById.get(account.ID_Account);
+          rollbackChanges.push({ kind: 'restore', tabName: 'ZED_Accounts', headers: CONTACTS_HEADERS.ZED_Accounts, rowIndex: account._rowIndex, row: { ...original } });
+          await updateSheetObject(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, account._rowIndex, account);
+        } else {
+          const appendResult = await appendSheetObject(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, account);
+          const appendedRowIndex = extractAppendedRowIndex(appendResult);
+          if (appendedRowIndex) {
+            rollbackChanges.push({ kind: 'clear', tabName: 'ZED_Accounts', headers: CONTACTS_HEADERS.ZED_Accounts, rowIndex: appendedRowIndex });
+          }
+        }
       }
-    }
 
-    for (const existing of existingAccounts) {
-      if (!seenAccountIds.has(existing.ID_Account)) {
-        await clearSheetRow(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, existing._rowIndex);
+      for (const existing of existingAccounts) {
+        if (!seenAccountIds.has(existing.ID_Account)) {
+          rollbackChanges.push({ kind: 'restore', tabName: 'ZED_Accounts', headers: CONTACTS_HEADERS.ZED_Accounts, rowIndex: existing._rowIndex, row: { ...existing } });
+          await clearSheetRow(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, existing._rowIndex);
+        }
       }
-    }
 
-    for (const join of state.joins) {
-      if (join.Matched_ID_Contact === contact.ID_Contact || !join.Matched_ID_Contact) {
-        await updateSheetObject(token, CONTACTS_SHEET_ID, 'Telegram_Joins', CONTACTS_HEADERS.Telegram_Joins, join._rowIndex, join);
+      for (const joinChange of joinsToUpdate) {
+        rollbackChanges.push({ kind: 'restore', tabName: 'Telegram_Joins', headers: CONTACTS_HEADERS.Telegram_Joins, rowIndex: joinChange.original._rowIndex, row: joinChange.original });
+        await updateSheetObject(token, CONTACTS_SHEET_ID, 'Telegram_Joins', CONTACTS_HEADERS.Telegram_Joins, joinChange.updated._rowIndex, joinChange.updated);
       }
+    } catch (writeError) {
+      await rollbackSheetChanges(token, rollbackChanges);
+      const error = new Error(`Contact update could not be fully applied and was rolled back. Please reload and try again. ${safeErrorMessage(writeError)}`);
+      error.statusCode = 409;
+      throw error;
     }
     res.json({ ok: true, id: contact.ID_Contact });
   } catch (error) {
-    res.status(error.statusCode || 400).json({ error: error.message });
+    sendSafeError(res, error.statusCode || 400, error);
   }
 });
 
@@ -836,20 +958,33 @@ app.delete('/api/contacts/:rowIndex', async (req, res) => {
     const contact = state.contacts.find((entry) => entry._rowIndex === rowIndex);
     if (!contact) return res.status(404).json({ error: 'Contact not found.' });
     assertContactVersion(contact, req.body?.version || req.query?.version);
+    const rollbackChanges = [];
+    const originalContact = { ...contact };
+    const contactAccounts = state.accounts.filter((entry) => entry.ID_Contact === contact.ID_Contact);
+    const joinsToUnlink = state.joins.filter((entry) => entry.Matched_ID_Contact === contact.ID_Contact).map((join) => ({ original: { ...join }, updated: { ...join, Matched_ID_Contact: '' } }));
 
-    await clearSheetRow(token, CONTACTS_SHEET_ID, 'ZED_Contacts', CONTACTS_HEADERS.ZED_Contacts, contact._rowIndex);
+    try {
+      rollbackChanges.push({ kind: 'restore', tabName: 'ZED_Contacts', headers: CONTACTS_HEADERS.ZED_Contacts, rowIndex: contact._rowIndex, row: originalContact });
+      await clearSheetRow(token, CONTACTS_SHEET_ID, 'ZED_Contacts', CONTACTS_HEADERS.ZED_Contacts, contact._rowIndex);
 
-    for (const account of state.accounts.filter((entry) => entry.ID_Contact === contact.ID_Contact)) {
-      await clearSheetRow(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, account._rowIndex);
-    }
+      for (const account of contactAccounts) {
+        rollbackChanges.push({ kind: 'restore', tabName: 'ZED_Accounts', headers: CONTACTS_HEADERS.ZED_Accounts, rowIndex: account._rowIndex, row: { ...account } });
+        await clearSheetRow(token, CONTACTS_SHEET_ID, 'ZED_Accounts', CONTACTS_HEADERS.ZED_Accounts, account._rowIndex);
+      }
 
-    for (const join of state.joins.filter((entry) => entry.Matched_ID_Contact === contact.ID_Contact)) {
-      join.Matched_ID_Contact = '';
-      await updateSheetObject(token, CONTACTS_SHEET_ID, 'Telegram_Joins', CONTACTS_HEADERS.Telegram_Joins, join._rowIndex, join);
+      for (const joinChange of joinsToUnlink) {
+        rollbackChanges.push({ kind: 'restore', tabName: 'Telegram_Joins', headers: CONTACTS_HEADERS.Telegram_Joins, rowIndex: joinChange.original._rowIndex, row: joinChange.original });
+        await updateSheetObject(token, CONTACTS_SHEET_ID, 'Telegram_Joins', CONTACTS_HEADERS.Telegram_Joins, joinChange.updated._rowIndex, joinChange.updated);
+      }
+    } catch (writeError) {
+      await rollbackSheetChanges(token, rollbackChanges);
+      const error = new Error(`Contact delete could not be fully applied and was rolled back. Please reload and try again. ${safeErrorMessage(writeError)}`);
+      error.statusCode = 409;
+      throw error;
     }
     res.json({ ok: true });
   } catch (error) {
-    res.status(error.statusCode || 400).json({ error: error.message });
+    sendSafeError(res, error.statusCode || 400, error);
   }
 });
 
@@ -867,17 +1002,18 @@ app.post('/api/telegram/joins/:joinId/link', async (req, res) => {
     await updateSheetObject(token, CONTACTS_SHEET_ID, 'Telegram_Joins', CONTACTS_HEADERS.Telegram_Joins, join._rowIndex, join);
     res.json({ ok: true });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    sendSafeError(res, 400, error);
   }
 });
 
 app.post('/api/telegram/webhook', async (req, res) => {
   try {
-    if (TELEGRAM_WEBHOOK_SECRET) {
-      const providedSecret = compactString(req.get('x-telegram-bot-api-secret-token'));
-      if (providedSecret !== TELEGRAM_WEBHOOK_SECRET) {
-        return res.status(401).json({ error: 'Invalid Telegram webhook secret.' });
-      }
+    if (!TELEGRAM_WEBHOOK_SECRET) {
+      return res.status(503).json({ error: 'TELEGRAM_WEBHOOK_SECRET is not configured. Webhook ingestion is disabled.' });
+    }
+    const providedSecret = compactString(req.get('x-telegram-bot-api-secret-token'));
+    if (providedSecret !== TELEGRAM_WEBHOOK_SECRET) {
+      return res.status(401).json({ error: 'Invalid Telegram webhook secret.' });
     }
     if (!CONTACTS_SHEET_ID) return res.json({ ok: true, skipped: 'CONTACTS_SHEET_ID not configured' });
     const token = await getAccessToken();
@@ -913,7 +1049,7 @@ app.post('/api/telegram/webhook', async (req, res) => {
     }
     res.json({ ok: true, created });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    sendSafeError(res, 500, error);
   }
 });
 
@@ -932,7 +1068,7 @@ app.get('/api/telegram/bot-info', async (req, res) => {
       supportsInlineQueries: Boolean(bot.supports_inline_queries),
     });
   } catch (error) {
-    res.status(502).json({ error: error.message });
+    sendSafeError(res, 502, error);
   }
 });
 
@@ -951,13 +1087,16 @@ app.get('/api/telegram/webhook-info', async (req, res) => {
       allowedUpdates: webhook.allowed_updates || [],
     });
   } catch (error) {
-    res.status(502).json({ error: error.message });
+    sendSafeError(res, 502, error);
   }
 });
 
 app.post('/api/telegram/register-webhook', async (req, res) => {
   try {
     if (!TELEGRAM_BOT_TOKEN) return res.json({ configured: false });
+    if (!TELEGRAM_WEBHOOK_SECRET) {
+      return res.status(503).json({ error: 'TELEGRAM_WEBHOOK_SECRET is required before registering the webhook.' });
+    }
     const baseUrl = getAppBaseUrl(req);
     if (!/^https?:\/\//i.test(baseUrl)) {
       return res.status(400).json({ error: 'APP_URL or request host did not produce a valid absolute URL.' });
@@ -965,7 +1104,7 @@ app.post('/api/telegram/register-webhook', async (req, res) => {
     const webhookUrl = `${baseUrl.replace(/\/+$/, '')}/api/telegram/webhook`;
     const result = await telegramApi('setWebhook', {
       url: webhookUrl,
-      secret_token: TELEGRAM_WEBHOOK_SECRET || undefined,
+      secret_token: TELEGRAM_WEBHOOK_SECRET,
       allowed_updates: ['chat_member'],
     });
     res.json({
@@ -975,7 +1114,7 @@ app.post('/api/telegram/register-webhook', async (req, res) => {
       url: webhookUrl,
     });
   } catch (error) {
-    res.status(502).json({ error: error.message });
+    sendSafeError(res, 502, error);
   }
 });
 
@@ -997,12 +1136,15 @@ app.get('/api/telegram/channels', async (req, res) => {
       })),
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    sendSafeError(res, 500, error);
   }
 });
 
 app.post('/api/telegram/jobs', async (req, res) => {
   try {
+    if (!WORKER_URL_VALID) {
+      return res.status(503).json({ error: WORKER_PROXY_ERROR || 'Telegram worker not configured.' });
+    }
     const type = compactString(req.body?.type);
     if (!['list-channels', 'fetch-members'].includes(type)) {
       return res.status(400).json({ error: 'Unsupported job type.' });
@@ -1017,15 +1159,18 @@ app.post('/api/telegram/jobs', async (req, res) => {
       : {};
     res.json(await proxyWorker(path, 'POST', payload));
   } catch (error) {
-    res.status(503).json({ error: error.message });
+    sendSafeError(res, 503, error);
   }
 });
 
 app.get('/api/telegram/jobs/:jobId', async (req, res) => {
   try {
+    if (!WORKER_URL_VALID) {
+      return res.status(503).json({ error: WORKER_PROXY_ERROR || 'Telegram worker not configured.' });
+    }
     res.json(await proxyWorker(`/jobs/${encodeURIComponent(req.params.jobId)}`, 'GET'));
   } catch (error) {
-    res.status(503).json({ error: error.message });
+    sendSafeError(res, 503, error);
   }
 });
 
