@@ -11,6 +11,7 @@ from telethon import TelegramClient
 from telethon.sessions import StringSession
 
 from channel_lister import list_channels
+from fetch_runtime import execute_sheet_actions, fetch_messages_to_sheet
 from member_fetcher import fetch_members
 from sheets_store import SheetsStore, make_id
 
@@ -255,6 +256,84 @@ def start_fetch_members():
             finished=now_iso(),
             summary=summary,
         )
+
+    run_async_job(job_id, work)
+    return jsonify({"ok": True, "jobId": job_id})
+
+
+@app.post("/jobs/fetch-messages")
+def start_fetch_messages():
+    payload = request.get_json(silent=True) or {}
+    spreadsheet_id = str(payload.get("spreadsheetId", "")).strip()
+    sheet_name = str(payload.get("sheetName", "")).strip()
+    channels = payload.get("channels") or []
+    range_mode = str(payload.get("rangeMode", "date")).strip() or "date"
+    date_from = str(payload.get("dateFrom", "")).strip()
+    start_message_id = str(payload.get("startMessageId", "")).strip()
+    end_message_id = str(payload.get("endMessageId", "")).strip()
+    fetch_comments = bool(payload.get("fetchComments"))
+    max_comments_per_post = int(payload.get("maxCommentsPerPost", 50) or 50)
+
+    if not spreadsheet_id or not sheet_name:
+        return jsonify({"error": "spreadsheetId and sheetName are required."}), 400
+    if not channels:
+        return jsonify({"error": "At least one channel is required."}), 400
+
+    label = ", ".join(filter(None, [str(channel.get("name", "")).strip() for channel in channels[:3]]))
+    if len(channels) > 3:
+        label = f"{label} (+{len(channels) - 3} more)"
+    job_id = create_job("fetch-messages", label or sheet_name)
+
+    async def work():
+        client = await init_client()
+        set_job(job_id, status="running", total=len(channels), summary=f"Fetching Telegram messages into {sheet_name}...")
+
+        def progress_cb(done_channels, total_channels, channel_name, message_count, row_count):
+            summary = json.dumps({
+                "current_channel": channel_name,
+                "channels_done": done_channels,
+                "channels_total": total_channels,
+                "messages_fetched": message_count,
+                "rows_buffered": row_count,
+            })
+            set_job(job_id, status="running", progress=done_channels, total=total_channels, summary=summary)
+
+        result = await fetch_messages_to_sheet(
+            client,
+            spreadsheet_id=spreadsheet_id,
+            sheet_name=sheet_name,
+            channels=channels,
+            range_mode=range_mode,
+            date_from=date_from,
+            start_message_id=start_message_id,
+            end_message_id=end_message_id,
+            fetch_comments=fetch_comments,
+            max_comments_per_post=max_comments_per_post,
+            progress_cb=progress_cb,
+        )
+        summary = json.dumps(result)
+        set_job(job_id, status="done", progress=len(channels), total=len(channels), finished=now_iso(), summary=summary)
+
+    run_async_job(job_id, work)
+    return jsonify({"ok": True, "jobId": job_id})
+
+
+@app.post("/jobs/execute-actions")
+def start_execute_actions():
+    payload = request.get_json(silent=True) or {}
+    spreadsheet_id = str(payload.get("spreadsheetId", "")).strip()
+    sheet_name = str(payload.get("sheetName", "")).strip()
+    if not spreadsheet_id or not sheet_name:
+        return jsonify({"error": "spreadsheetId and sheetName are required."}), 400
+
+    job_id = create_job("execute-actions", sheet_name)
+
+    async def work():
+        client = await init_client()
+        set_job(job_id, status="running", summary=f"Executing sheet actions from {sheet_name}...")
+        stats = await execute_sheet_actions(client, spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)
+        summary = json.dumps(stats)
+        set_job(job_id, status="done", progress=int(stats.get("total", 0) or 0), total=int(stats.get("total", 0) or 0), finished=now_iso(), summary=summary)
 
     run_async_job(job_id, work)
     return jsonify({"ok": True, "jobId": job_id})

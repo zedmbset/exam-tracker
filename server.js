@@ -27,6 +27,12 @@ app.get(['/contacts', '/contacts/', '/contacts/index.html'], (req, res) => {
   res.sendFile(`${__dirname}/public/contacts/index.html`);
 });
 
+app.get(['/telegram', '/telegram/', '/telegram/index.html'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  ensureContactsSessionCookie(req, res);
+  res.sendFile(`${__dirname}/public/telegram/index.html`);
+});
+
 app.use(express.static('public', {
   setHeaders(res, path) {
     if (path.endsWith('.html')) {
@@ -34,7 +40,6 @@ app.use(express.static('public', {
     }
   },
 }));
-
 const SHEET_ID = process.env.SHEET_ID || '';
 const SHEET_TAB = process.env.SHEET_TAB || 'Sheet1';
 const HEADER_ROW = parseInt(process.env.HEADER_ROW || '1', 10);
@@ -45,6 +50,11 @@ const OWNER_GOOGLE_CLIENT_ID = process.env.OWNER_GOOGLE_CLIENT_ID || GOOGLE_CLIE
 const OWNER_GOOGLE_CLIENT_SECRET = process.env.OWNER_GOOGLE_CLIENT_SECRET || '';
 const OWNER_GOOGLE_REFRESH_TOKEN = process.env.OWNER_GOOGLE_REFRESH_TOKEN || '';
 const CONTACTS_SHEET_ID = process.env.CONTACTS_SHEET_ID || '';
+const DRAFT_SPREADSHEET_ID = process.env.DRAFT_SPREADSHEET_ID || '';
+const TELEGRAM_SPREADSHEET_ID = process.env.TELEGRAM_SPREADSHEET_ID || SHEET_ID || '';
+const TELEGRAM_FETCH_CHANNELS_SPREADSHEET_ID = process.env.TELEGRAM_FETCH_CHANNELS_SPREADSHEET_ID || TELEGRAM_SPREADSHEET_ID || '';
+const TELEGRAM_FETCH_CHANNELS_SHEET_NAME = process.env.TELEGRAM_FETCH_CHANNELS_SHEET_NAME || 'My_CHNs_Grps';
+const TELEGRAM_FETCH_DEFAULT_SHEET = process.env.TELEGRAM_FETCH_DEFAULT_SHEET || 'All_Msgs';
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || '';
 const APP_URL = (process.env.APP_URL || '').trim().replace(/\/+$/, '');
@@ -73,6 +83,11 @@ const CONTACTS_HEADERS = {
   ZED_Channels: ['ID_Channel', 'Channel_Name', 'Username', 'Type', 'Members_Count', 'Last_Sync'],
   ZED_Jobs: ['ID_Job', 'Type', 'Channel', 'Status', 'Progress', 'Total', 'Started', 'Finished', 'Error', 'Summary_JSON', 'Worker_Job_ID'],
 };
+
+const FETCH_SPREADSHEET_OPTIONS = [
+  { key: 'Draft', label: 'Draft', spreadsheetId: DRAFT_SPREADSHEET_ID || TELEGRAM_SPREADSHEET_ID || '' },
+  { key: 'Telegram', label: 'Telegram', spreadsheetId: TELEGRAM_SPREADSHEET_ID || '' },
+].filter((entry, index, list) => entry.spreadsheetId && list.findIndex((candidate) => candidate.key === entry.key) === index);
 
 let cachedToken = null;
 let tokenExpiry = 0;
@@ -179,6 +194,93 @@ function normalizeAccountValue(type, value) {
   if (type === 'email') return raw.toLowerCase();
   if (type === 'phone') return raw.replace(/[^\d+]/g, '');
   return raw.toLowerCase();
+}
+
+function getFetchSpreadsheetOptions() {
+  return FETCH_SPREADSHEET_OPTIONS.map((option) => ({ ...option }));
+}
+
+function getFetchSpreadsheetByKey(key) {
+  return getFetchSpreadsheetOptions().find((option) => option.key === key) || null;
+}
+
+function buildChannelTags(row) {
+  const tags = new Set();
+  for (const [header, value] of Object.entries(row)) {
+    if (!value || header === '_rowIndex') continue;
+    const normalizedHeader = String(header).trim().toLowerCase();
+    if (/(group|tag|folder|category|section|year|bucket|label)/.test(normalizedHeader)) {
+      String(value).split(/[;,|]/).map((part) => part.trim()).filter(Boolean).forEach((part) => tags.add(part));
+    }
+  }
+  return [...tags];
+}
+
+function normalizeChannelRecord(headers, row) {
+  const payload = {};
+  headers.forEach((header, index) => {
+    payload[header] = compactString(row[index] || '');
+  });
+  const tags = buildChannelTags(payload);
+  return {
+    id: payload['Channel ID'] || payload.Channel_ID || payload.ID_Channel || '',
+    name: payload['Channel Name'] || payload.Channel_Name || payload.Name || '',
+    username: normalizeTelegramUsername(payload.Username || payload['Channel Username'] || payload['Username'] || ''),
+    type: payload.Type || payload['Channel Type'] || '',
+    membersCount: payload['Members Count'] || payload.Members_Count || '',
+    tags,
+    raw: payload,
+  };
+}
+
+async function listSpreadsheetTabs(token, spreadsheetId) {
+  const metadata = await getSpreadsheetMetadata(token, spreadsheetId);
+  return (metadata.sheets || []).map((sheet) => ({
+    title: sheet.properties?.title || '',
+    sheetId: sheet.properties?.sheetId,
+    index: sheet.properties?.index,
+  })).filter((sheet) => sheet.title);
+}
+
+async function loadFetchChannels(token) {
+  if (!TELEGRAM_FETCH_CHANNELS_SPREADSHEET_ID) return [];
+  const values = await getSheetValues(token, TELEGRAM_FETCH_CHANNELS_SPREADSHEET_ID, `${TELEGRAM_FETCH_CHANNELS_SHEET_NAME}!A1:ZZ`).catch(() => ({ values: [] }));
+  const rows = values.values || [];
+  const headers = rows[0] || [];
+  return rows.slice(1).map((row) => normalizeChannelRecord(headers, row)).filter((channel) => channel.id || channel.username || channel.name);
+}
+
+function sanitizeFetchJobPayload(body, spreadsheet) {
+  const sheetName = compactString(body?.sheetName);
+  if (!sheetName) throw new Error('sheetName is required.');
+  const channels = Array.isArray(body?.channels) ? body.channels : [];
+  if (!channels.length) throw new Error('Select at least one channel.');
+  const normalizedChannels = channels.map((channel) => ({
+    id: compactString(channel?.id),
+    name: compactString(channel?.name),
+    username: normalizeTelegramUsername(channel?.username),
+  })).filter((channel) => channel.id || channel.username || channel.name);
+  if (!normalizedChannels.length) throw new Error('Selected channels are invalid.');
+
+  const rangeMode = compactString(body?.rangeMode) === 'message_id' ? 'message_id' : 'date';
+  const dateFrom = compactString(body?.dateFrom);
+  const startMessageId = compactString(body?.startMessageId);
+  const endMessageId = compactString(body?.endMessageId);
+  if (rangeMode === 'message_id' && !startMessageId && !endMessageId) {
+    throw new Error('Provide at least one message ID boundary.');
+  }
+  return {
+    spreadsheetKey: spreadsheet.key,
+    spreadsheetId: spreadsheet.spreadsheetId,
+    sheetName,
+    channels: normalizedChannels,
+    rangeMode,
+    dateFrom,
+    startMessageId,
+    endMessageId,
+    fetchComments: Boolean(body?.fetchComments),
+    maxCommentsPerPost: Math.max(1, parseInt(body?.maxCommentsPerPost || '50', 10) || 50),
+  };
 }
 
 function getAppBaseUrl(req) {
@@ -670,6 +772,34 @@ async function proxyWorker(path, method = 'GET', body = null) {
   return data;
 }
 
+async function getWorkerHealth() {
+  if (!TELEGRAM_WORKER_URL || !WORKER_URL_VALID) {
+    return {
+      ok: false,
+      telethonConfigured: false,
+      telethonConnected: false,
+      contactsSheetConfigured: false,
+      workerAuthConfigured: Boolean(WORKER_AUTH_TOKEN),
+      error: WORKER_PROXY_ERROR || 'Telegram worker not configured.',
+    };
+  }
+  try {
+    const response = await fetch(`${TELEGRAM_WORKER_URL}/health`);
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
+    return { ok: response.ok, ...data };
+  } catch (error) {
+    return {
+      ok: false,
+      telethonConfigured: false,
+      telethonConnected: false,
+      contactsSheetConfigured: false,
+      workerAuthConfigured: Boolean(WORKER_AUTH_TOKEN),
+      error: safeErrorMessage(error),
+    };
+  }
+}
+
 app.use('/api/contacts', requireContactsSession);
 app.use('/api/telegram/joins', requireContactsSession);
 app.use('/api/telegram/bot-info', requireContactsSession);
@@ -677,6 +807,7 @@ app.use('/api/telegram/webhook-info', requireContactsSession);
 app.use('/api/telegram/register-webhook', requireContactsSession);
 app.use('/api/telegram/channels', requireContactsSession);
 app.use('/api/telegram/jobs', requireContactsSession);
+app.use('/api/telegram/fetch', requireContactsSession);
 
 app.get('/api/sheet', async (req, res) => {
   try {
@@ -779,6 +910,56 @@ app.get('/api/config', (req, res) => {
     telegramWorkerConfigured: Boolean(TELEGRAM_WORKER_URL) && WORKER_URL_VALID,
     telegramWorkerError: WORKER_PROXY_ERROR,
   });
+});
+
+app.get('/api/telegram/fetch/config', async (req, res) => {
+  try {
+    const workerHealth = await getWorkerHealth();
+    res.json({
+      workerHealth,
+      channelsSheetName: TELEGRAM_FETCH_CHANNELS_SHEET_NAME,
+      defaultSheetName: TELEGRAM_FETCH_DEFAULT_SHEET,
+      spreadsheets: getFetchSpreadsheetOptions(),
+    });
+  } catch (error) {
+    sendSafeError(res, 500, error);
+  }
+});
+
+app.get('/api/telegram/fetch/spreadsheets', async (req, res) => {
+  try {
+    res.json({ spreadsheets: getFetchSpreadsheetOptions() });
+  } catch (error) {
+    sendSafeError(res, 500, error);
+  }
+});
+
+app.get('/api/telegram/fetch/sheets', async (req, res) => {
+  try {
+    const spreadsheet = getFetchSpreadsheetByKey(compactString(req.query.spreadsheet));
+    if (!spreadsheet) return res.status(400).json({ error: 'Unknown spreadsheet.' });
+    const token = await getAccessToken();
+    const sheets = await listSpreadsheetTabs(token, spreadsheet.spreadsheetId);
+    res.json({ spreadsheet, sheets });
+  } catch (error) {
+    sendSafeError(res, 500, error);
+  }
+});
+
+app.get('/api/telegram/fetch/channels', async (req, res) => {
+  try {
+    const token = await getAccessToken();
+    const channels = await loadFetchChannels(token);
+    const groups = [...new Set(channels.flatMap((channel) => channel.tags))].sort((a, b) => a.localeCompare(b));
+    res.json({
+      spreadsheetId: TELEGRAM_FETCH_CHANNELS_SPREADSHEET_ID,
+      sheetName: TELEGRAM_FETCH_CHANNELS_SHEET_NAME,
+      groups,
+      channels,
+    });
+  } catch (error) {
+    sendSafeError(res, 500, error);
+  }
 });
 
 app.get('/api/contacts', async (req, res) => {
@@ -1138,6 +1319,47 @@ app.get('/api/telegram/channels', async (req, res) => {
     });
   } catch (error) {
     sendSafeError(res, 500, error);
+  }
+});
+
+app.post('/api/telegram/fetch/jobs', async (req, res) => {
+  try {
+    if (!WORKER_URL_VALID) {
+      return res.status(503).json({ error: WORKER_PROXY_ERROR || 'Telegram worker not configured.' });
+    }
+    const type = compactString(req.body?.type);
+    if (!['fetch-messages', 'execute-actions'].includes(type)) {
+      return res.status(400).json({ error: 'Unsupported fetch job type.' });
+    }
+
+    const spreadsheet = getFetchSpreadsheetByKey(compactString(req.body?.spreadsheetKey));
+    if (!spreadsheet) return res.status(400).json({ error: 'Choose a valid spreadsheet.' });
+
+    if (type === 'fetch-messages') {
+      const payload = sanitizeFetchJobPayload(req.body || {}, spreadsheet);
+      return res.json(await proxyWorker('/jobs/fetch-messages', 'POST', payload));
+    }
+
+    const sheetName = compactString(req.body?.sheetName);
+    if (!sheetName) return res.status(400).json({ error: 'sheetName is required.' });
+    return res.json(await proxyWorker('/jobs/execute-actions', 'POST', {
+      spreadsheetKey: spreadsheet.key,
+      spreadsheetId: spreadsheet.spreadsheetId,
+      sheetName,
+    }));
+  } catch (error) {
+    sendSafeError(res, 503, error);
+  }
+});
+
+app.get('/api/telegram/fetch/jobs/:jobId', async (req, res) => {
+  try {
+    if (!WORKER_URL_VALID) {
+      return res.status(503).json({ error: WORKER_PROXY_ERROR || 'Telegram worker not configured.' });
+    }
+    res.json(await proxyWorker(`/jobs/${encodeURIComponent(req.params.jobId)}`, 'GET'));
+  } catch (error) {
+    sendSafeError(res, 503, error);
   }
 });
 

@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telegram Fetcher</title>
+<style>
+  :root { --bg:#eef1f5; --card:#fff; --border:#d0d7de; --primary:#1565c0; --primary-dark:#0d47a1; --accent:#5c35a0; --text:#1c2b3a; --muted:#6b7a88; --success:#2e7d32; --warn:#e65100; --danger:#c62828; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
+  .topbar{display:flex;align-items:center;gap:16px;padding:18px 24px;background:var(--primary);color:#fff;}
+  .topbar .right{margin-left:auto;display:flex;gap:10px;flex-wrap:wrap;}
+  .page{padding:18px;display:grid;gap:16px;max-width:1600px;margin:0 auto;}
+  .layout{display:grid;grid-template-columns:minmax(0,1.85fr) minmax(340px,.95fr);gap:16px;}
+  .stack{display:grid;gap:16px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+  .card-header{padding:14px 16px 0;}
+  .card-body{padding:14px 16px 16px;}
+  .stripe{height:4px;background:var(--primary);}
+  .card h2{margin:0;font-size:14px;color:var(--primary);}
+  .grid{display:grid;gap:12px;}
+  .grid.two{grid-template-columns:1fr 1fr;}
+  .row,.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  label{font-size:13px;color:var(--muted);}
+  input,select,button,textarea{font:inherit;}
+  input,select,textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#fff;}
+  button{border:0;border-radius:10px;padding:10px 14px;cursor:pointer;background:#dfe6ee;color:var(--text);font-weight:600;}
+  button.primary{background:var(--primary);color:#fff;}
+  button.primary:hover{background:var(--primary-dark);}
+  button.accent{background:var(--accent);color:#fff;}
+  button.ghost{background:#fff;border:1px solid var(--border);}
+  button.warn{background:#fff4e8;color:var(--warn);border:1px solid #f0c59b;}
+  .muted{color:var(--muted);font-size:12px;}
+  .pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;}
+  .pill.ok{background:#e7f4ea;color:var(--success);}
+  .pill.warn{background:#fff3e0;color:var(--warn);}
+  .pill.err{background:#fdeceb;color:var(--danger);}
+  .toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
+  .group-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .group-chip{padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:12px;}
+  .group-chip.active{background:#e3f2fd;color:var(--primary);border-color:#b9d7f4;}
+  .channel-list{border:1px solid var(--border);border-radius:12px;background:#fff;max-height:440px;overflow:auto;}
+  .channel-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;padding:10px 12px;border-bottom:1px solid #edf1f5;align-items:start;}
+  .channel-row:last-child{border-bottom:0;}
+  .channel-name{font-weight:600;}
+  .channel-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+  .tag{display:inline-flex;padding:2px 8px;border-radius:999px;background:#eef4fb;color:var(--primary);font-size:11px;}
+  .tag.alt{background:#f0ebfb;color:var(--accent);}
+  .jobs{display:grid;gap:10px;}
+  .job{border:1px solid var(--border);border-radius:12px;background:#fff;padding:12px;}
+  .progress{height:8px;background:#e7ebef;border-radius:999px;overflow:hidden;margin-top:8px;}
+  .progress>div{height:100%;background:linear-gradient(90deg,var(--primary),var(--accent));}
+  .log{white-space:pre-wrap;font-family:Consolas,monospace;background:#0f1720;color:#d7e5f6;border-radius:12px;padding:12px;min-height:140px;max-height:340px;overflow:auto;}
+  @media (max-width: 1100px){ .layout,.grid.two{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <div style="font-size:30px;font-weight:700;">Telegram Fetcher</div>
+      <div class="muted" style="color:#dce8f7;">Web version of the desktop Telegram Channel Manager for Draft and Telegram sheets.</div>
+    </div>
+    <div class="right">
+      <a href="/contacts/" style="text-decoration:none;"><button class="ghost">Contacts</button></a>
+      <a href="/" style="text-decoration:none;"><button class="ghost">Dashboard</button></a>
+      <button class="ghost" id="openSheetBtn" type="button">Open Sheet</button>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="layout">
+      <div class="stack">
+        <section class="card">
+          <div class="stripe"></div>
+          <div class="card-header"><h2>Target Spreadsheet & Sheet</h2></div>
+          <div class="card-body grid two">
+            <div>
+              <label for="spreadsheetSelect">Spreadsheet</label>
+              <select id="spreadsheetSelect"></select>
+            </div>
+            <div>
+              <label for="sheetSelect">Sheet</label>
+              <select id="sheetSelect"></select>
+            </div>
+            <div class="muted" id="sheetHint" style="grid-column:1 / -1;"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="stripe"></div>
+          <div class="card-header"><h2>Channel Selection</h2></div>
+          <div class="card-body">
+            <div class="toolbar">
+              <div class="controls">
+                <button id="reloadChannelsBtn" type="button">Refresh</button>
+                <button id="selectVisibleBtn" type="button">Select Visible</button>
+                <button id="clearVisibleBtn" class="warn" type="button">Clear</button>
+              </div>
+              <div class="muted" id="selectedCount">0 channels selected</div>
+            </div>
+            <div class="group-bar" id="groupBar"></div>
+            <div class="row" style="margin-bottom:10px;">
+              <input id="channelSearch" type="search" placeholder="Search channels by name, username, id, or group">
+            </div>
+            <div class="channel-list" id="channelList"></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="stack">
+        <section class="card">
+          <div class="stripe" style="background:#2e7d32;"></div>
+          <div class="card-header"><h2 style="color:#2e7d32;">Worker & Fetch Status</h2></div>
+          <div class="card-body grid">
+            <div id="workerPill" class="pill warn">Checking worker...</div>
+            <div class="muted" id="workerSummary"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="stripe" style="background:#2e7d32;"></div>
+          <div class="card-header"><h2 style="color:#2e7d32;">Fetch Range</h2></div>
+          <div class="card-body grid">
+            <label><input type="radio" name="rangeMode" value="date" checked> By Date</label>
+            <div class="grid two">
+              <div>
+                <label for="dateFromInput">Start date/time</label>
+                <input id="dateFromInput" placeholder="2026-04-18 00:00 or leave empty for fetch all">
+              </div>
+              <div class="muted" style="align-self:end;">Empty date fetches all messages.</div>
+            </div>
+            <label><input type="radio" name="rangeMode" value="message_id"> By Message ID</label>
+            <div class="grid two">
+              <div>
+                <label for="startMessageInput">Start</label>
+                <input id="startMessageInput" placeholder="Start ID">
+              </div>
+              <div>
+                <label for="endMessageInput">End</label>
+                <input id="endMessageInput" placeholder="End ID">
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="stripe" style="background:#5c35a0;"></div>
+          <div class="card-header"><h2 style="color:#5c35a0;">Comment Fetching</h2></div>
+          <div class="card-body grid">
+            <label><input id="fetchCommentsInput" type="checkbox"> Fetch comments for each post</label>
+            <div>
+              <label for="maxCommentsInput">Max comments per post</label>
+              <input id="maxCommentsInput" type="number" min="1" step="1" value="50">
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="stripe" style="background:#5c35a0;"></div>
+          <div class="card-header"><h2 style="color:#5c35a0;">Execute</h2></div>
+          <div class="card-body grid">
+            <button class="primary" id="fetchMessagesBtn" type="button">Fetch Messages</button>
+            <button class="accent" id="executeActionsBtn" type="button">Execute Actions</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="stripe" style="background:#334155;"></div>
+          <div class="card-header"><h2 style="color:#334155;">Jobs</h2></div>
+          <div class="card-body jobs" id="jobs"></div>
+        </section>
+      </div>
+    </div>
+
+    <section class="card">
+      <div class="stripe" style="background:#334155;"></div>
+      <div class="card-header"><h2 style="color:#334155;">Activity Log</h2></div>
+      <div class="card-body">
+        <div class="log" id="log">Ready.</div>
+      </div>
+    </section>
+  </div>
+
+<script>
+const state = { config:null, spreadsheets:[], sheets:[], channels:[], groups:[], selectedChannels:new Set(), activeGroup:'All', jobs:new Map(), timers:new Map() };
+const MAX_POLL_ERRORS = 5;
+const POLL_INTERVAL = 3000;
+const els = {
+  spreadsheetSelect: document.getElementById('spreadsheetSelect'),
+  sheetSelect: document.getElementById('sheetSelect'),
+  sheetHint: document.getElementById('sheetHint'),
+  groupBar: document.getElementById('groupBar'),
+  channelSearch: document.getElementById('channelSearch'),
+  channelList: document.getElementById('channelList'),
+  selectedCount: document.getElementById('selectedCount'),
+  workerPill: document.getElementById('workerPill'),
+  workerSummary: document.getElementById('workerSummary'),
+  jobs: document.getElementById('jobs'),
+  log: document.getElementById('log'),
+  dateFromInput: document.getElementById('dateFromInput'),
+  startMessageInput: document.getElementById('startMessageInput'),
+  endMessageInput: document.getElementById('endMessageInput'),
+  fetchCommentsInput: document.getElementById('fetchCommentsInput'),
+  maxCommentsInput: document.getElementById('maxCommentsInput'),
+  openSheetBtn: document.getElementById('openSheetBtn'),
+};
+
+const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+
+function log(message) {
+  const timestamp = new Date().toLocaleTimeString();
+  els.log.textContent = `[${timestamp}] ${message}\n` + els.log.textContent;
+}
+
+async function api(url, options = {}) {
+  const response = await fetch(url, options);
+  const text = await response.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch (error) { data = null; }
+  if (!response.ok) {
+    if (data && data.error) throw new Error(data.error);
+    throw new Error(`HTTP ${response.status}${text ? `: ${text.slice(0, 180)}` : ''}`);
+  }
+  return data || {};
+}
+
+function renderWorkerStatus() {
+  const health = state.config?.workerHealth || {};
+  const connected = Boolean(health.telethonConnected);
+  els.workerPill.className = `pill ${connected ? 'ok' : (health.ok ? 'warn' : 'err')}`;
+  els.workerPill.textContent = connected ? 'Worker connected' : (health.ok ? 'Worker reachable' : 'Worker unavailable');
+  els.workerSummary.textContent = connected
+    ? 'Telethon is connected and ready for fetch/action jobs.'
+    : (health.error || 'Worker is reachable but Telethon is not fully connected yet.');
+}
+
+function renderSpreadsheets() {
+  els.spreadsheetSelect.innerHTML = state.spreadsheets.map((entry) => `<option value="${escapeHtml(entry.key)}">${escapeHtml(entry.label)}</option>`).join('');
+}
+
+function renderSheets() {
+  els.sheetSelect.innerHTML = state.sheets.map((sheet) => `<option value="${escapeHtml(sheet.title)}">${escapeHtml(sheet.title)}</option>`).join('');
+  const spreadsheet = state.spreadsheets.find((entry) => entry.key === els.spreadsheetSelect.value);
+  els.sheetHint.textContent = spreadsheet
+    ? `${spreadsheet.label} → ${spreadsheet.spreadsheetId}`
+    : '';
+}
+
+function renderGroups() {
+  const groups = ['All', ...state.groups];
+  els.groupBar.innerHTML = groups.map((group) => `<button class="group-chip ${group === state.activeGroup ? 'active' : ''}" type="button" data-group="${escapeHtml(group)}">${escapeHtml(group)}</button>`).join('');
+}
+
+function getVisibleChannels() {
+  const search = els.channelSearch.value.trim().toLowerCase();
+  return state.channels.filter((channel) => {
+    const matchesGroup = state.activeGroup === 'All' || (channel.tags || []).includes(state.activeGroup);
+    const haystack = [channel.name, channel.username, channel.id, ...(channel.tags || [])].join(' ').toLowerCase();
+    const matchesSearch = !search || haystack.includes(search);
+    return matchesGroup && matchesSearch;
+  });
+}
+
+function renderChannels() {
+  const visible = getVisibleChannels();
+  if (!visible.length) {
+    els.channelList.innerHTML = '<div class="channel-row"><div class="muted">No channels match the current filters.</div></div>';
+  } else {
+    els.channelList.innerHTML = visible.map((channel) => {
+      const checked = state.selectedChannels.has(channel.id || channel.username || channel.name);
+      const tagHtml = (channel.tags || []).map((tag) => `<span class="tag alt">${escapeHtml(tag)}</span>`).join('');
+      return `<label class="channel-row">
+        <input type="checkbox" class="channel-check" data-channel-key="${escapeHtml(channel.id || channel.username || channel.name)}" ${checked ? 'checked' : ''}>
+        <div>
+          <div class="channel-name">${escapeHtml(channel.name || channel.username || channel.id)}</div>
+          <div class="muted">${escapeHtml(channel.username ? `@${channel.username}` : channel.id || '')}</div>
+          <div class="channel-tags">${tagHtml}</div>
+        </div>
+        <div class="muted">${escapeHtml(channel.type || '')}</div>
+      </label>`;
+    }).join('');
+  }
+  els.selectedCount.textContent = `${state.selectedChannels.size} channels selected`;
+}
+
+function renderJobs() {
+  const jobs = [...state.jobs.values()].reverse();
+  if (!jobs.length) {
+    els.jobs.innerHTML = '<div class="muted">No jobs yet.</div>';
+    return;
+  }
+  els.jobs.innerHTML = jobs.map((job) => {
+    const total = Number(job.total || 0);
+    const progress = Number(job.progress || 0);
+    const pct = total > 0 ? Math.min(100, Math.round((progress / total) * 100)) : (job.status === 'done' ? 100 : 0);
+    const statusClass = job.status === 'done' ? 'ok' : job.status === 'error' ? 'err' : 'warn';
+    return `<div class="job">
+      <div class="row" style="justify-content:space-between;">
+        <strong>${escapeHtml(job.type)}</strong>
+        <span class="pill ${statusClass}">${escapeHtml(job.status || 'queued')}</span>
+      </div>
+      <div class="muted" style="margin-top:6px;">${escapeHtml(job.channel || '')}</div>
+      <div class="muted" style="margin-top:6px;">${escapeHtml(job.summary || job.error || '')}</div>
+      <div class="progress"><div style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+async function loadConfig() {
+  state.config = await api('/api/telegram/fetch/config');
+  state.spreadsheets = state.config.spreadsheets || [];
+  renderWorkerStatus();
+  renderSpreadsheets();
+}
+
+async function loadSheets() {
+  const spreadsheetKey = els.spreadsheetSelect.value;
+  const data = await api(`/api/telegram/fetch/sheets?spreadsheet=${encodeURIComponent(spreadsheetKey)}`);
+  state.sheets = data.sheets || [];
+  renderSheets();
+}
+
+async function loadChannels() {
+  const data = await api('/api/telegram/fetch/channels');
+  state.channels = data.channels || [];
+  state.groups = data.groups || [];
+  renderGroups();
+  renderChannels();
+  log(`Loaded ${state.channels.length} channels from ${data.sheetName || 'channel sheet'}.`);
+}
+
+function getSelectedChannels() {
+  return state.channels.filter((channel) => state.selectedChannels.has(channel.id || channel.username || channel.name));
+}
+
+function stopPolling(jobId) {
+  clearTimeout(state.timers.get(jobId)?.timer);
+  state.timers.delete(jobId);
+}
+
+async function pollJob(jobId) {
+  const meta = state.timers.get(jobId) || { failures: 0 };
+  stopPolling(jobId);
+  try {
+    const job = await api(`/api/telegram/fetch/jobs/${encodeURIComponent(jobId)}`);
+    state.jobs.set(jobId, job);
+    renderJobs();
+    if (!['done', 'error'].includes(job.status)) {
+      state.timers.set(jobId, { failures: 0, timer: setTimeout(() => pollJob(jobId), POLL_INTERVAL) });
+    } else {
+      log(`${job.type} finished with status ${job.status}.`);
+    }
+  } catch (error) {
+    const failures = (meta.failures || 0) + 1;
+    if (failures >= MAX_POLL_ERRORS) {
+      log(`Lost connection while polling job ${jobId}: ${error.message}`);
+      return;
+    }
+    state.timers.set(jobId, { failures, timer: setTimeout(() => pollJob(jobId), POLL_INTERVAL + 1000) });
+  }
+}
+
+async function startJob(type) {
+  const spreadsheetKey = els.spreadsheetSelect.value;
+  const sheetName = els.sheetSelect.value;
+  if (!spreadsheetKey || !sheetName) {
+    alert('Choose spreadsheet and sheet first.');
+    return;
+  }
+  const payload = { type, spreadsheetKey, sheetName };
+  if (type === 'fetch-messages') {
+    payload.channels = getSelectedChannels();
+    payload.rangeMode = document.querySelector('input[name="rangeMode"]:checked').value;
+    payload.dateFrom = els.dateFromInput.value.trim();
+    payload.startMessageId = els.startMessageInput.value.trim();
+    payload.endMessageId = els.endMessageInput.value.trim();
+    payload.fetchComments = els.fetchCommentsInput.checked;
+    payload.maxCommentsPerPost = Number(els.maxCommentsInput.value || 50);
+  }
+  const result = await api('/api/telegram/fetch/jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  state.jobs.set(result.jobId, { jobId: result.jobId, type, status: 'queued', channel: sheetName, summary: 'Queued...' });
+  renderJobs();
+  log(`Started ${type} job ${result.jobId}.`);
+  pollJob(result.jobId);
+}
+
+function openSheet() {
+  const spreadsheet = state.spreadsheets.find((entry) => entry.key === els.spreadsheetSelect.value);
+  const sheet = els.sheetSelect.value;
+  if (!spreadsheet) return;
+  const url = `https://docs.google.com/spreadsheets/d/${spreadsheet.spreadsheetId}/edit#gid=0`;
+  window.open(url, '_blank', 'noopener');
+}
+
+document.getElementById('reloadChannelsBtn').addEventListener('click', () => loadChannels().catch((error) => alert(error.message)));
+document.getElementById('selectVisibleBtn').addEventListener('click', () => {
+  getVisibleChannels().forEach((channel) => state.selectedChannels.add(channel.id || channel.username || channel.name));
+  renderChannels();
+});
+document.getElementById('clearVisibleBtn').addEventListener('click', () => {
+  getVisibleChannels().forEach((channel) => state.selectedChannels.delete(channel.id || channel.username || channel.name));
+  renderChannels();
+});
+document.getElementById('fetchMessagesBtn').addEventListener('click', () => startJob('fetch-messages').catch((error) => alert(error.message)));
+document.getElementById('executeActionsBtn').addEventListener('click', () => startJob('execute-actions').catch((error) => alert(error.message)));
+els.spreadsheetSelect.addEventListener('change', () => loadSheets().catch((error) => alert(error.message)));
+els.channelSearch.addEventListener('input', renderChannels);
+els.channelList.addEventListener('change', (event) => {
+  if (!event.target.classList.contains('channel-check')) return;
+  const key = event.target.dataset.channelKey;
+  if (event.target.checked) state.selectedChannels.add(key); else state.selectedChannels.delete(key);
+  renderChannels();
+});
+els.groupBar.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-group]');
+  if (!button) return;
+  state.activeGroup = button.dataset.group;
+  renderGroups();
+  renderChannels();
+});
+els.openSheetBtn.addEventListener('click', openSheet);
+window.addEventListener('pagehide', () => [...state.timers.keys()].forEach(stopPolling));
+
+(async function init() {
+  try {
+    await loadConfig();
+    await loadSheets();
+    await loadChannels();
+  } catch (error) {
+    alert(error.message);
+    log(error.message);
+  }
+})();
+</script>
+</body>
+</html>
