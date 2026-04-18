@@ -224,6 +224,20 @@ async function api(url, options = {}) {
   return data || {};
 }
 
+function presentError(error, fallback = 'Something went wrong.') {
+  const message = String(error?.message || fallback).trim();
+  if (message.includes('Google Sheets is temporarily unavailable')) {
+    return 'Google Sheets is temporarily unavailable. Please wait a few seconds and try again.';
+  }
+  if (message.includes('"status":"UNAVAILABLE"') || message.includes('The service is currently unavailable.')) {
+    return 'Google Sheets is temporarily unavailable. Please wait a few seconds and try again.';
+  }
+  if (message.includes('Contacts session is missing or expired')) {
+    return 'Your contacts session expired. Reload the page and try again.';
+  }
+  return message || fallback;
+}
+
 function renderWorkerStatus() {
   const health = state.config?.workerHealth || {};
   const connected = Boolean(health.telethonConnected);
@@ -396,7 +410,7 @@ function openSheet() {
   window.open(url, '_blank', 'noopener');
 }
 
-document.getElementById('reloadChannelsBtn').addEventListener('click', () => loadChannels().catch((error) => alert(error.message)));
+document.getElementById('reloadChannelsBtn').addEventListener('click', () => loadChannels().catch((error) => alert(presentError(error))));
 document.getElementById('selectVisibleBtn').addEventListener('click', () => {
   getVisibleChannels().forEach((channel) => state.selectedChannels.add(channel.id || channel.username || channel.name));
   renderChannels();
@@ -405,9 +419,9 @@ document.getElementById('clearVisibleBtn').addEventListener('click', () => {
   getVisibleChannels().forEach((channel) => state.selectedChannels.delete(channel.id || channel.username || channel.name));
   renderChannels();
 });
-document.getElementById('fetchMessagesBtn').addEventListener('click', () => startJob('fetch-messages').catch((error) => alert(error.message)));
-document.getElementById('executeActionsBtn').addEventListener('click', () => startJob('execute-actions').catch((error) => alert(error.message)));
-els.spreadsheetSelect.addEventListener('change', () => loadSheets().catch((error) => alert(error.message)));
+document.getElementById('fetchMessagesBtn').addEventListener('click', () => startJob('fetch-messages').catch((error) => alert(presentError(error))));
+document.getElementById('executeActionsBtn').addEventListener('click', () => startJob('execute-actions').catch((error) => alert(presentError(error))));
+els.spreadsheetSelect.addEventListener('change', () => loadSheets().catch((error) => alert(presentError(error))));
 els.channelSearch.addEventListener('input', renderChannels);
 els.channelList.addEventListener('change', (event) => {
   if (!event.target.classList.contains('channel-check')) return;
@@ -431,8 +445,9 @@ window.addEventListener('pagehide', () => [...state.timers.keys()].forEach(stopP
     await loadSheets();
     await loadChannels();
   } catch (error) {
-    alert(error.message);
-    log(error.message);
+    const message = presentError(error);
+    alert(message);
+    log(message);
   }
 })();
 </script>

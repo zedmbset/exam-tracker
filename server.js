@@ -388,18 +388,38 @@ async function getOwnerDriveAccessToken() {
 }
 
 async function googleJson(url, options = {}) {
-  const response = await fetch(url, options);
-  const text = await response.text();
-  let parsed;
-  try {
-    parsed = text ? JSON.parse(text) : {};
-  } catch (error) {
-    parsed = text;
+  const retries = Number.isFinite(options.retries) ? options.retries : 3;
+  const retryDelayMs = Number.isFinite(options.retryDelayMs) ? options.retryDelayMs : 700;
+  const requestOptions = { ...options };
+  delete requestOptions.retries;
+  delete requestOptions.retryDelayMs;
+
+  let lastError;
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    const response = await fetch(url, requestOptions);
+    const text = await response.text();
+    let parsed;
+    try {
+      parsed = text ? JSON.parse(text) : {};
+    } catch (error) {
+      parsed = text;
+    }
+
+    if (response.ok) return parsed;
+
+    const message = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+    const transientStatus = [429, 500, 502, 503, 504];
+    if (transientStatus.includes(response.status) && attempt < retries - 1) {
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs * (attempt + 1)));
+      continue;
+    }
+
+    lastError = new Error(message);
+    lastError.status = response.status;
+    throw lastError;
   }
-  if (!response.ok) {
-    throw new Error(typeof parsed === 'string' ? parsed : JSON.stringify(parsed));
-  }
-  return parsed;
+
+  throw lastError || new Error('Google request failed.');
 }
 
 async function getSpreadsheetMetadata(token, spreadsheetId) {
@@ -942,6 +962,9 @@ app.get('/api/telegram/fetch/sheets', async (req, res) => {
     const sheets = await listSpreadsheetTabs(token, spreadsheet.spreadsheetId);
     res.json({ spreadsheet, sheets });
   } catch (error) {
+    if ([429, 500, 502, 503, 504].includes(Number(error?.status))) {
+      return res.status(503).json({ error: 'Google Sheets is temporarily unavailable. Please try again in a few seconds.' });
+    }
     sendSafeError(res, 500, error);
   }
 });
