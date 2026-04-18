@@ -3,6 +3,7 @@ import os
 import sys
 from pathlib import Path
 
+from telethon.utils import get_peer_id
 
 LEGACY_ROOT = Path(__file__).resolve().parent / "legacy_fetcher"
 if str(LEGACY_ROOT) not in sys.path:
@@ -23,9 +24,61 @@ class WorkerTelegramFetcherAdapter:
         self.entity_name = None
         self.comment_fetcher = CommentFetcher(client)
         self._topic_cache = {}
+        self._dialog_cache = None
+
+    async def _ensure_dialog_cache(self):
+        if self._dialog_cache is not None:
+            return self._dialog_cache
+
+        cache = {}
+        async for dialog in self.client.iter_dialogs():
+            entity = dialog.entity
+            if not getattr(entity, "megagroup", False) and not getattr(entity, "broadcast", False):
+                continue
+
+            full_id = str(get_peer_id(entity))
+            raw_id = str(getattr(entity, "id", "") or "")
+            username = str(getattr(entity, "username", "") or "").strip().lstrip("@").lower()
+            title = str(getattr(entity, "title", "") or dialog.name or "").strip().lower()
+
+            for key in {full_id, raw_id, username, title}:
+                if key:
+                    cache[key] = entity
+
+        self._dialog_cache = cache
+        return cache
+
+    async def _resolve_channel_entity(self, channel_ref):
+        ref = str(channel_ref or "").strip()
+        if not ref:
+            raise RuntimeError("Channel reference is empty.")
+
+        cache = await self._ensure_dialog_cache()
+        normalized_keys = {
+            ref,
+            ref.lstrip("@").lower(),
+        }
+
+        if ref.startswith("-100") and len(ref) > 4:
+            normalized_keys.add(ref[4:])
+
+        for key in normalized_keys:
+            entity = cache.get(key)
+            if entity is not None:
+                return entity
+
+        errors = []
+        for candidate in (ref.lstrip("@"), ref):
+            try:
+                entity = await self.client.get_entity(candidate)
+                return entity
+            except Exception as error:
+                errors.append(str(error))
+
+        raise RuntimeError(f'Cannot find any entity corresponding to "{ref}"')
 
     async def get_channel_entity(self, channel_id):
-        self.entity = await self.client.get_entity(channel_id)
+        self.entity = await self._resolve_channel_entity(channel_id)
         self.entity_name = getattr(self.entity, "title", str(channel_id))
         return self.entity, self.entity_name
 
@@ -130,7 +183,7 @@ async def fetch_messages_to_sheet(
     all_rows = []
     total_channels = len(channels)
     for index, channel in enumerate(channels, start=1):
-        channel_ref = channel.get("id") or channel.get("username") or channel.get("name")
+        channel_ref = channel.get("username") or channel.get("id") or channel.get("name")
         await adapter.get_channel_entity(channel_ref)
         start_dt = None
         if range_mode == "date" and date_from:
