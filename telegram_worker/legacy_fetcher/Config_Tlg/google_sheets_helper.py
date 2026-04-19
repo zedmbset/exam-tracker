@@ -113,6 +113,21 @@ def _worksheet_cache_key(spreadsheet_id, sheet_name):
     return (str(spreadsheet_id), str(sheet_name))
 
 
+def column_index_to_letter(index):
+    """
+    Convert a zero-based column index to Excel/Sheets column letters.
+    0 -> A, 25 -> Z, 26 -> AA, 27 -> AB ...
+    """
+    if index < 0:
+        raise ValueError("Column index must be non-negative")
+    out = ""
+    current = index + 1
+    while current > 0:
+        current, rem = divmod(current - 1, 26)
+        out = chr(65 + rem) + out
+    return out
+
+
 def invalidate_header_cache(spreadsheet_id, sheet_name):
     _header_row_cache.pop(_worksheet_cache_key(spreadsheet_id, sheet_name), None)
 
@@ -175,13 +190,7 @@ def read_action_rows_only(spreadsheet_id, sheet_name=None):
     except StopIteration:
         raise Exception("Action column not found in header row")
 
-    action_col_letter = chr(ord('A') + action_col_idx)   # works for cols A-Z
-    if action_col_idx >= 26:
-        # Handle AA, AB … columns
-        action_col_letter = (
-            chr(ord('A') + action_col_idx // 26 - 1) +
-            chr(ord('A') + action_col_idx % 26)
-        )
+    action_col_letter = column_index_to_letter(action_col_idx)
 
     # ── Step 2: fetch ONLY the Action column (all rows) ─────────────────────
     action_col_range  = f"{action_col_letter}2:{action_col_letter}"   # row 2 onward
@@ -876,7 +885,7 @@ def upsert_messages_to_all_msgs(spreadsheet_id, messages_data, sheet_name=None):
             if msg_id in id_to_row:
                 # Update existing row
                 row_num = id_to_row[msg_id]
-                end_col = chr(ord('A') + len(headers) - 1)
+                end_col = column_index_to_letter(len(headers) - 1)
                 range_notation = f"A{row_num}:{end_col}{row_num}"
                 updates_batch.append({
                     'range': range_notation,
@@ -913,7 +922,7 @@ def upsert_messages_to_all_msgs(spreadsheet_id, messages_data, sheet_name=None):
                 print(f"✓ Expanded sheet from {current_row_count} to {new_row_count} rows")
             
             new_data_batch = []
-            end_col = chr(ord('A') + len(headers) - 1)
+            end_col = column_index_to_letter(len(headers) - 1)
             for i, row in enumerate(new_rows):
                 row_num = start_row + i
                 range_notation = f"A{row_num}:{end_col}{row_num}"

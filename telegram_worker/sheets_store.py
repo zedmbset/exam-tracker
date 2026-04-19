@@ -57,6 +57,20 @@ def normalize_username(value):
     return str(value or "").strip().lstrip("@").lower()
 
 
+def column_index_to_letter(index):
+    """
+    Convert a zero-based column index to Excel/Sheets column letters.
+    """
+    if index < 0:
+        raise ValueError("Column index must be non-negative")
+    out = ""
+    current = index + 1
+    while current > 0:
+        current, rem = divmod(current - 1, 26)
+        out = chr(65 + rem) + out
+    return out
+
+
 class SheetsStore:
     def __init__(self):
         self.sheet_id = os.environ["CONTACTS_SHEET_ID"]
@@ -123,7 +137,7 @@ class SheetsStore:
 
     def update_row(self, title, row_index, payload):
         worksheet = self.ensure_sheet(title)
-        end_col = chr(ord("A") + len(HEADERS[title]) - 1)
+        end_col = column_index_to_letter(len(HEADERS[title]) - 1)
         run_gspread_request(
             lambda: worksheet.update(
                 f"A{row_index}:{end_col}{row_index}",
@@ -137,7 +151,7 @@ class SheetsStore:
         rows, worksheet = self.get_rows("ZED_Jobs")
         for row in rows:
             if row.get("ID_Job") == payload["ID_Job"]:
-                end_col = chr(ord("A") + len(HEADERS["ZED_Jobs"]) - 1)
+                end_col = column_index_to_letter(len(HEADERS["ZED_Jobs"]) - 1)
                 run_gspread_request(
                     lambda: worksheet.update(
                         f"A{row['_row_index']}:{end_col}{row['_row_index']}",
