@@ -1,6 +1,11 @@
 attached_assets/
 .env
+telegram_worker/.env
+.env.*
+telegram_worker/.env.*
 node_modules/
+__pycache__/
+*.pyc
 *.log
 npm-debug.log*
 .DS_Store

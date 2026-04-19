@@ -11,6 +11,7 @@ from google.oauth2.service_account import Credentials
 import config
 import json
 import os
+import time
 from datetime import datetime, timedelta
 import pytz
 
@@ -25,6 +26,38 @@ SCOPES = [
 
 # Module-level cached client – created once per process, reused everywhere
 _gspread_client_cache = None
+_spreadsheet_cache = {}
+_worksheet_cache = {}
+_header_row_cache = {}
+
+
+def run_gspread_request(fn, label="Google Sheets request", retries=5, base_delay=2.0):
+    """
+    Retry gspread operations on quota/transient failures with exponential backoff.
+    """
+    last_error = None
+    for attempt in range(retries):
+        try:
+            return fn()
+        except gspread.exceptions.APIError as error:
+            message = str(error)
+            is_retryable = (
+                '429' in message or
+                'Quota exceeded' in message or
+                'Read requests per minute per user' in message or
+                '500' in message or
+                '502' in message or
+                '503' in message or
+                '504' in message
+            )
+            if not is_retryable or attempt >= retries - 1:
+                raise
+            delay = base_delay * (2 ** attempt)
+            print(f"  Retry {attempt + 1}/{retries} for {label} after {delay:.1f}s due to Sheets API limit...")
+            time.sleep(delay)
+            last_error = error
+    if last_error:
+        raise last_error
 
 def get_google_sheets_client():
     """
@@ -64,6 +97,41 @@ def get_google_sheets_client():
         raise Exception(f"Failed to authenticate with Google Sheets: {str(e)}")
 
 
+def get_spreadsheet(spreadsheet_id):
+    """Return a cached spreadsheet object for the given spreadsheet ID."""
+    spreadsheet = _spreadsheet_cache.get(spreadsheet_id)
+    if spreadsheet is not None:
+        return spreadsheet
+
+    gc = get_google_sheets_client()
+    spreadsheet = gc.open_by_key(spreadsheet_id)
+    _spreadsheet_cache[spreadsheet_id] = spreadsheet
+    return spreadsheet
+
+
+def _worksheet_cache_key(spreadsheet_id, sheet_name):
+    return (str(spreadsheet_id), str(sheet_name))
+
+
+def invalidate_header_cache(spreadsheet_id, sheet_name):
+    _header_row_cache.pop(_worksheet_cache_key(spreadsheet_id, sheet_name), None)
+
+
+def get_header_row_cached(worksheet, spreadsheet_id, sheet_name):
+    """Read and cache the header row for a worksheet."""
+    cache_key = _worksheet_cache_key(spreadsheet_id, sheet_name)
+    cached = _header_row_cache.get(cache_key)
+    if cached is not None:
+        return list(cached)
+
+    header_row = run_gspread_request(
+        lambda: worksheet.row_values(1),
+        label=f"read header row for {sheet_name}"
+    )
+    _header_row_cache[cache_key] = list(header_row)
+    return list(header_row)
+
+
 def read_action_rows_only(spreadsheet_id, sheet_name=None):
     """
     FAST alternative to read_sheet_data() for action execution.
@@ -91,12 +159,10 @@ def read_action_rows_only(spreadsheet_id, sheet_name=None):
     if not sheet_name:
         sheet_name = config.ALL_MSGS_SHEET_NAME
 
-    gc          = get_google_sheets_client()
-    spreadsheet = gc.open_by_key(spreadsheet_id)
-    worksheet   = spreadsheet.worksheet(sheet_name)
+    worksheet = get_worksheet_by_name(spreadsheet_id, sheet_name)
 
     # ── Step 1: fetch header row to find the Action column letter ────────────
-    header_row  = worksheet.row_values(1)          # 1 API call, 1 row only
+    header_row  = get_header_row_cached(worksheet, spreadsheet_id, sheet_name)
     if not header_row:
         raise Exception("Sheet header row is empty")
 
@@ -119,7 +185,10 @@ def read_action_rows_only(spreadsheet_id, sheet_name=None):
 
     # ── Step 2: fetch ONLY the Action column (all rows) ─────────────────────
     action_col_range  = f"{action_col_letter}2:{action_col_letter}"   # row 2 onward
-    action_col_values = worksheet.col_values(action_col_idx + 1)      # 1-based, 1 API call
+    action_col_values = run_gspread_request(
+        lambda: worksheet.col_values(action_col_idx + 1),
+        label=f"read action column for {sheet_name}"
+    )      # 1-based, 1 API call
 
     # Collect 1-based row numbers that have a non-empty Action value
     # action_col_values[0] is row 1 (header), so data starts at index 1
@@ -149,8 +218,11 @@ def read_action_rows_only(spreadsheet_id, sheet_name=None):
             time.sleep(1.1)
         for _attempt in range(_MAX_CHUNK_RETRIES):
             try:
-                batch_result = worksheet.spreadsheet.values_batch_get(
-                    ranges=[f"'{sheet_name}'!{rng}" for rng in chunk]
+                batch_result = run_gspread_request(
+                    lambda: worksheet.spreadsheet.values_batch_get(
+                        ranges=[f"'{sheet_name}'!{rng}" for rng in chunk]
+                    ),
+                    label=f"batch read action rows for {sheet_name}"
                 )
                 all_value_ranges.extend(batch_result.get('valueRanges', []))
                 break
@@ -217,8 +289,7 @@ def get_worksheet_by_gid(spreadsheet_id, gid):
         Exception: If worksheet not found or connection fails
     """
     try:
-        gc = get_google_sheets_client()
-        spreadsheet = gc.open_by_key(spreadsheet_id)
+        spreadsheet = get_spreadsheet(spreadsheet_id)
         
         # Find worksheet by GID
         for sheet in spreadsheet.worksheets():
@@ -244,9 +315,15 @@ def get_worksheet_by_name(spreadsheet_id, sheet_name):
         Exception: If worksheet not found or connection fails
     """
     try:
-        gc = get_google_sheets_client()
-        spreadsheet = gc.open_by_key(spreadsheet_id)
-        return spreadsheet.worksheet(sheet_name)
+        cache_key = _worksheet_cache_key(spreadsheet_id, sheet_name)
+        cached = _worksheet_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        spreadsheet = get_spreadsheet(spreadsheet_id)
+        worksheet = spreadsheet.worksheet(sheet_name)
+        _worksheet_cache[cache_key] = worksheet
+        return worksheet
     except Exception as e:
         raise Exception(f"Failed to get worksheet '{sheet_name}': {str(e)}")
 
@@ -275,7 +352,10 @@ def read_sheet_data(spreadsheet_id, gid=None, sheet_name=None):
         else:
             raise ValueError("Either gid or sheet_name must be provided")
         
-        all_data = worksheet.get_all_values()
+        all_data = run_gspread_request(
+            lambda: worksheet.get_all_values(),
+            label=f"read full sheet data for {sheet_name or gid}"
+        )
         
         if len(all_data) < 1:
             raise Exception("Sheet is empty")
@@ -714,51 +794,54 @@ def upsert_messages_to_all_msgs(spreadsheet_id, messages_data, sheet_name=None):
         dict: Statistics about the operation
     """
     try:
-        gc = get_google_sheets_client()
-        spreadsheet = gc.open_by_key(spreadsheet_id)
         if not sheet_name:
             sheet_name = config.ALL_MSGS_SHEET_NAME
-        worksheet = spreadsheet.worksheet(sheet_name)
-        
-        # Get all existing data
-        all_data = worksheet.get_all_values()
-        
+        worksheet = get_worksheet_by_name(spreadsheet_id, sheet_name)
+
         # Expected headers
         expected_headers = [
             'ID', 'Channel Name', 'Date & Time', 'Author', 'Topic', 'Text',
             'Hashtags', 'Title', 'Description_MD', 'Tags',
             'Message Link', 'Extra_Msg', 'Action', 'Destination', 'Scheduled_Time'
         ]
-        
+
+        # Read only the header row first instead of downloading the whole sheet.
+        headers = get_header_row_cached(worksheet, spreadsheet_id, sheet_name)
+
         # Check if sheet is empty or needs headers
-        if len(all_data) == 0:
-            worksheet.update('A1', [expected_headers])
-            all_data = [expected_headers]
+        if len(headers) == 0:
+            run_gspread_request(
+                lambda: worksheet.update('A1', [expected_headers]),
+                label=f"create headers in {sheet_name}"
+            )
+            headers = expected_headers
+            _header_row_cache[_worksheet_cache_key(spreadsheet_id, sheet_name)] = list(headers)
             print("✓ Created headers in All_Msgs sheet")
-        
-        headers = all_data[0]
-        existing_rows = all_data[1:] if len(all_data) > 1 else []
-        
+
         # Create header index map
         header_map = {header: idx for idx, header in enumerate(headers)}
-        
+
         if 'ID' not in header_map:
             raise Exception("'ID' column not found in sheet headers")
-        
+
         id_col_index = header_map['ID']
-        
-        # Build map of existing IDs to row numbers
+
+        # Read only the ID column to decide update vs insert.
+        id_column_values = run_gspread_request(
+            lambda: worksheet.col_values(id_col_index + 1),
+            label=f"read ID column for {sheet_name}"
+        )
+
+        # Build map of existing IDs to row numbers and track the last populated ID row.
         id_to_row = {}
         last_data_row = 1
-        
-        for idx, row in enumerate(existing_rows):
-            if any(cell.strip() for cell in row if cell):
-                last_data_row = idx + 2
-            
-            if len(row) > id_col_index and row[id_col_index]:
-                row_id = row[id_col_index]
-                id_to_row[row_id] = idx + 2
-        
+
+        for row_num, row_id in enumerate(id_column_values[1:], start=2):
+            row_id = str(row_id or '').strip()
+            if row_id:
+                last_data_row = row_num
+                id_to_row[row_id] = row_num
+
         # Statistics
         stats = {
             'total': len(messages_data),
@@ -807,12 +890,15 @@ def upsert_messages_to_all_msgs(spreadsheet_id, messages_data, sheet_name=None):
         
         # Execute batch updates
         if updates_batch:
-            worksheet.batch_update(updates_batch)
+            run_gspread_request(
+                lambda: worksheet.batch_update(updates_batch),
+                label=f"batch update existing rows in {sheet_name}"
+            )
             print(f"✓ Updated {len(updates_batch)} existing messages")
         
         # Append new rows
         if new_rows:
-            start_row = last_data_row + 1
+            start_row = max(last_data_row + 1, 2)
             end_row = start_row + len(new_rows) - 1
             
             current_row_count = worksheet.row_count
@@ -820,7 +906,10 @@ def upsert_messages_to_all_msgs(spreadsheet_id, messages_data, sheet_name=None):
             
             if required_rows > current_row_count:
                 new_row_count = required_rows + 100
-                worksheet.resize(rows=new_row_count)
+                run_gspread_request(
+                    lambda: worksheet.resize(rows=new_row_count),
+                    label=f"resize sheet {sheet_name}"
+                )
                 print(f"✓ Expanded sheet from {current_row_count} to {new_row_count} rows")
             
             new_data_batch = []
@@ -833,7 +922,10 @@ def upsert_messages_to_all_msgs(spreadsheet_id, messages_data, sheet_name=None):
                     'values': [row]
                 })
             
-            worksheet.batch_update(new_data_batch)
+            run_gspread_request(
+                lambda: worksheet.batch_update(new_data_batch),
+                label=f"batch insert new rows in {sheet_name}"
+            )
             print(f"✓ Inserted {len(new_rows)} new messages at row {start_row}")
         
         return stats
@@ -852,17 +944,19 @@ def get_existing_message_ids(spreadsheet_id):
     """
     try:
         worksheet = get_worksheet_by_name(spreadsheet_id, config.ALL_MSGS_SHEET_NAME)
-        all_data = worksheet.get_all_values()
-        
-        if len(all_data) <= 1:
+        id_column_values = run_gspread_request(
+            lambda: worksheet.col_values(1),
+            label=f"read existing IDs for {config.ALL_MSGS_SHEET_NAME}"
+        )
+
+        if len(id_column_values) <= 1:
             return set()
-        
-        existing_ids = set()
-        for row in all_data[1:]:
-            if len(row) > 0 and row[0]:
-                existing_ids.add(row[0])
-        
-        return existing_ids
+
+        return {
+            row_id.strip()
+            for row_id in id_column_values[1:]
+            if str(row_id or '').strip()
+        }
     except Exception as e:
         print(f"Warning: Could not read existing IDs: {str(e)}")
         return set()
@@ -1489,7 +1583,7 @@ def update_action_results(spreadsheet_id, sheet_updates, sheet_name=None):
             sheet_name = config.ALL_MSGS_SHEET_NAME
         
         worksheet = get_worksheet_by_name(spreadsheet_id, sheet_name)
-        headers = worksheet.row_values(1)
+        headers = get_header_row_cached(worksheet, spreadsheet_id, sheet_name)
         
         # Find required column indices
         id_col_idx = get_column_index(headers, 'ID')
@@ -1552,7 +1646,10 @@ def update_action_results(spreadsheet_id, sheet_updates, sheet_name=None):
                     })
         
         if updates:
-            worksheet.batch_update(updates)
+            run_gspread_request(
+                lambda: worksheet.batch_update(updates),
+                label=f"update action results in {sheet_name}"
+            )
             print(f"✓ Applied {len(updates)} cell updates across {len(sheet_updates)} rows")
     except Exception as e:
         raise Exception(f"Failed to update action results: {str(e)}")

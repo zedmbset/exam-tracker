@@ -19,6 +19,10 @@ from sheets_store import SheetsStore, make_id
 app = Flask(__name__)
 JOBS = {}
 LOCK = threading.Lock()
+SHEETS_JOB_LOCK = threading.Lock()
+ACTIVE_SHEETS_JOB = None
+STORE = None
+STORE_LOCK = threading.Lock()
 
 API_ID = int(os.environ.get("TELEGRAM_API_ID", "0"))
 API_HASH = os.environ.get("TELEGRAM_API_HASH", "")
@@ -47,9 +51,12 @@ def redact_sensitive_text(value):
 
 
 def get_store():
-    store = SheetsStore()
-    store.ensure_all()
-    return store
+    global STORE
+    with STORE_LOCK:
+        if STORE is None:
+            STORE = SheetsStore()
+            STORE.ensure_all()
+        return STORE
 
 
 def base_job(job_id, job_type, channel=""):
@@ -93,6 +100,24 @@ def set_job(job_id, **updates):
         snapshot = dict(job)
         persist_job(snapshot)
     return snapshot
+
+
+def set_active_sheets_job(job_id):
+    global ACTIVE_SHEETS_JOB
+    with LOCK:
+        ACTIVE_SHEETS_JOB = job_id
+
+
+def clear_active_sheets_job(job_id):
+    global ACTIVE_SHEETS_JOB
+    with LOCK:
+        if ACTIVE_SHEETS_JOB == job_id:
+            ACTIVE_SHEETS_JOB = None
+
+
+def get_active_sheets_job():
+    with LOCK:
+        return ACTIVE_SHEETS_JOB
 
 
 def create_job(job_type, channel=""):
@@ -170,6 +195,27 @@ def run_async_job(job_id, coroutine_factory):
 
     thread = threading.Thread(target=runner, daemon=True)
     thread.start()
+
+
+async def run_serialized_sheets_job(job_id, wait_summary, coroutine_factory):
+    """
+    Ensure only one sheet-heavy job runs at a time to avoid Google Sheets quota spikes.
+    """
+    announced_wait = False
+    while not SHEETS_JOB_LOCK.acquire(blocking=False):
+        active_job = get_active_sheets_job()
+        suffix = f" Waiting for job {active_job} to finish..." if active_job else " Waiting for another sheet job to finish..."
+        if not announced_wait:
+            set_job(job_id, status="queued", summary=f"{wait_summary}.{suffix}")
+            announced_wait = True
+        await asyncio.sleep(2)
+
+    set_active_sheets_job(job_id)
+    try:
+        return await coroutine_factory()
+    finally:
+        clear_active_sheets_job(job_id)
+        SHEETS_JOB_LOCK.release()
 
 
 @app.before_request
@@ -285,34 +331,41 @@ def start_fetch_messages():
     job_id = create_job("fetch-messages", label or sheet_name)
 
     async def work():
-        client = await init_client()
-        set_job(job_id, status="running", total=len(channels), summary=f"Fetching Telegram messages into {sheet_name}...")
+        async def run_job():
+            client = await init_client()
+            set_job(job_id, status="running", total=len(channels), summary=f"Fetching Telegram messages into {sheet_name}...")
 
-        def progress_cb(done_channels, total_channels, channel_name, message_count, row_count):
-            summary = json.dumps({
-                "current_channel": channel_name,
-                "channels_done": done_channels,
-                "channels_total": total_channels,
-                "messages_fetched": message_count,
-                "rows_buffered": row_count,
-            })
-            set_job(job_id, status="running", progress=done_channels, total=total_channels, summary=summary)
+            def progress_cb(done_channels, total_channels, channel_name, message_count, row_count):
+                summary = json.dumps({
+                    "current_channel": channel_name,
+                    "channels_done": done_channels,
+                    "channels_total": total_channels,
+                    "messages_fetched": message_count,
+                    "rows_buffered": row_count,
+                })
+                set_job(job_id, status="running", progress=done_channels, total=total_channels, summary=summary)
 
-        result = await fetch_messages_to_sheet(
-            client,
-            spreadsheet_id=spreadsheet_id,
-            sheet_name=sheet_name,
-            channels=channels,
-            range_mode=range_mode,
-            date_from=date_from,
-            start_message_id=start_message_id,
-            end_message_id=end_message_id,
-            fetch_comments=fetch_comments,
-            max_comments_per_post=max_comments_per_post,
-            progress_cb=progress_cb,
+            result = await fetch_messages_to_sheet(
+                client,
+                spreadsheet_id=spreadsheet_id,
+                sheet_name=sheet_name,
+                channels=channels,
+                range_mode=range_mode,
+                date_from=date_from,
+                start_message_id=start_message_id,
+                end_message_id=end_message_id,
+                fetch_comments=fetch_comments,
+                max_comments_per_post=max_comments_per_post,
+                progress_cb=progress_cb,
+            )
+            summary = json.dumps(result)
+            set_job(job_id, status="done", progress=len(channels), total=len(channels), finished=now_iso(), summary=summary)
+
+        await run_serialized_sheets_job(
+            job_id,
+            wait_summary=f"Queued for fetch into {sheet_name}",
+            coroutine_factory=run_job,
         )
-        summary = json.dumps(result)
-        set_job(job_id, status="done", progress=len(channels), total=len(channels), finished=now_iso(), summary=summary)
 
     run_async_job(job_id, work)
     return jsonify({"ok": True, "jobId": job_id})
@@ -329,11 +382,18 @@ def start_execute_actions():
     job_id = create_job("execute-actions", sheet_name)
 
     async def work():
-        client = await init_client()
-        set_job(job_id, status="running", summary=f"Executing sheet actions from {sheet_name}...")
-        stats = await execute_sheet_actions(client, spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)
-        summary = json.dumps(stats)
-        set_job(job_id, status="done", progress=int(stats.get("total", 0) or 0), total=int(stats.get("total", 0) or 0), finished=now_iso(), summary=summary)
+        async def run_job():
+            client = await init_client()
+            set_job(job_id, status="running", summary=f"Executing sheet actions from {sheet_name}...")
+            stats = await execute_sheet_actions(client, spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)
+            summary = json.dumps(stats)
+            set_job(job_id, status="done", progress=int(stats.get("total", 0) or 0), total=int(stats.get("total", 0) or 0), finished=now_iso(), summary=summary)
+
+        await run_serialized_sheets_job(
+            job_id,
+            wait_summary=f"Queued for action execution on {sheet_name}",
+            coroutine_factory=run_job,
+        )
 
     run_async_job(job_id, work)
     return jsonify({"ok": True, "jobId": job_id})

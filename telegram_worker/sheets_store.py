@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -13,6 +14,35 @@ HEADERS = {
     "ZED_Channels": ["ID_Channel", "Channel_Name", "Username", "Type", "Members_Count", "Last_Sync"],
     "ZED_Jobs": ["ID_Job", "Type", "Channel", "Status", "Progress", "Total", "Started", "Finished", "Error", "Summary_JSON", "Worker_Job_ID"],
 }
+
+
+def run_gspread_request(fn, label="Google Sheets request", retries=5, base_delay=2.0):
+    """
+    Retry gspread operations on quota/transient failures with exponential backoff.
+    """
+    last_error = None
+    for attempt in range(retries):
+        try:
+            return fn()
+        except gspread.exceptions.APIError as error:
+            message = str(error)
+            is_retryable = (
+                "429" in message or
+                "Quota exceeded" in message or
+                "Read requests per minute per user" in message or
+                "500" in message or
+                "502" in message or
+                "503" in message or
+                "504" in message
+            )
+            if not is_retryable or attempt >= retries - 1:
+                raise
+            delay = base_delay * (2 ** attempt)
+            print(f"Retry {attempt + 1}/{retries} for {label} after {delay:.1f}s due to Sheets API limit...")
+            time.sleep(delay)
+            last_error = error
+    if last_error:
+        raise last_error
 
 
 def now_iso():
@@ -32,17 +62,39 @@ class SheetsStore:
         self.sheet_id = os.environ["CONTACTS_SHEET_ID"]
         service_account = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
         self.gc = gspread.service_account_from_dict(service_account)
-        self.book = self.gc.open_by_key(self.sheet_id)
+        self.book = run_gspread_request(
+            lambda: self.gc.open_by_key(self.sheet_id),
+            label="open contacts spreadsheet"
+        )
+        self._worksheet_cache = {}
+        self._header_cache = {}
 
     def ensure_sheet(self, title):
-        try:
-            worksheet = self.book.worksheet(title)
-        except gspread.WorksheetNotFound:
-            worksheet = self.book.add_worksheet(title=title, rows=1000, cols=len(HEADERS[title]) + 6)
-        values = worksheet.get("A1:Z2")
+        worksheet = self._worksheet_cache.get(title)
+        if worksheet is None:
+            try:
+                worksheet = run_gspread_request(
+                    lambda: self.book.worksheet(title),
+                    label=f"open worksheet {title}"
+                )
+            except gspread.WorksheetNotFound:
+                worksheet = run_gspread_request(
+                    lambda: self.book.add_worksheet(title=title, rows=1000, cols=len(HEADERS[title]) + 6),
+                    label=f"create worksheet {title}"
+                )
+            self._worksheet_cache[title] = worksheet
+
+        values = run_gspread_request(
+            lambda: worksheet.get("A1:Z2"),
+            label=f"read headers for {title}"
+        )
         first_row = values[0] if values else []
         if first_row != HEADERS[title]:
-            worksheet.update("A1", [HEADERS[title]])
+            run_gspread_request(
+                lambda: worksheet.update("A1", [HEADERS[title]]),
+                label=f"write headers for {title}"
+            )
+            self._header_cache[title] = list(HEADERS[title])
         return worksheet
 
     def ensure_all(self):
@@ -51,7 +103,10 @@ class SheetsStore:
 
     def get_rows(self, title):
         worksheet = self.ensure_sheet(title)
-        raw_rows = worksheet.get_all_values()
+        raw_rows = run_gspread_request(
+            lambda: worksheet.get_all_values(),
+            label=f"read rows for {title}"
+        )
         rows = []
         for row_index, row in enumerate(raw_rows[1:], start=2):
             payload = {header: (row[idx] if idx < len(row) else "") for idx, header in enumerate(HEADERS[title])}
@@ -61,15 +116,21 @@ class SheetsStore:
 
     def append_row(self, title, row):
         worksheet = self.ensure_sheet(title)
-        worksheet.append_row([row.get(header, "") for header in HEADERS[title]], value_input_option="USER_ENTERED")
+        run_gspread_request(
+            lambda: worksheet.append_row([row.get(header, "") for header in HEADERS[title]], value_input_option="USER_ENTERED"),
+            label=f"append row to {title}"
+        )
 
     def update_row(self, title, row_index, payload):
         worksheet = self.ensure_sheet(title)
         end_col = chr(ord("A") + len(HEADERS[title]) - 1)
-        worksheet.update(
-            f"A{row_index}:{end_col}{row_index}",
-            [[payload.get(header, "") for header in HEADERS[title]]],
-            value_input_option="USER_ENTERED",
+        run_gspread_request(
+            lambda: worksheet.update(
+                f"A{row_index}:{end_col}{row_index}",
+                [[payload.get(header, "") for header in HEADERS[title]]],
+                value_input_option="USER_ENTERED",
+            ),
+            label=f"update row in {title}"
         )
 
     def upsert_job(self, payload):
@@ -77,13 +138,19 @@ class SheetsStore:
         for row in rows:
             if row.get("ID_Job") == payload["ID_Job"]:
                 end_col = chr(ord("A") + len(HEADERS["ZED_Jobs"]) - 1)
-                worksheet.update(
-                    f"A{row['_row_index']}:{end_col}{row['_row_index']}",
-                    [[payload.get(header, "") for header in HEADERS["ZED_Jobs"]]],
-                    value_input_option="USER_ENTERED",
+                run_gspread_request(
+                    lambda: worksheet.update(
+                        f"A{row['_row_index']}:{end_col}{row['_row_index']}",
+                        [[payload.get(header, "") for header in HEADERS["ZED_Jobs"]]],
+                        value_input_option="USER_ENTERED",
+                    ),
+                    label="update job row"
                 )
                 return
-        worksheet.append_row([payload.get(header, "") for header in HEADERS["ZED_Jobs"]], value_input_option="USER_ENTERED")
+        run_gspread_request(
+            lambda: worksheet.append_row([payload.get(header, "") for header in HEADERS["ZED_Jobs"]], value_input_option="USER_ENTERED"),
+            label="append job row"
+        )
 
     def write_channels(self, channels):
         worksheet = self.ensure_sheet("ZED_Channels")
@@ -101,8 +168,8 @@ class SheetsStore:
         matrix = [HEADERS["ZED_Channels"]]
         for row in rows:
             matrix.append([row.get(header, "") for header in HEADERS["ZED_Channels"]])
-        worksheet.clear()
-        worksheet.update("A1", matrix)
+        run_gspread_request(lambda: worksheet.clear(), label="clear ZED_Channels")
+        run_gspread_request(lambda: worksheet.update("A1", matrix), label="rewrite ZED_Channels")
 
     def import_members(self, members):
         contacts, contacts_ws = self.get_rows("ZED_Contacts")
@@ -195,8 +262,14 @@ class SheetsStore:
                 "Updated_At": timestamp,
             }
 
-            contacts_ws.append_row([contact_row.get(header, "") for header in HEADERS["ZED_Contacts"]], value_input_option="USER_ENTERED")
-            accounts_ws.append_row([account_row.get(header, "") for header in HEADERS["ZED_Accounts"]], value_input_option="USER_ENTERED")
+            run_gspread_request(
+                lambda: contacts_ws.append_row([contact_row.get(header, "") for header in HEADERS["ZED_Contacts"]], value_input_option="USER_ENTERED"),
+                label="append imported contact"
+            )
+            run_gspread_request(
+                lambda: accounts_ws.append_row([account_row.get(header, "") for header in HEADERS["ZED_Accounts"]], value_input_option="USER_ENTERED"),
+                label="append imported account"
+            )
             contacts_by_id[contact_id] = contact_row
             if tg_user_id:
                 by_user_id[tg_user_id] = account_row
