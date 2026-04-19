@@ -3,3 +3,4 @@ gspread==6.2.1
 google-auth==2.38.0
 Telethon==1.42.0
 pytz==2024.2
+python-dotenv==1.0.1

@@ -4,9 +4,11 @@ import os
 import re
 import signal
 import threading
+from pathlib import Path
 from datetime import datetime, timezone
 
 from flask import Flask, jsonify, request
+from dotenv import load_dotenv
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 
@@ -15,6 +17,7 @@ from fetch_runtime import execute_sheet_actions, fetch_messages_to_sheet
 from member_fetcher import fetch_members
 from sheets_store import SheetsStore, make_id
 
+load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 
 app = Flask(__name__)
 JOBS = {}
