@@ -12,7 +12,7 @@ Add a public-facing "available exams" overview page modeled after the attached m
 - Below the title, six cards are laid out in a responsive 3×2 grid (1ère, 2ème, 3ème / 4ème, 5ème, 6ème Année):
   - **1ère / 2ème / 3ème Année cards** show a simple module list with a single green check or empty checkbox next to each module name.
   - **4ème / 5ème / 6ème Année cards** show a matrix: one row per module, seven columns — `R1`, `R2`, `R3`, `ECOS R1`, `ECOS R2`, `ECOS R3`, `Ratrpg` — each cell is a green check or empty checkbox.
-- A cell/row is "checked" **only when** at least one exam row exists for that (Year, Wilaya, Level, Module, and the relevant Rotation/Period slot) with `Status = ✅ Completed` (i.e., `Quiz_Tbl` present). All other states (Pending, New, Missing, blank) render as empty.
+- A cell/row is "checked" **only when** at least one exam row exists for that (Year, Wilaya, Level, Module, and the relevant Rotation/Period slot) with `Status = Completed` (i.e., `Quiz_Tbl` present). All other states (Pending, New, Missing, blank) render as empty.
 - Module lists inside each card are built dynamically from the sheet: every module that has any row for that Year+Wilaya+Level appears, checked or not, sorted alphabetically. There is no hardcoded module list.
 - Column→cell mapping for years 4–6:
   - `R1` / `R2` / `R3` → `Rotation = R1/R2/R3` AND `Period` is not `ECOS` and not `Ratrpg`

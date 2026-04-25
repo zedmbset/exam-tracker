@@ -1,8 +1,8 @@
-﻿# Exam Tracker - Database Schema
+# Exam Tracker - Database Schema
 
 This file is the authoritative technical reference for the Google Sheet database used by the Exam Tracker app.
 
-Each exam is one row in the `Exams_Tracking` tab. The current app expects 20 columns (A-T).
+Each exam is one row in the `Exams_Tracking` tab. `ExamSession` is now the authoritative session field and replaces the old `Rotation` + `Period` pair.
 
 ## Main Runtime Columns
 
@@ -12,22 +12,41 @@ Each exam is one row in the `Exams_Tracking` tab. The current app expects 20 col
 | B | 1 | Wilaya | Faculty / wilaya |
 | C | 2 | Year | Exam year |
 | D | 3 | Level | Student level |
-| E | 4 | Rotation | Rotation code |
-| F | 5 | Period | Period code |
-| G | 6 | categoryId | Module identifier(s); composed exams store multiple IDs separated by commas |
-| H | 7 | Module | Module name shown in the app |
-| I | 8 | Start | Work start date |
-| J | 9 | End | Work end date |
-| K | 10 | ExamDate | Real exam date |
-| L | 11 | Status | Auto-maintained workflow status derived from `ExamDate`, `OrigPDF`, and `Quiz_Tbl` |
-| M | 12 | OrigPDF | Original exam PDF Drive URL |
-| N | 13 | AffichagePDF | Affichage PDF Drive URL |
-| O | 14 | Quiz_Tbl | Final Excel table Drive URL |
-| P | 15 | Membre | JSON history of member participation by Gmail and step activity |
-| Q | 16 | Tags | JSON metadata |
-| R | 17 | Quiz_Link | MBset quiz URL |
-| S | 18 | Admin_Report | Generated Admin PDF URL |
-| T | 19 | Public_Report | Generated Public PDF URL |
+| E | 4 | ExamSession | Canonical compact session code |
+| F | 5 | categoryId | Module identifier(s); composed exams store multiple IDs separated by commas |
+| G | 6 | Module | Module name shown in the app |
+| H | 7 | Start | Work start date |
+| I | 8 | End | Work end date |
+| J | 9 | ExamDate | Real exam date |
+| K | 10 | Status | Auto-maintained workflow status derived from `ExamDate`, `OrigPDF`, and `Quiz_Tbl` |
+| L | 11 | OrigPDF | Original exam PDF Drive URL |
+| M | 12 | AffichagePDF | Affichage PDF Drive URL |
+| N | 13 | Quiz_Tbl | Final Excel table Drive URL |
+| O | 14 | Membre | JSON history of member participation by Gmail and step activity |
+| P | 15 | Tags | JSON metadata |
+| Q | 16 | Quiz_Link | MBset quiz URL |
+| R | 17 | Admin_Report | Generated Admin PDF URL |
+| S | 18 | Public_Report | Generated Public PDF URL |
+
+Deprecated legacy columns:
+- `Rotation`
+- `Period`
+
+## ExamSession Codes
+
+Stored in column `E` (`ExamSession`) as a plain string.
+
+Canonical values:
+- Clinical: `R1-P1`, `R1-P2`, `R1-P3`, `R2-P1`, `R2-P2`, `R2-P3`, `R3-P1`, `R3-P2`, `R3-P3`
+- Clinical with missing legacy period: `R1-UNK`, `R2-UNK`, `R3-UNK`
+- Preclinical: `S1`, `S2`
+- Special: `RTRPG`, `SYNTH`
+
+Rules:
+- `SYNTH` is valid only for `Level = 6A`
+- legacy typo `Syth` is normalized to `SYNTH`
+- legacy `Rtrpg` / `Rattrapage` values are normalized to `RTRPG`
+- UI and backend derive display labels and validation from the shared `src/shared/examSession.js` helper, not from legacy columns
 
 ## Membre History JSON Shape
 
@@ -230,13 +249,14 @@ A row is treated as complete in the main workflow when these required items exis
 
 ## Status Automation
 
-`Status` is written directly into the sheet, but it is fully derived by the app and should not be edited manually.
+`Status` is written directly into the sheet and is normally derived by the app. One manual override is supported: a row already marked `Completed` is preserved even when `Quiz_Tbl` is empty.
 
 Automatic rules:
-- `✅ Completed`: `Quiz_Tbl` exists
-- `🕒 Pending`: `OrigPDF` exists and `Quiz_Tbl` is still empty
-- `🆕 New Exam`: exam date is today/past, both `OrigPDF` and `Quiz_Tbl` are empty, and the exam is 0 to 15 days old
-- `✖️ Missing`: exam date is today/past, both `OrigPDF` and `Quiz_Tbl` are empty, and the exam is more than 15 days old
+- `Completed`: `Quiz_Tbl` exists
+- manual `Completed`: current `Status` is `Completed` and `Quiz_Tbl` is empty; preserved by app sync and batch refresh
+- `Pending`: `OrigPDF` exists and `Quiz_Tbl` is still empty
+- `New Exam`: exam date is today/past, both `OrigPDF` and `Quiz_Tbl` are empty, and the exam is 0 to 15 days old
+- `Missing`: exam date is today/past, both `OrigPDF` and `Quiz_Tbl` are empty, and the exam is more than 15 days old
 - empty status: exam date is in the future, blank, or invalid
 
 ## Link Ownership
@@ -251,5 +271,5 @@ Automatic rules:
 ## Notes For Implementers
 
 - If you add a new file/link field, update both `public/exam.html` and this schema file.
-- Report payloads are shaped in `public/exam.html` and normalized in `reports/reportPdfShared.js`.
+- Report payloads are shaped in `public/exam.html` and normalized in `src/server/reports/reportPdfShared.js`.
 - `AffichagePDF` should be treated as an optional document link, not as a required completion field.

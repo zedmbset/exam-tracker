@@ -4,7 +4,11 @@
   "description": "Backend server for Exam Tracker app",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "worker": "python workers/telegram/worker.py",
+    "dev:local": "powershell -ExecutionPolicy Bypass -File ./scripts/start-local.ps1",
+    "migrate:exam-session": "node scripts/backfill-exam-session.js",
+    "normalize:status": "node scripts/normalize-status-column.js"
   },
   "dependencies": {
     "@replit/connectors-sdk": "^0.4.0",

@@ -1,0 +1,2945 @@
+﻿const API = "";
+
+      const COLS = {
+        ID_Exams: 0, Wilaya: 1, Year: 2, Level: 3, ExamSession: 4, Rotation: 4, Period: 5,
+        categoryId: 6, Module: 7, Start: 8, End: 9, ExamDate: 10, Status: 11,
+        OrigPDF: 12, AffichagePDF: 13, Quiz_Tbl: 14, Membre: 15, Tags: 16, Quiz_Link: 17,
+        Admin_Report: 18, Public_Report: 19, Note: 20,
+      };
+
+      const STATUS_COMPLETED = ExamStatusUtils.STATUS_COMPLETED;
+      const STATUS_PENDING = ExamStatusUtils.STATUS_PENDING;
+      const STATUS_NEW_EXAM = ExamStatusUtils.STATUS_NEW_EXAM;
+      const STATUS_MISSING = ExamStatusUtils.STATUS_MISSING;
+      const EXAM_STATUS_OPTIONS = ExamStatusUtils.STATUS_OPTIONS;
+
+      function normalizeStatusValue(value) {
+        return ExamStatusUtils.normalizeStatusValue(value);
+      }
+
+      let sheetData = [];
+      let headers = [];
+      let headerRow = 1;
+      let activeRow = null;
+      let pendingOrigPdfFile = null;
+      let pendingAffichagePdfFile = null;
+      let googleUser = null;
+      let googleClientId = "";
+      let noteColumnPendingPersist = false;
+      let examSessionColumnPendingPersist = false;
+      let noteColumnWarned = false;
+      let noteEntriesState = [];
+      let noteEntryCounter = 0;
+      let subcategoriesState = [];
+      let draggedSubcategoryId = null;
+      let composedSubmodulesState = [];
+      let draggedComposedSubmoduleId = null;
+      const SUBCATEGORY_CATALOG = [
+        { name: "Anatomie", modules: ["unit1", "unit2", "unit3", "unit4", "unit5"], levels: [2] },
+        { name: "Biochimie", modules: ["unit2", "unit3", "unit4"], levels: [2] },
+        { name: "Biophysique", modules: ["unit1", "unit5"], levels: [2] },
+        { name: "Histologie", modules: ["unit1", "unit2", "unit3", "unit4", "unit5"], levels: [2] },
+        { name: "Physiologie", modules: ["unit1", "unit2", "unit3", "unit4", "unit5"], levels: [2] },
+        { name: "Biochimie", modules: ["unit1", "unit2", "unit3", "unit4"], levels: [3] },
+        { name: "Physiopathologie", modules: ["unit1", "unit2", "unit3", "unit4"], levels: [3] },
+        { name: "Psychologie medicale", modules: ["unit1"], levels: [3] },
+        { name: "Radiologie", modules: ["unit1", "unit2", "unit3", "unit4"], levels: [3] },
+        { name: "Semiologie", modules: ["unit1", "unit2", "unit3", "unit4"], levels: [3] },
+        { name: "Biologie", modules: ["residanat"], levels: [7] },
+        { name: "Medicale", modules: ["residanat"], levels: [7] },
+        { name: "Chirurgie", modules: ["residanat"], levels: [7] },
+      ];
+      const COMPOSED_EXAM_CATALOG = [
+        {
+          wilaya: "constantine",
+          module: "Appareil Locomoteur",
+          categoryIds: ["Cnst_ORTHOPEDIE", "Cnst_MPR", "Cnst_RHUMATOLOGIE"],
+          submodules: [
+            { name: "Orthopédie", categoryId: "Cnst_ORTHOPEDIE" },
+            { name: "MPR", categoryId: "Cnst_MPR" },
+            { name: "Rhumatologie", categoryId: "Cnst_RHUMATOLOGIE" },
+          ],
+        },
+        {
+          wilaya: "constantine",
+          module: "Onco-Hématologie",
+          categoryIds: ["Cnst_HEMATOLOGIE", "Cnst_ONCOLOGIE_MEDICALE"],
+          submodules: [
+            { name: "Hématologie", categoryId: "Cnst_HEMATOLOGIE" },
+            { name: "Oncologie médicale", categoryId: "Cnst_ONCOLOGIE_MEDICALE" },
+          ],
+        },
+        {
+          wilaya: "constantine",
+          module: "Urologie-Néphrologie",
+          categoryIds: ["Cnst_NEPHROLOGIE", "Cnst_UROLOGIE"],
+          submodules: [
+            { name: "Néphrologie", categoryId: "Cnst_NEPHROLOGIE" },
+            { name: "Urologie", categoryId: "Cnst_UROLOGIE" },
+          ],
+        },
+        {
+          wilaya: "setif",
+          module: "Appareil Locomoteur",
+          categoryIds: ["Setif21", "Setif29", "Setif36"],
+          submodules: [
+            { name: "MPR", categoryId: "Setif21" },
+            { name: "Orthopédie", categoryId: "Setif29" },
+            { name: "Rhumatologie", categoryId: "Setif36" },
+          ],
+        },
+        {
+          wilaya: "setif",
+          module: "Onco-Hématologie",
+          categoryIds: ["Setif16", "Setif26"],
+          submodules: [
+            { name: "Hématologie", categoryId: "Setif16" },
+            { name: "Oncologie médicale", categoryId: "Setif26" },
+          ],
+        },
+        {
+          wilaya: "setif",
+          module: "Urologie-Néphrologie",
+          categoryIds: ["Setif25", "Setif48"],
+          submodules: [
+            { name: "Néphrologie", categoryId: "Setif25" },
+            { name: "Urologie", categoryId: "Setif48" },
+          ],
+        },
+      ];
+
+      // Google Auth
+      function handleCredentialResponse(response) {
+        try {
+          const payload = JSON.parse(atob(response.credential.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+          googleUser = { email: payload.email, name: payload.name, picture: payload.picture || "" };
+          localStorage.setItem("examTrackerUser", JSON.stringify(googleUser));
+        } catch (e) { console.error("Auth decode error", e); return; }
+        document.getElementById("signInScreen").style.display = "none";
+        document.getElementById("appShell").style.display = "block";
+        updateUserBadge();
+        boot();
+      }
+
+      async function initGoogleAuth() {
+        try {
+          const cfg = await (await fetch(`${API}/api/config`)).json();
+          googleClientId = cfg.googleClientId || "";
+        } catch (e) {}
+        const stored = localStorage.getItem("examTrackerUser");
+        if (stored) {
+          try {
+            googleUser = JSON.parse(stored);
+            document.getElementById("signInScreen").style.display = "none";
+            document.getElementById("appShell").style.display = "block";
+            updateUserBadge(); boot(); return;
+          } catch (e) { localStorage.removeItem("examTrackerUser"); }
+        }
+        document.getElementById("signInScreen").style.display = "flex";
+        if (!googleClientId || googleClientId === "YOUR_CLIENT_ID_HERE") {
+          document.getElementById("googleSignInBtn").innerHTML = '<p style="color:var(--red-text);font-size:12px;">Warning: Client ID not configured.</p>';
+          return;
+        }
+        google.accounts.id.initialize({ client_id: googleClientId, callback: handleCredentialResponse });
+        google.accounts.id.renderButton(document.getElementById("googleSignInBtn"), { type: "standard", size: "large", theme: "outline", text: "signin_with", shape: "rectangular", width: 280 });
+      }
+
+      function updateUserBadge() {
+        if (!googleUser) return;
+        document.getElementById("userBadge").innerHTML =
+          (googleUser.picture ? `<img src="${googleUser.picture}" alt="">` : "") +
+          `<span>${googleUser.email}</span>` +
+          `<button class="signout-btn" onclick="signOut()">Sign out</button>`;
+      }
+      function signOut() {
+        googleUser = null;
+        localStorage.removeItem("examTrackerUser");
+        location.reload();
+      }
+
+      // Boot
+      async function boot() {
+        const params = new URLSearchParams(location.search);
+        const id = decodeURIComponent(params.get("id") || "");
+        if (!id) { showError("No ID provided", "The URL is missing the exam ID parameter."); return; }
+        try { const cfg = await (await fetch(`${API}/api/config`)).json(); headerRow = cfg.headerRow || 1; } catch (e) {}
+        await loadAndFind(id);
+      }
+
+      async function loadAndFind(id) {
+        try {
+          const data = await (await fetch(`${API}/api/sheet`)).json();
+          if (data.error) throw new Error(data.error);
+          const rows = data.values || [];
+          const hi = headerRow - 1;
+          headers = rows[hi] || [];
+          sheetData = rows.slice(hi + 1).map((r, i) => {
+            while (r.length < headers.length) r.push("");
+            return { _rowIndex: hi + 2 + i, cells: r };
+          });
+          const noteColumnInserted = ensureLocalNoteColumn();
+          const idIdx = headers.findIndex(h => h && h.toLowerCase().replace(/[\s_]/g, "") === "idexams");
+          let found = null;
+          if (idIdx >= 0) found = sheetData.find(r => (r.cells[idIdx] || "").trim() === id.trim());
+          if (!found && !isNaN(Number(id))) found = sheetData.find(r => r._rowIndex === Number(id));
+          if (!found) { showError("Exam not found", `No exam found with ID "${id}". The link may be invalid.`); return; }
+          activeRow = found;
+          const needsStatusSync = syncDerivedStatus(activeRow);
+          renderExam(found);
+          if (noteColumnInserted && !noteColumnWarned) {
+            noteColumnWarned = true;
+            notify('The "Note" column is missing in the sheet header. It will be created automatically the next time you save Step 1.', "info");
+          }
+          if (needsStatusSync) {
+            writeSheet().catch(error => console.error("Initial status sync failed", error));
+          }
+        } catch (e) { showError("Connection error", e.message); }
+      }
+
+      // Helpers
+      function normalizeHeaderName(value) {
+        return String(value || "").toLowerCase().replace(/[\s_]/g, "");
+      }
+
+      function normalizeTextToken(value) {
+        return String(value || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "");
+      }
+
+      function getModuleCategoryKey(row = activeRow) {
+        const normalizedModule = normalizeTextToken(cell(row, "Module"));
+        const unitMatch = normalizedModule.match(/^unite?([1-5]).*$/);
+        if (unitMatch) return `unit${unitMatch[1]}`;
+        if (/^residanat.*$/.test(normalizedModule)) return "residanat";
+        return "";
+      }
+
+      function getLevelNumber(row = activeRow) {
+        const rawLevel = String(cell(row, "Level") || "").trim();
+        const match = rawLevel.match(/^(\d+)/);
+        return match ? parseInt(match[1], 10) : NaN;
+      }
+
+      function colIdx(name) {
+        const exact = headers.indexOf(name);
+        if (exact >= 0) return exact;
+
+        const normalizedName = normalizeHeaderName(name);
+        const normalizedMatch = headers.findIndex(h => normalizeHeaderName(h) === normalizedName);
+        if (normalizedMatch >= 0) return normalizedMatch;
+
+        const fallbackIdx = COLS[name];
+        if (typeof fallbackIdx === "number") {
+          const headerAtFallback = headers[fallbackIdx];
+          if (!headerAtFallback || normalizeHeaderName(headerAtFallback) === normalizedName) {
+            return fallbackIdx;
+          }
+        }
+
+        return -1;
+      }
+      function hasActualColumn(name) {
+        return headers.some(h => normalizeHeaderName(h) === normalizeHeaderName(name));
+      }
+      function ensureExamSessionColumn() {
+        if (hasActualColumn("ExamSession")) {
+          examSessionColumnPendingPersist = false;
+          return false;
+        }
+        const levelIdx = colIdx("Level");
+        const insertAt = levelIdx >= 0 ? levelIdx + 1 : headers.length;
+        headers.splice(insertAt, 0, "ExamSession");
+        sheetData.forEach(row => {
+          if (Array.isArray(row?.cells)) {
+            row.cells.splice(insertAt, 0, "");
+          }
+        });
+        examSessionColumnPendingPersist = true;
+        return true;
+      }
+      function ensureLocalNoteColumn() {
+        if (hasActualColumn("Note")) {
+          noteColumnPendingPersist = false;
+          return false;
+        }
+        const publicReportIdx = colIdx("Public_Report");
+        const insertAt = publicReportIdx >= 0 ? publicReportIdx + 1 : headers.length;
+        headers.splice(insertAt, 0, "Note");
+        sheetData.forEach(row => {
+          if (Array.isArray(row?.cells)) {
+            row.cells.splice(insertAt, 0, "");
+          }
+        });
+        noteColumnPendingPersist = true;
+        return true;
+      }
+      async function persistHeaders() {
+        const r = await fetch(`${API}/api/sheet/${headerRow}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cells: headers }),
+        });
+        const d = await r.json();
+        if (d.error) throw new Error(d.error);
+      }
+      async function ensureNoteColumnPersisted() {
+        if (!noteColumnPendingPersist && !examSessionColumnPendingPersist) return;
+        await persistHeaders();
+        noteColumnPendingPersist = false;
+        examSessionColumnPendingPersist = false;
+      }
+      function cell(row, n) { const i = colIdx(n); return i >= 0 ? row.cells[i] || "" : ""; }
+      function setCell(row, n, v) { const i = colIdx(n); if (i >= 0) { while (row.cells.length <= i) row.cells.push(""); row.cells[i] = v; } }
+      function getExamSessionForRow(row) {
+        if (!row || !window.ExamSessionUtils) return null;
+        return window.ExamSessionUtils.parseExamSession(cell(row, "ExamSession"), {
+          level: cell(row, "Level"),
+          legacyRotation: cell(row, "Rotation"),
+          legacyPeriod: cell(row, "Period"),
+        });
+      }
+      function getSessionShortLabel(row) {
+        return getExamSessionForRow(row)?.shortLabel || "";
+      }
+      function getSessionLongLabel(row) {
+        return getExamSessionForRow(row)?.label || "";
+      }
+      function getSessionRef(row) {
+        return getExamSessionForRow(row)?.ref || "";
+      }
+      function getPeriodLabelForTags(row) {
+        return getExamSessionForRow(row)?.periodLabelForTags || "";
+      }
+      function getSessionFamilyValue(session) {
+        if (!session) return "";
+        if (session.phase === "clinical") return "clinical";
+        if (session.phase === "preclinical") return "preclinical";
+        if (session.phase === "special" && session.specialType === "RTRPG") return "rattrapage";
+        if (session.phase === "special" && session.specialType === "SYNTH") return "synthese";
+        return "";
+      }
+      function updateExamSessionFormState() {
+        const family = document.getElementById("examSession_family")?.value || "";
+        const clinical = document.getElementById("examSession_clinical");
+        const preclinical = document.getElementById("examSession_preclinical");
+        const synthHint = document.getElementById("examSession_synth_hint");
+        if (clinical) clinical.style.display = family === "clinical" ? "contents" : "none";
+        if (preclinical) preclinical.style.display = family === "preclinical" ? "contents" : "none";
+        if (synthHint) synthHint.style.display = family === "synthese" ? "block" : "none";
+        refreshPromptText();
+      }
+      function readExamSessionFromForm(row) {
+        if (!window.ExamSessionUtils) throw new Error("ExamSession helper failed to load.");
+        const family = document.getElementById("examSession_family")?.value || "";
+        const level = cell(row, "Level");
+        return window.ExamSessionUtils.buildExamSession({
+          family,
+          level,
+          rotation: document.getElementById("examSession_rotation")?.value || "",
+          period: document.getElementById("examSession_period")?.value || "",
+          semester: document.getElementById("examSession_semester")?.value || "",
+          specialType: family === "rattrapage" ? "RTRPG" : family === "synthese" ? "SYNTH" : "",
+        }, { level });
+      }
+
+      function escapeHtml(value) {
+        return String(value || "").replace(/[&<>"']/g, char => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          "\"": "&quot;",
+          "'": "&#39;",
+        }[char]));
+      }
+
+      function parseStructuredNotes(rawValue) {
+        return String(rawValue || "")
+          .replace(/\r\n/g, "\n")
+          .split(/\n\s*\n+/)
+          .map(block => block.replace(/\s+$/g, ""))
+          .filter(block => block.trim().length > 0)
+          .map(text => {
+            const lines = text.split("\n");
+            const reason = (lines.shift() || "").trim();
+            const detail = lines.join("\n").trim();
+            return {
+            id: `note_${noteEntryCounter += 1}`,
+            reason,
+            detail,
+          };
+          });
+      }
+
+      function serializeStructuredNotes(entries) {
+        return entries
+          .map(entry => {
+            const reason = String(entry?.reason || "").replace(/\r\n/g, "\n").trim();
+            const detail = String(entry?.detail || "").replace(/\r\n/g, "\n").trim();
+            return [reason, detail].filter(Boolean).join("\n");
+          })
+          .filter(Boolean)
+          .join("\n\n");
+      }
+
+      function renderNoteCards() {
+        const host = document.getElementById("noteCardsHost");
+        if (!host) return;
+        if (!noteEntriesState.length) {
+          host.innerHTML = "";
+          return;
+        }
+        host.innerHTML = `<div class="note-cards">${noteEntriesState.map(entry => `
+          <article class="note-card">
+            <div class="note-card-top">
+              <button type="button" class="note-card-remove" data-note-remove="${escapeHtml(entry.id)}">Remove</button>
+            </div>
+            <div class="note-card-fields">
+              <div class="field-hint" style="margin:0;">Reason</div>
+              <input
+                type="text"
+                class="note-card-reason"
+                data-note-reason="${escapeHtml(entry.id)}"
+                placeholder="Reason"
+                value="${escapeHtml(entry.reason || "")}">
+              <div class="field-hint" style="margin:0;">Detail</div>
+              <textarea
+                class="note-card-detail"
+                data-note-detail="${escapeHtml(entry.id)}"
+                placeholder="Detail"
+              >${escapeHtml(entry.detail || "")}</textarea>
+            </div>
+          </article>
+        `).join("")}</div>`;
+      }
+
+      function addNoteCard() {
+        noteEntriesState.push({
+          id: `note_${noteEntryCounter += 1}`,
+          reason: "",
+          detail: "",
+        });
+        renderNoteCards();
+        const host = document.getElementById("noteCardsHost");
+        const editors = host ? [...host.querySelectorAll("[data-note-reason]")] : [];
+        const last = editors[editors.length - 1];
+        if (last) {
+          last.focus();
+        }
+      }
+
+      function refreshNotePreview() {
+        renderNoteCards();
+      }
+
+      document.addEventListener("input", (event) => {
+        const reasonField = event.target.closest?.("[data-note-reason]");
+        const detailField = event.target.closest?.("[data-note-detail]");
+        const noteId = reasonField?.dataset.noteReason || detailField?.dataset.noteDetail || "";
+        if (!noteId) return;
+        const entry = noteEntriesState.find(item => item.id === noteId);
+        if (!entry) return;
+        if (reasonField) {
+          entry.reason = String(reasonField.value || "");
+        }
+        if (detailField) {
+          entry.detail = String(detailField.value || "");
+        }
+      });
+
+      document.addEventListener("click", (event) => {
+        const removeBtn = event.target.closest?.("[data-note-remove]");
+        if (!removeBtn) return;
+        const noteId = removeBtn.dataset.noteRemove || "";
+        noteEntriesState = noteEntriesState.filter(item => item.id !== noteId);
+        renderNoteCards();
+      });
+
+      function parseMemberHistoryValue(value) {
+        const raw = String(value || "").trim();
+        if (!raw) {
+          return { version: 1, participants: [], updatedAt: "" };
+        }
+
+        if (!(raw.startsWith("{") || raw.startsWith("["))) {
+          return {
+            version: 1,
+            participants: [{ email: raw, name: "", steps: {}, timeline: [] }],
+            updatedAt: "",
+          };
+        }
+
+        try {
+          const parsed = JSON.parse(raw);
+          const sourceParticipants = Array.isArray(parsed)
+            ? parsed
+            : Array.isArray(parsed?.participants)
+              ? parsed.participants
+              : [];
+          const participants = sourceParticipants
+            .map(item => {
+              const email = String(item?.email || "").trim();
+              if (!email) return null;
+              const steps = {};
+              const sourceSteps = item?.steps && typeof item.steps === "object" ? item.steps : {};
+              Object.entries(sourceSteps).forEach(([stepName, stepValue]) => {
+                if (!stepName) return;
+                if (stepValue && typeof stepValue === "object") {
+                  const count = Math.max(1, parseInt(stepValue.count, 10) || 1);
+                  steps[stepName] = {
+                    count,
+                    firstAt: String(stepValue.firstAt || stepValue.lastAt || ""),
+                    lastAt: String(stepValue.lastAt || stepValue.firstAt || ""),
+                  };
+                } else {
+                  steps[stepName] = { count: 1, firstAt: "", lastAt: "" };
+                }
+              });
+              const timeline = Array.isArray(item?.timeline)
+                ? item.timeline
+                    .map(entry => ({
+                      step: String(entry?.step || "").trim(),
+                      at: String(entry?.at || "").trim(),
+                    }))
+                    .filter(entry => entry.step)
+                : [];
+              return {
+                email,
+                name: String(item?.name || "").trim(),
+                steps,
+                timeline,
+              };
+            })
+            .filter(Boolean);
+
+          return {
+            version: 1,
+            participants,
+            updatedAt: String(parsed?.updatedAt || ""),
+          };
+        } catch (e) {
+          return {
+            version: 1,
+            participants: [{ email: raw, name: "", steps: {}, timeline: [] }],
+            updatedAt: "",
+          };
+        }
+      }
+
+      function formatMemberHistorySummary(value) {
+        const history = parseMemberHistoryValue(value);
+        if (!history.participants.length) return "";
+
+        const stepOrder = {
+          "Step 1": 1,
+          "Step 3": 3,
+          "Step 4": 4,
+          "Admin report": 5,
+          "Public report": 6,
+        };
+
+        return history.participants.map(participant => {
+          const stepLabels = Object.entries(participant.steps || {})
+            .sort((a, b) => (stepOrder[a[0]] || 99) - (stepOrder[b[0]] || 99) || a[0].localeCompare(b[0]))
+            .map(([stepName, stepInfo]) => {
+              const count = Math.max(1, parseInt(stepInfo?.count, 10) || 1);
+              return count > 1 ? `${stepName} x${count}` : stepName;
+            });
+          return stepLabels.length
+            ? `${participant.email} (${stepLabels.join(", ")})`
+            : participant.email;
+        }).join(" | ");
+      }
+
+      function recordMemberActivity(row, email, stepName, name = "") {
+        const cleanEmail = String(email || "").trim();
+        const cleanStepName = String(stepName || "").trim();
+        if (!cleanEmail || !cleanStepName) return;
+
+        const history = parseMemberHistoryValue(cell(row, "Membre"));
+        const now = new Date().toISOString();
+        let participant = history.participants.find(item => item.email.toLowerCase() === cleanEmail.toLowerCase());
+
+        if (!participant) {
+          participant = {
+            email: cleanEmail,
+            name: String(name || "").trim(),
+            steps: {},
+            timeline: [],
+          };
+          history.participants.push(participant);
+        } else if (!participant.name && name) {
+          participant.name = String(name).trim();
+        }
+
+        const currentStep = participant.steps[cleanStepName] || { count: 0, firstAt: "", lastAt: "" };
+        const nextCount = Math.max(0, parseInt(currentStep.count, 10) || 0) + 1;
+        participant.steps[cleanStepName] = {
+          count: nextCount,
+          firstAt: currentStep.firstAt || now,
+          lastAt: now,
+        };
+        participant.timeline = Array.isArray(participant.timeline) ? participant.timeline : [];
+        participant.timeline.push({ step: cleanStepName, at: now });
+        history.updatedAt = now;
+
+        setCell(row, "Membre", JSON.stringify(history));
+      }
+
+      function parseSubcategoriesValue(value) {
+        if (Array.isArray(value)) return value;
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          if (!trimmed || trimmed === "[]") return [];
+          try {
+            const parsed = JSON.parse(trimmed);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (e) {
+            return [];
+          }
+        }
+        return [];
+      }
+
+      function parseCategoryIdList(value) {
+        return String(value || "")
+          .split(",")
+          .map(item => String(item || "").trim())
+          .filter(Boolean);
+      }
+
+      function normalizeCategoryIdSet(value) {
+        return parseCategoryIdList(value)
+          .map(item => item.toUpperCase())
+          .sort()
+          .join("|");
+      }
+
+      function parseComposedSubmodulesValue(value) {
+        if (Array.isArray(value)) return value;
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          if (!trimmed || trimmed === "[]") return [];
+          try {
+            const parsed = JSON.parse(trimmed);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (e) {
+            return [];
+          }
+        }
+        return [];
+      }
+
+      function getStoredSubcategories(row = activeRow) {
+        return parseSubcategoriesValue(parseTags(row).subcategories);
+      }
+
+      function getStoredComposedSubmodules(row = activeRow) {
+        return parseComposedSubmodulesValue(parseTags(row).composedSubmodules);
+      }
+
+      function getComposedExamDefinition(row = activeRow) {
+        const ids = parseCategoryIdList(cell(row, "categoryId"));
+        if (ids.length <= 1) return null;
+        const wilaya = normalizeTextToken(cell(row, "Wilaya"));
+        const normalizedIds = normalizeCategoryIdSet(ids.join(","));
+        return COMPOSED_EXAM_CATALOG.find(item =>
+          normalizeTextToken(item.wilaya) === wilaya &&
+          normalizeCategoryIdSet(item.categoryIds.join(",")) === normalizedIds
+        ) || null;
+      }
+
+      function isComposedExam(row = activeRow) {
+        return !!getComposedExamDefinition(row);
+      }
+
+      function buildDefaultComposedSubmodules(row = activeRow) {
+        const definition = getComposedExamDefinition(row);
+        if (!definition) return [];
+        return definition.submodules.map(item => ({
+          id: Date.now() + Math.random(),
+          name: item.name,
+          categoryId: item.categoryId,
+          range: "",
+        }));
+      }
+
+      function mergeComposedSubmoduleSets(savedSubmodules, defaultSubmodules) {
+        const merged = [];
+        const seen = new Set();
+        const addItem = (item) => {
+          const categoryId = String(item.categoryId || "").trim();
+          const normalizedId = categoryId.toUpperCase();
+          if (!normalizedId || seen.has(normalizedId)) return;
+          seen.add(normalizedId);
+          merged.push({
+            id: Date.now() + Math.random(),
+            name: String(item.name || "").trim(),
+            categoryId,
+            range: String(item.range || "").trim(),
+          });
+        };
+
+        savedSubmodules.forEach(addItem);
+        defaultSubmodules.forEach(addItem);
+        return merged;
+      }
+
+      function getDefaultSubcategoriesForRow(row = activeRow) {
+        const moduleKey = getModuleCategoryKey(row);
+        const levelNumber = getLevelNumber(row);
+        if (!moduleKey || Number.isNaN(levelNumber)) return [];
+
+        return SUBCATEGORY_CATALOG
+          .filter(item => item.modules.includes(moduleKey) && item.levels.includes(levelNumber))
+          .map(item => ({ name: item.name, range: "" }));
+      }
+
+      function shouldShowSubcategoriesForRow(row = activeRow) {
+        return !!getModuleCategoryKey(row);
+      }
+
+      function mergeSubcategorySets(savedSubcategories, defaultSubcategories) {
+        const merged = [];
+        const seen = new Set();
+        const addItem = (item) => {
+          const normalizedName = normalizeTextToken(item.name);
+          if (!normalizedName || seen.has(normalizedName)) return;
+          seen.add(normalizedName);
+          merged.push({
+            id: item.id || Date.now() + Math.random(),
+            name: String(item.name || "").trim(),
+            range: String(item.range || "").trim(),
+          });
+        };
+
+        savedSubcategories.forEach(addItem);
+        defaultSubcategories.forEach(addItem);
+        return merged;
+      }
+
+      function parseTags(row) {
+        let tags = {};
+        const raw = cell(row, "Tags");
+        if (raw) { try { tags = JSON.parse(raw); } catch(e) {} }
+        return tags;
+      }
+      function setTags(row, tags) {
+        setCell(row, "Tags", JSON.stringify(tags));
+      }
+      function getStoredReportLink(row, type) {
+        const colName = type === "admin" ? "Admin_Report" : "Public_Report";
+        const direct = cell(row, colName);
+        if (direct) return direct;
+        const tags = parseTags(row);
+        return tags.reportLinks?.[type] || "";
+      }
+      function setStoredReportLink(row, type, url) {
+        const colName = type === "admin" ? "Admin_Report" : "Public_Report";
+        if (colIdx(colName) >= 0) {
+          setCell(row, colName, url);
+          return;
+        }
+        const tags = parseTags(row);
+        tags.reportLinks = { ...(tags.reportLinks || {}), [type]: url };
+        setTags(row, tags);
+      }
+
+      function parseAnnotations(str) {
+        const missingPos = [], schemaQsts = [];
+        if (!str || !str.trim()) return { missingPos, schemaQsts };
+        str.split(',').forEach(part => {
+          const m = part.trim().match(/^(\d+)(?:-(\d+))?([ms])$/i);
+          if (!m) return;
+          const from = parseInt(m[1]), to = m[2] ? parseInt(m[2]) : from;
+          const tag = m[3].toLowerCase();
+          for (let i = from; i <= to; i++) {
+            if (tag === 'm') missingPos.push(i);
+            else if (tag === 's') schemaQsts.push(i);
+          }
+        });
+        return { missingPos, schemaQsts };
+      }
+
+      function annotationsToString(tags) {
+        const entries = [];
+        (tags.missingPos || []).forEach(p => entries.push({ pos: +p, tag: 'm' }));
+        (tags.schemaQsts  || []).forEach(p => entries.push({ pos: +p, tag: 's' }));
+        entries.sort((a, b) => a.pos - b.pos);
+        return entries.map(e => e.pos + e.tag).join(', ');
+      }
+
+      function parseQuestionRangeList(value, maxQuestionNumber) {
+        const text = String(value || "").trim();
+        if (!text) return { ok: false, error: "Missing range", values: [] };
+        const values = [];
+        const seen = new Set();
+        for (const rawPart of text.split(",")) {
+          const part = rawPart.trim();
+          if (!part) continue;
+          const match = part.match(/^(\d+)(?:-(\d+))?$/);
+          if (!match) return { ok: false, error: `Invalid range "${part}"`, values: [] };
+          const start = parseInt(match[1], 10);
+          const end = match[2] ? parseInt(match[2], 10) : start;
+          if (start < 1 || end < start) return { ok: false, error: `Invalid range "${part}"`, values: [] };
+          if (maxQuestionNumber && end > maxQuestionNumber) return { ok: false, error: `Range "${part}" exceeds total questions`, values: [] };
+          for (let num = start; num <= end; num++) {
+            if (!seen.has(num)) {
+              seen.add(num);
+              values.push(num);
+            }
+          }
+        }
+        return values.length ? { ok: true, values } : { ok: false, error: "Missing range", values: [] };
+      }
+
+      function validateComposedSubmodulesState(items, nQst, missingPos) {
+        const maxQuestionNumber = parseInt(nQst, 10);
+        if (!(maxQuestionNumber > 0)) {
+          return { ok: false, message: "Enter the total number of questions before saving composed submodule ranges." };
+        }
+        const missingSet = new Set((missingPos || []).map(num => parseInt(num, 10)).filter(num => Number.isInteger(num)));
+        const seen = new Map();
+        for (const item of items) {
+          if (!String(item.range || "").trim()) {
+            return { ok: false, message: `Range is required for submodule ${item.name}.` };
+          }
+          const parsed = parseQuestionRangeList(item.range, maxQuestionNumber);
+          if (!parsed.ok) {
+            return { ok: false, message: `${item.name}: ${parsed.error}.` };
+          }
+          for (const num of parsed.values) {
+            if (seen.has(num)) {
+              return { ok: false, message: `Question ${num} is assigned to both ${seen.get(num)} and ${item.name}.` };
+            }
+            seen.set(num, item.name);
+          }
+        }
+
+        for (let num = 1; num <= maxQuestionNumber; num++) {
+          if (missingSet.has(num)) continue;
+          if (!seen.has(num)) {
+            return { ok: false, message: `Question ${num} is not covered by any composed submodule range.` };
+          }
+        }
+        return { ok: true };
+      }
+
+      function getCategoryIdForQuestionNum(num, row = activeRow, composedItems = composedSubmodulesState) {
+        const questionNum = parseInt(num, 10);
+        if (!Number.isInteger(questionNum)) return "";
+        if (!isComposedExam(row)) {
+          return parseCategoryIdList(cell(row, "categoryId"))[0] || "";
+        }
+        for (const item of composedItems || []) {
+          const parsed = parseQuestionRangeList(item.range, parseInt(parseTags(row).nQst, 10) || 0);
+          if (!parsed.ok) continue;
+          if (parsed.values.includes(questionNum)) return String(item.categoryId || "").trim();
+        }
+        return "";
+      }
+
+      function applyDerivedQuestionFields(questions, row = activeRow) {
+        const definition = getComposedExamDefinition(row);
+        const defaultCategoryId = parseCategoryIdList(cell(row, "categoryId"))[0] || "";
+        return (questions || []).map(question => {
+          const nextQuestion = { ...question };
+          delete nextQuestion.categoryName;
+          const assignedCategoryId = definition
+            ? getCategoryIdForQuestionNum(nextQuestion.num, row, composedSubmodulesState)
+            : defaultCategoryId;
+          if (assignedCategoryId) nextQuestion.categoryId = assignedCategoryId;
+          return nextQuestion;
+        });
+      }
+
+      function getMissing(row) {
+        const tags = parseTags(row);
+        const m = [];
+        const examSession = getExamSessionForRow(row);
+        if (!cell(row, "OrigPDF"))  m.push("OrigPDF");
+        if (!cell(row, "Quiz_Tbl")) m.push("Quiz_Tbl");
+        if (!tags.nQst)             m.push("N° Qst");
+        if (!examSession || !examSession.isValid) m.push("ExamSession");
+        return m;
+      }
+
+      function getStep1PromptRequirements(row) {
+        const tags = parseTags(row);
+        const examSession = getExamSessionForRow(row);
+        const missing = [];
+        if (!cell(row, "OrigPDF")) missing.push("Original PDF");
+        if (!(cell(row, "ExamDate") || cell(row, "Exam Date"))) missing.push("Exam date");
+        if (!(parseInt(tags.nQst, 10) > 0)) missing.push("Total number of questions");
+        if (!examSession || !examSession.isValid) missing.push("Exam session");
+        if (isComposedExam(row)) {
+          // Prefer the live in-memory state when we're looking at the currently
+          // edited row and the composed submodule editor is mounted. Otherwise
+          // fall back to the persisted tags (e.g. listing rendering for other rows).
+          const editorMounted = !!document.getElementById("composedSubmoduleSection");
+          // When the editor is mounted for the active row, the in-memory
+          // state is authoritative — even when empty — so stale stored
+          // tags cannot mask newly cleared ranges.
+          const useLive = row === activeRow && editorMounted && Array.isArray(composedSubmodulesState);
+          const items = useLive
+            ? composedSubmodulesState.map(item => ({
+                name: String(item.name || "").trim(),
+                categoryId: String(item.categoryId || "").trim(),
+                range: String(item.range || "").trim(),
+              }))
+            : getStoredComposedSubmodules(row);
+          const composedValidation = validateComposedSubmodulesState(items, tags.nQst, tags.missingPos || []);
+          if (!composedValidation.ok) missing.push("Composed submodule ranges");
+        }
+        return {
+          ready: missing.length === 0,
+          missing,
+        };
+      }
+
+      function toDateInputValue(str) {
+        if (!str) return "";
+        str = str.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+        const m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (m) {
+          const a = parseInt(m[1]), b = parseInt(m[2]), yr = m[3];
+          if (b > 12) return `${yr}-${String(a).padStart(2,"0")}-${String(b).padStart(2,"0")}`;
+          if (a > 12) return `${yr}-${String(b).padStart(2,"0")}-${String(a).padStart(2,"0")}`;
+          return `${yr}-${String(a).padStart(2,"0")}-${String(b).padStart(2,"0")}`;
+        }
+        const d = new Date(str);
+        if (!isNaN(d)) return d.toISOString().slice(0, 10);
+        return "";
+      }
+
+      function parseDateOnly(value) {
+        const iso = toDateInputValue(value);
+        if (!iso) return null;
+        const [year, month, day] = iso.split("-").map(Number);
+        return new Date(year, month - 1, day);
+      }
+
+      function getTodayDateOnly() {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      }
+
+      function isPresent(value) {
+        return String(value || "").trim() !== "";
+      }
+
+      function getRawExamDate(row) {
+        return cell(row, "ExamDate") || cell(row, "Exam Date") || "";
+      }
+
+      function deriveStatusForRow(row) {
+        return ExamStatusUtils.deriveEffectiveStatus(row, cell);
+      }
+
+      function syncDerivedStatus(row) {
+        return ExamStatusUtils.syncEffectiveStatus(row, cell, setCell);
+      }
+
+      function getRowStatus(row) {
+        return deriveStatusForRow(row);
+      }
+
+      function tsvToCsv(tsv) {
+        return tsv.trim().split('\n').map(line =>
+          line.split('\t').map(v => {
+            v = v.trim();
+            if (v.includes(',') || v.includes('"') || v.includes('\n')) return '"' + v.replace(/"/g, '""') + '"';
+            return v;
+          }).join(',')
+        ).join('\n');
+      }
+
+      function escapeXml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&apos;");
+      }
+
+      function columnNumberToName(num) {
+        let name = "";
+        while (num > 0) {
+          const rem = (num - 1) % 26;
+          name = String.fromCharCode(65 + rem) + name;
+          num = Math.floor((num - 1) / 26);
+        }
+        return name;
+      }
+
+      function makeCrcTable() {
+        const table = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) {
+          let c = n;
+          for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+          table[n] = c >>> 0;
+        }
+        return table;
+      }
+
+      const CRC32_TABLE = makeCrcTable();
+
+      function crc32(bytes) {
+        let crc = 0 ^ (-1);
+        for (let i = 0; i < bytes.length; i++) {
+          crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ bytes[i]) & 0xFF];
+        }
+        return (crc ^ (-1)) >>> 0;
+      }
+
+      function createStoredZip(files) {
+        const encoder = new TextEncoder();
+        const localParts = [];
+        const centralParts = [];
+        let offset = 0;
+
+        for (const file of files) {
+          const nameBytes = encoder.encode(file.name);
+          const dataBytes = encoder.encode(file.content);
+          const crc = crc32(dataBytes);
+
+          const localHeader = new Uint8Array(30 + nameBytes.length);
+          const localView = new DataView(localHeader.buffer);
+          localView.setUint32(0, 0x04034b50, true);
+          localView.setUint16(4, 20, true);
+          localView.setUint16(6, 0, true);
+          localView.setUint16(8, 0, true);
+          localView.setUint16(10, 0, true);
+          localView.setUint16(12, 0, true);
+          localView.setUint32(14, crc, true);
+          localView.setUint32(18, dataBytes.length, true);
+          localView.setUint32(22, dataBytes.length, true);
+          localView.setUint16(26, nameBytes.length, true);
+          localView.setUint16(28, 0, true);
+          localHeader.set(nameBytes, 30);
+
+          localParts.push(localHeader, dataBytes);
+
+          const centralHeader = new Uint8Array(46 + nameBytes.length);
+          const centralView = new DataView(centralHeader.buffer);
+          centralView.setUint32(0, 0x02014b50, true);
+          centralView.setUint16(4, 20, true);
+          centralView.setUint16(6, 20, true);
+          centralView.setUint16(8, 0, true);
+          centralView.setUint16(10, 0, true);
+          centralView.setUint16(12, 0, true);
+          centralView.setUint16(14, 0, true);
+          centralView.setUint32(16, crc, true);
+          centralView.setUint32(20, dataBytes.length, true);
+          centralView.setUint32(24, dataBytes.length, true);
+          centralView.setUint16(28, nameBytes.length, true);
+          centralView.setUint16(30, 0, true);
+          centralView.setUint16(32, 0, true);
+          centralView.setUint16(34, 0, true);
+          centralView.setUint16(36, 0, true);
+          centralView.setUint32(38, 0, true);
+          centralView.setUint32(42, offset, true);
+          centralHeader.set(nameBytes, 46);
+
+          centralParts.push(centralHeader);
+          offset += localHeader.length + dataBytes.length;
+        }
+
+        const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+        const endRecord = new Uint8Array(22);
+        const endView = new DataView(endRecord.buffer);
+        endView.setUint32(0, 0x06054b50, true);
+        endView.setUint16(4, 0, true);
+        endView.setUint16(6, 0, true);
+        endView.setUint16(8, files.length, true);
+        endView.setUint16(10, files.length, true);
+        endView.setUint32(12, centralSize, true);
+        endView.setUint32(16, offset, true);
+        endView.setUint16(20, 0, true);
+
+        return new Blob([...localParts, ...centralParts, endRecord], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        });
+      }
+
+      function tsvLinesToWorkbookBlob(tableLines) {
+        const rows = tableLines.map(line => line.split("\t"));
+        const maxCols = rows.reduce((max, row) => Math.max(max, row.length), 0) || 1;
+        const lastRef = `${columnNumberToName(maxCols)}${rows.length || 1}`;
+
+        const sheetRows = rows.map((row, rowIndex) => {
+          const cells = row.map((value, colIndex) => {
+            const ref = `${columnNumberToName(colIndex + 1)}${rowIndex + 1}`;
+            return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+          }).join("");
+          return `<row r="${rowIndex + 1}">${cells}</row>`;
+        }).join("");
+
+        const sheetXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+          `<dimension ref="A1:${lastRef}"/>` +
+          `<sheetViews><sheetView workbookViewId="0"/></sheetViews>` +
+          `<sheetFormatPr defaultRowHeight="15"/>` +
+          `<sheetData>${sheetRows}</sheetData>` +
+          `</worksheet>`;
+
+        const workbookXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+          `<sheets><sheet name="QCM" sheetId="1" r:id="rId1"/></sheets>` +
+          `</workbook>`;
+
+        const workbookRelsXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+          `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>` +
+          `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+          `</Relationships>`;
+
+        const relsXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+          `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
+          `</Relationships>`;
+
+        const stylesXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+          `<fonts count="1"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts>` +
+          `<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>` +
+          `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
+          `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
+          `<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>` +
+          `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
+          `</styleSheet>`;
+
+        const contentTypesXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+          `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+          `<Default Extension="xml" ContentType="application/xml"/>` +
+          `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+          `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+          `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+          `</Types>`;
+
+        return createStoredZip([
+          { name: "[Content_Types].xml", content: contentTypesXml },
+          { name: "_rels/.rels", content: relsXml },
+          { name: "xl/workbook.xml", content: workbookXml },
+          { name: "xl/_rels/workbook.xml.rels", content: workbookRelsXml },
+          { name: "xl/worksheets/sheet1.xml", content: sheetXml },
+          { name: "xl/styles.xml", content: stylesXml },
+        ]);
+      }
+
+      function jsonToWorkbookBlob(questions) {
+        const COLS_ORDER = ["cas","num","text","a","b","c","d","e","f","g","correct","exp","hint","categoryId","tagSuggere","year","tag"];
+        const usedKeys = COLS_ORDER.filter(k => questions.some(q => q[k] != null && q[k] !== ""));
+        const header = usedKeys.map(k => /[A-Z]/.test(k) ? k : k.charAt(0).toUpperCase() + k.slice(1));
+        const rows = [header, ...questions.map(q => usedKeys.map(k => {
+          const value = q[k];
+          if (k === "tag" && Array.isArray(value)) return value.join(", ");
+          return String(value ?? "");
+        }))];
+
+        const maxCols = rows[0].length;
+        const lastRef = `${columnNumberToName(maxCols)}${rows.length}`;
+        const sheetRows = rows.map((row, rowIndex) => {
+          const cells = row.map((value, colIndex) => {
+            const ref = `${columnNumberToName(colIndex + 1)}${rowIndex + 1}`;
+            return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+          }).join("");
+          return `<row r="${rowIndex + 1}">${cells}</row>`;
+        }).join("");
+
+        const sheetXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+          `<dimension ref="A1:${lastRef}"/>` +
+          `<sheetViews><sheetView workbookViewId="0"/></sheetViews>` +
+          `<sheetFormatPr defaultRowHeight="15"/>` +
+          `<sheetData>${sheetRows}</sheetData>` +
+          `</worksheet>`;
+
+        const workbookXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+          `<sheets><sheet name="QCM" sheetId="1" r:id="rId1"/></sheets>` +
+          `</workbook>`;
+
+        const workbookRelsXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+          `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>` +
+          `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+          `</Relationships>`;
+
+        const relsXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+          `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
+          `</Relationships>`;
+
+        const stylesXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+          `<fonts count="1"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts>` +
+          `<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>` +
+          `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
+          `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
+          `<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>` +
+          `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
+          `</styleSheet>`;
+
+        const contentTypesXml =
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+          `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+          `<Default Extension="xml" ContentType="application/xml"/>` +
+          `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+          `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+          `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+          `</Types>`;
+
+        return createStoredZip([
+          { name: "[Content_Types].xml", content: contentTypesXml },
+          { name: "_rels/.rels", content: relsXml },
+          { name: "xl/workbook.xml", content: workbookXml },
+          { name: "xl/_rels/workbook.xml.rels", content: workbookRelsXml },
+          { name: "xl/worksheets/sheet1.xml", content: sheetXml },
+          { name: "xl/styles.xml", content: stylesXml },
+        ]);
+      }
+
+      // Extract JSON array from AI output.
+      function extractVerifiedJson(text) {
+        const candidates = [];
+
+        const jsonBlockMatch = text.match(/```json\s*([\s\S]*?)```/i);
+        if (jsonBlockMatch) candidates.push(jsonBlockMatch[1].trim());
+
+        const anyCodeBlocks = [...text.matchAll(/```(?:[a-zA-Z0-9_-]+)?\s*([\s\S]*?)```/g)];
+        for (const block of anyCodeBlocks) {
+          const content = (block[1] || "").trim();
+          if (content) candidates.push(content);
+        }
+
+        const jsonFinalMatch = text.match(/JSON FINAL\s*:\s*([\s\S]*)$/i);
+        if (jsonFinalMatch) candidates.push(jsonFinalMatch[1].trim());
+
+        candidates.push(text.trim());
+
+        for (const candidate of candidates) {
+          try {
+            const parsed = JSON.parse(candidate);
+            if (Array.isArray(parsed)) return parsed;
+          } catch (e) {}
+
+          const arrayMatch = candidate.match(/\[[\s\S]*\]/);
+          if (!arrayMatch) continue;
+          try {
+            const parsedArray = JSON.parse(arrayMatch[0]);
+            if (Array.isArray(parsedArray)) return parsedArray;
+          } catch (e) {}
+        }
+        return null;
+      }
+
+      // FIX 2: Added missing function declaration for isTableSepRow
+      function isTableSepRow(line) {
+        return /^[\|\s\-:]+$/.test(line.trim());
+      }
+
+      function isTsvHeaderRow(t) {
+        const cols = t.split("\t").map(c => c.trim().toLowerCase());
+        const hasNum  = cols.includes("num");
+        const hasText = cols.includes("text");
+        const hasTag  = cols.includes("tag");
+        return (hasNum || hasText) && hasTag;
+      }
+      function extractPipeRows(text, { skipHeader = false } = {}) {
+        return text.split("\n").filter(l => {
+          const t = l.trim();
+          if (!t) return false;
+          if (t.includes("\t")) {
+            if (skipHeader && isTsvHeaderRow(t)) return false;
+            return true;
+          }
+          if (!t.includes("|")) return false;
+          if (isTableSepRow(t)) return false;
+          if (skipHeader && /\bTag\b/.test(t) && /\bNum\b/.test(t)) return false;
+          return true;
+        });
+      }
+      function extractVerifiedTableRows(text, { skipHeader = false } = {}) {
+        const lines = text.split("\n");
+        const start = lines.findIndex(line => {
+          const t = line.trim();
+          if (!t) return false;
+          const lower = t.toLowerCase();
+          if (lower.startsWith("tag\t")) return true;
+          return /\btag\b/i.test(t) && /\bcas\b/i.test(t) && /\btext\b/i.test(t) && (t.includes("|") || t.includes("\t"));
+        });
+        const source = start >= 0 ? lines.slice(start).join("\n") : text;
+        return extractPipeRows(source, { skipHeader });
+      }
+      function hasValidationPassedSignal(text) {
+        return /VALIDATION PASSED\b/i.test(text);
+      }
+      function pipeTableToCsv(text) {
+        return extractVerifiedTableRows(text).map(line => {
+          const t = line.trim();
+          let parts;
+          if (t.includes("\t")) {
+            parts = t.split("\t");
+          } else {
+            parts = t.split("|");
+            if (parts[0].trim() === "") parts.shift();
+            if (parts.length && parts[parts.length - 1].trim() === "") parts.pop();
+          }
+          return parts.map(v => {
+            v = v.trim();
+            if (v.includes(',') || v.includes('"') || v.includes('\n')) return '"' + v.replace(/"/g, '""') + '"';
+            return v;
+          }).join(',');
+        }).join('\n');
+      }
+
+      function driveDirectDownloadUrl(url) {
+        if (!url) return url;
+        const m = url.match(/\/d\/([^\/?#]+)/) || url.match(/[?&]id=([^&]+)/);
+        if (m) return `${API}/api/drive-download?id=${m[1]}`;
+        return url;
+      }
+
+      function driveOpenInSheetsUrl(url) {
+        if (!url) return "";
+        const m = url.match(/\/d\/([^\/?#]+)/) || url.match(/[?&]id=([^&]+)/);
+        if (!m) return "";
+        return `https://docs.google.com/spreadsheets/d/${m[1]}/edit`;
+      }
+
+      function extractDriveFileId(url) {
+        if (!url) return "";
+        const match = String(url).match(/\/d\/([^\/?#]+)/) || String(url).match(/[?&]id=([^&]+)/);
+        return match ? match[1] : "";
+      }
+
+      async function getDriveFileName(url) {
+        const fileId = extractDriveFileId(url);
+        if (!fileId) return "";
+        const res = await fetch(`${API}/api/drive-meta?id=${encodeURIComponent(fileId)}`);
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || "Unable to read existing Drive file metadata");
+        return data.name || "";
+      }
+
+      function buildNextVersionedFilename(baseStem, extension, existingName = "") {
+        const ext = String(extension || "").replace(/^\./, "");
+        const fileSuffix = ext ? `.${ext}` : "";
+        const currentName = String(existingName || "").trim();
+        if (!currentName) return `${baseStem}${fileSuffix}`;
+        const escapedExt = ext.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const versionRegex = new RegExp(`_V(\\d+)\\.${escapedExt}$`, "i");
+        const versionMatch = currentName.match(versionRegex);
+        if (versionMatch) return `${baseStem}_V${parseInt(versionMatch[1], 10) + 1}${fileSuffix}`;
+        return `${baseStem}_V1${fileSuffix}`;
+      }
+
+      // Step checkbox state (localStorage)
+      function stepStateKey(examId) { return `examSteps_${examId}`; }
+      function loadStepState(examId) {
+        try { return JSON.parse(localStorage.getItem(stepStateKey(examId))) || {}; } catch(e) { return {}; }
+      }
+      function saveStepState(examId, state) {
+        localStorage.setItem(stepStateKey(examId), JSON.stringify(state));
+      }
+      function toggleStep(examId, idx, checked) {
+        const state = loadStepState(examId);
+        state[idx] = checked;
+        saveStepState(examId, state);
+        const card = document.getElementById("stepCard_" + idx);
+        if (card) card.classList.toggle("done", checked);
+        if (activeRow) renderReportCard(activeRow);
+      }
+
+      // Report readiness validation
+      function validateReportReady() {
+        if (!activeRow) return { ok: false, missing: ["No exam loaded"] };
+        const examId  = cell(activeRow, "ID_Exams");
+        const state   = loadStepState(examId);
+        const tags    = parseTags(activeRow);
+        const missing = [];
+
+        const stepLabels = ["Step 1 - Upload PDF & metadata", "Step 2 - AI Digitization & Double Check", "Step 3 - Upload verified CSV", "Step 4 - MBset quiz link"];
+        for (let i = 0; i < 4; i++) {
+          if (!state[i]) missing.push(`${stepLabels[i]} not checked`);
+        }
+
+        if (!tags.nQst || tags.nQst <= 0) missing.push("Number of questions not set (Step 1)");
+        const examDate = cell(activeRow, "ExamDate") || cell(activeRow, "Exam Date");
+        if (!examDate) missing.push("Exam date not set (Step 1)");
+
+        return { ok: missing.length === 0, missing };
+      }
+
+      // renderExam
+      function renderExam(row) {
+        syncDerivedStatus(row);
+        const missing  = getMissing(row);
+        const module   = cell(row, "Module");
+        const year     = cell(row, "Year");
+        const level    = cell(row, "Level");
+        const wilaya   = cell(row, "Wilaya");
+        const sessionShort = getSessionShortLabel(row);
+
+        document.getElementById("topbarTitle").textContent = [module, sessionShort].filter(Boolean).join(" ") || "Exam details";
+        document.getElementById("topbarTitle").style.color = "";
+
+        const tagsHtml = [
+          level  ? `<span class="badge badge-solid-blue"   style="font-size:11px;">${level}</span>`   : "",
+          wilaya ? `<span class="badge badge-solid-violet" style="font-size:11px;">${wilaya}</span>`  : "",
+          year   ? `<span class="badge badge-solid-emerald"style="font-size:11px;">${year}</span>`    : "",
+        ].filter(Boolean).join("");
+        document.getElementById("topbarTags").innerHTML = tagsHtml;
+
+        if (missing.length > 0) {
+          document.getElementById("missingAlert").style.display = "flex";
+          document.getElementById("missingTags").innerHTML = missing.map(m => `<span class="missing-tag">${m}</span>`).join("");
+        } else {
+          document.getElementById("missingAlert").style.display = "none";
+        }
+
+        renderSteps(row);
+        renderReportCard(row);
+
+        document.getElementById("loadingScreen").style.display = "none";
+        document.getElementById("examContent").style.display = "block";
+      }
+
+      // Summary card
+      function renderSummaryCard(row) {
+        const status = getRowStatus(row);
+        const statusClass = status === STATUS_COMPLETED
+          ? "badge-green"
+          : status === STATUS_PENDING
+            ? "badge-amber"
+            : status === STATUS_NEW_EXAM
+              ? "badge-blue"
+              : status === STATUS_MISSING
+                ? "badge-red"
+                : "badge-gray";
+        const statusHtml = status
+          ? `<span class="badge ${statusClass}" style="font-size:11px;">${status}</span>`
+          : `<span class="badge badge-red" style="font-size:11px;">No status</span>`;
+        const items = [
+          { label: "Wilaya",    value: cell(row, "Wilaya") },
+          { label: "Year",      value: cell(row, "Year") },
+          { label: "Level",     value: cell(row, "Level") },
+          { label: "Session",   value: getSessionLongLabel(row) },
+          { label: "Module",    value: cell(row, "Module") },
+          { label: "Exam Date", value: cell(row, "ExamDate") || cell(row, "Exam Date") },
+          { label: "Member",    value: formatMemberHistorySummary(cell(row, "Membre")) },
+          { label: "Status",    value: null, html: statusHtml },
+          { label: "ID",        value: cell(row, "ID_Exams") },
+        ];
+        const itemsHtml = items.map(({ label, value, html }) => `
+          <div class="summary-item">
+            <div class="summary-item-label">${label}</div>
+            <div class="summary-item-value${(!html && !value) ? " empty" : ""}">${html || value || "-"}</div>
+          </div>`).join("");
+        document.getElementById("summaryCard").innerHTML = `
+          <div class="summary-card">
+            <div class="summary-card-header"><h3>Exam Summary</h3></div>
+            <div class="summary-grid">${itemsHtml}</div>
+          </div>`;
+      }
+
+      // 7-step workflow
+      function renderSteps(row) {
+        const examId = cell(row, "ID_Exams") || String(row._rowIndex);
+        const state  = loadStepState(examId);
+        const tags   = parseTags(row);
+        const step1Prompt = getStep1PromptRequirements(row);
+
+        const pdfUrl  = cell(row, "OrigPDF");
+        const affichagePdfUrl = cell(row, "AffichagePDF");
+        const csvUrl  = cell(row, "Quiz_Tbl");
+        const quizLink = cell(row, "Quiz_Link");
+        const examDateVal = toDateInputValue(cell(row, "ExamDate") || cell(row, "Exam Date"));
+        noteEntriesState = parseStructuredNotes(cell(row, "Note"));
+
+        const steps = [
+          buildStep1(row, examId, state, pdfUrl, affichagePdfUrl, tags, examDateVal),
+          step1Prompt.ready ? buildStep2(examId, state) : buildStep2Locked(examId, state, step1Prompt.missing),
+          buildStep3(examId, state, csvUrl),
+          buildStep4(examId, state, quizLink),
+        ];
+
+        document.getElementById("stepsContainer").innerHTML = steps.join("");
+
+        initSubcategories();
+        updateExamSessionFormState();
+        renderNoteCards();
+        if (step1Prompt.ready) refreshPromptText();
+      }
+
+      function stepCardWrap(idx, examId, state, title, subtitle, bodyHtml, footerHtml) {
+        const done = !!state[idx];
+        return `
+        <div class="step-card${done ? ' done' : ''}" id="stepCard_${idx}">
+          <div class="step-card-header">
+            <input type="checkbox" class="step-check" ${done ? 'checked' : ''}
+              onchange="toggleStep('${examId}', ${idx}, this.checked)" title="Mark as done">
+            <div class="step-num-badge">${idx + 1}</div>
+            <div class="step-title-wrap">
+              <div class="step-title">${title}</div>
+              ${subtitle ? `<div class="step-subtitle">${subtitle}</div>` : ''}
+            </div>
+          </div>
+          <div class="step-body">${bodyHtml}</div>
+          ${footerHtml ? `<div class="step-footer">${footerHtml}</div>` : ''}
+        </div>`;
+      }
+
+      function buildStep1(row, examId, state, pdfUrl, affichagePdfUrl, tags, examDateVal) {
+        const hasCT  = tags.hasCT  ? '<span class="badge badge-amber" style="font-size:10px;">CT</span>' : '<span class="badge badge-gray" style="font-size:10px;">No CT</span>';
+        const examSession = getExamSessionForRow(row);
+        const sessionFamily = getSessionFamilyValue(examSession);
+        const sessionWarning = examSession && !examSession.isValid
+          ? `<div class="instruction-box" style="margin-bottom:12px;border-color:var(--amber-border);background:var(--amber-bg);color:var(--amber-text);">
+               This row still uses legacy session data. Save Step 1 once to migrate it to the canonical <code>ExamSession</code> code field.
+             </div>`
+          : "";
+        const buildPdfUploadBlock = ({ kind, title, storedUrl, statusBadge = "", emptyText, uploadText }) => {
+          const downloadUrl = driveDirectDownloadUrl(storedUrl);
+          const storedRow = storedUrl
+            ? `<div class="pdf-status-row">
+               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+               <div class="pdf-status-text">File stored - <a href="${storedUrl}" target="_blank" style="color:inherit;font-weight:600;">View PDF</a></div>
+               <a class="download-link" href="${downloadUrl}" download>
+                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                 Download PDF
+               </a>
+               ${statusBadge}
+             </div>`
+            : `<div class="pdf-status-row missing">
+               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+               <div class="pdf-status-text">${emptyText}</div>
+             </div>`;
+          return `
+            <div>
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-bottom:10px;">${title}</div>
+              ${storedRow}
+              <div class="upload-compact" id="uploadZone_${kind}" onclick="document.getElementById('pdfFileInput_${kind}').click()"
+                ondragover="event.preventDefault();this.classList.add('dragover')"
+                ondragleave="this.classList.remove('dragover')" ondrop="handlePdfDrop(event, '${kind}')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text3);flex-shrink:0;">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <div class="upload-compact-text">
+                  <p>${uploadText}</p>
+                  <span>PDF, max 20 MB - click or drag &amp; drop</span>
+                </div>
+              </div>
+              <input type="file" id="pdfFileInput_${kind}" accept=".pdf" style="display:none" onchange="handlePdfSelect(this, '${kind}')">
+              <div class="upload-file-name" id="pdfFileName_${kind}"></div>
+            </div>`;
+        };
+
+        const body = `
+          <div class="form-grid" style="margin-bottom:20px;">
+            ${buildPdfUploadBlock({
+              kind: "orig",
+              title: "Original PDF",
+              storedUrl: pdfUrl,
+              statusBadge: hasCT,
+              emptyText: "No original PDF uploaded yet",
+              uploadText: pdfUrl ? "Upload a new original PDF" : "Upload original exam PDF"
+            })}
+            ${buildPdfUploadBlock({
+              kind: "affichage",
+              title: "Affichage PDF",
+              storedUrl: affichagePdfUrl,
+              emptyText: "No affichage PDF uploaded yet",
+              uploadText: affichagePdfUrl ? "Upload a new affichage PDF" : "Upload affichage PDF"
+            })}
+          </div>
+
+          <div style="margin:20px 0 16px;border-top:1px solid var(--border);padding-top:18px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-bottom:16px;">Exam metadata</div>
+            ${sessionWarning}
+            <div class="form-grid">
+              <div class="form-row">
+                <label>Session family <span style="color:var(--red-text)">*</span></label>
+                <select id="examSession_family" onchange="updateExamSessionFormState()" style="padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-size:13px;width:100%;cursor:pointer;">
+                  <option value="">Select session family</option>
+                  <option value="clinical" ${sessionFamily === "clinical" ? "selected" : ""}>Clinical</option>
+                  <option value="preclinical" ${sessionFamily === "preclinical" ? "selected" : ""}>Preclinical</option>
+                  <option value="rattrapage" ${sessionFamily === "rattrapage" ? "selected" : ""}>Rattrapage</option>
+                  <option value="synthese" ${sessionFamily === "synthese" ? "selected" : ""}>Synthese</option>
+                </select>
+              </div>
+              <div id="examSession_clinical">
+                <div class="form-row">
+                  <label>Rotation</label>
+                  <select id="examSession_rotation" onchange="refreshPromptText()" style="padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-size:13px;width:100%;cursor:pointer;">
+                    <option value="">Select rotation</option>
+                    <option value="R1" ${examSession?.groupValue === "R1" ? "selected" : ""}>R1</option>
+                    <option value="R2" ${examSession?.groupValue === "R2" ? "selected" : ""}>R2</option>
+                    <option value="R3" ${examSession?.groupValue === "R3" ? "selected" : ""}>R3</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <label>Period</label>
+                  <select id="examSession_period" onchange="refreshPromptText()" style="padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-size:13px;width:100%;cursor:pointer;">
+                    <option value="">Select period</option>
+                    <option value="P1" ${examSession?.period === "P1" ? "selected" : ""}>P1</option>
+                    <option value="P2" ${examSession?.period === "P2" ? "selected" : ""}>P2</option>
+                    <option value="P3" ${examSession?.period === "P3" ? "selected" : ""}>P3</option>
+                  </select>
+                </div>
+              </div>
+              <div id="examSession_preclinical">
+                <div class="form-row">
+                  <label>Semestre</label>
+                  <select id="examSession_semester" onchange="refreshPromptText()" style="padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-size:13px;width:100%;cursor:pointer;">
+                    <option value="">Select semester</option>
+                    <option value="S1" ${examSession?.groupValue === "S1" ? "selected" : ""}>S1</option>
+                    <option value="S2" ${examSession?.groupValue === "S2" ? "selected" : ""}>S2</option>
+                  </select>
+                </div>
+              </div>
+              <div id="examSession_synth_hint" class="form-row full" style="display:none;">
+                <div class="field-hint">Synthese is valid only for level 6A. Saving will fail if this row is not level 6A.</div>
+              </div>
+              <div class="form-row">
+                <label>Exam language</label>
+                <select id="tags_lang" onchange="refreshPromptText()" style="padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-size:13px;width:100%;cursor:pointer;">
+                  <option value="Francais" ${(tags.lang || 'Francais') === 'Francais' ? 'selected' : ''}>Francais</option>
+                  <option value="English"  ${tags.lang === 'English' ? 'selected' : ''}>English</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>Exam Date</label>
+                <input type="date" id="tags_examDate" value="${examDateVal}">
+              </div>
+              <div class="form-row">
+                <label>Total N° of questions in the exam <span style="color:var(--red-text)">*</span></label>
+                <input type="number" id="tags_nQst" value="${tags.nQst != null ? tags.nQst : ''}" min="0" placeholder="30">
+              </div>
+              <div class="form-row full">
+                <label>Exam Notes</label>
+                <div class="markdown-note-wrap">
+                  <div class="note-toolbar">
+                    <button type="button" class="btn btn-sm" onclick="addNoteCard()">+ Add note</button>
+                    <div class="field-hint">Click the button to add a note, then fill in the reason and the detail.</div>
+                  </div>
+                  <div id="noteCardsHost"></div>
+                </div>
+              </div>
+              <div class="form-row full">
+                <label>Question annotations</label>
+                <input type="text" id="tags_annotations" value="${annotationsToString(tags)}" placeholder="e.g. 3m, 7s, 15-17m, 20s" oninput="refreshPromptText()">
+                <div class="field-hint"><strong>m</strong> = missing Qst &nbsp;&middot;&nbsp; <strong>s</strong> = Qst contain schema/table &nbsp;&middot;&nbsp; you can use ranges, e.g. 5-8m</div>
+              </div>
+              <div class="form-row">
+                <label>Has Corrige Type (CT)</label>
+                <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;background:var(--bg2);">
+                  <input type="checkbox" id="tags_hasCT" ${tags.hasCT ? "checked" : ""} style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;"
+                    onchange="refreshPromptText();this.nextElementSibling.textContent=this.checked?'Yes - includes CT':'No CT'">
+                  <span style="font-size:13px;color:var(--text);">${tags.hasCT ? "Yes - includes CT" : "No CT"}</span>
+                </label>
+              </div>
+              <div class="form-row">
+                <label style="display:flex;align-items:center;gap:6px;">
+                  Has Clinical Cases (Cas cliniques)
+                  <button type="button" onclick="const d=document.getElementById('hint-cas');d.style.display=d.style.display==='none'?'block':'none';" style="width:16px;height:16px;border-radius:50%;border:1px solid var(--border2);background:var(--bg2);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;line-height:1;padding:0;flex-shrink:0;">?</button>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;background:var(--bg2);">
+                  <input type="checkbox" id="tags_hasCas" ${tags.hasCas ? "checked" : ""} style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;"
+                    onchange="refreshPromptText();this.nextElementSibling.textContent=this.checked?'Yes - has Cas cliniques':'No Cas cliniques'">
+                  <span style="font-size:13px;color:var(--text);">${tags.hasCas ? "Yes - has Cas cliniques" : "No Cas cliniques"}</span>
+                </label>
+                <div id="hint-cas" style="display:none;font-size:11px;color:var(--text3);margin-top:4px;">A clinical case is a shared introductory text that applies to 2 or more consecutive QCMs.</div>
+              </div>
+              <div class="form-row">
+                <label style="display:flex;align-items:center;gap:6px;">
+                  Has Association / Combination questions
+                  <button type="button" onclick="const d=document.getElementById('hint-comb');d.style.display=d.style.display==='none'?'block':'none';" style="width:16px;height:16px;border-radius:50%;border:1px solid var(--border2);background:var(--bg2);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;line-height:1;padding:0;flex-shrink:0;">?</button>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;background:var(--bg2);">
+                  <input type="checkbox" id="tags_hasComb" ${tags.hasComb ? "checked" : ""} style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;"
+                    onchange="refreshPromptText();this.nextElementSibling.textContent=this.checked?'Yes - has association / combination questions':'No association questions'">
+                  <span style="font-size:13px;color:var(--text);">${tags.hasComb ? "Yes - has association / combination questions" : "No association questions"}</span>
+                </label>
+                <div id="hint-comb" style="display:none;font-size:11px;color:var(--text3);margin-top:4px;">e.g. A&nbsp;-&nbsp;1+2 &nbsp;/&nbsp; B&nbsp;-&nbsp;1+3 &nbsp;/&nbsp; C&nbsp;-&nbsp;2+3+4 &nbsp;/&nbsp; D&nbsp;-&nbsp;1+2+3 &nbsp;/&nbsp; E&nbsp;-&nbsp;All correct</div>
+              </div>
+              <div id="subcategorySection" class="form-row full" style="display:none;">
+                <label>Subcategories mapping</label>
+                <div class="instruction-box" style="padding:12px 14px;">
+                  Add subcategories only for Unite 1-5 and Residanat exams. Each row maps a subcategory name to a question range like 1-20.
+                </div>
+                <div style="display:flex;justify-content:flex-start;margin-top:8px;">
+                  <button type="button" class="btn btn-sm" onclick="addSubcategoryRow()">+ Add subcategory</button>
+                </div>
+                <div id="subcategoryList" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"></div>
+              </div>
+              <div id="composedSubmoduleSection" class="form-row full" style="display:none;">
+                <label>Composed exam submodules</label>
+                <div class="instruction-box" style="padding:12px 14px;">
+                  For composed exams, each fixed submodule must receive a question range. You can reorder the submodules, but their names stay locked because the final export assigns the matching categoryId automatically.
+                </div>
+                <div id="composedSubmoduleList" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"></div>
+              </div>
+            </div>
+          </div>`;
+
+        const footer = `<button class="btn btn-sm btn-primary" id="saveStep1Btn" onclick="saveStep1()">Save</button>`;
+        const step1Ready = pdfUrl ? "Original PDF stored - update metadata or re-upload files" : "Upload original PDF and optional affichage PDF";
+        return stepCardWrap(0, examId, state, "Upload PDFs & fill exam data", step1Ready, body, footer);
+      }
+
+      function buildStep2(examId, state) {
+        const svgCopy = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+        const body = `
+          <!-- Phase 1 : Digitize prompt -->
+          <div class="dc-phase">
+            <div class="dc-phase-header">
+              <span class="dc-phase-badge" style="background:linear-gradient(135deg,var(--accent),var(--accent2));">1</span>
+              <div>
+                <div class="dc-phase-title">Digitize — copy this prompt into TWO AIs simultaneously</div>
+                <div class="dc-phase-sub">Send the same prompt + PDF to two independent AI models (e.g. Claude and GPT-4o). Each will produce its own JSON.</div>
+              </div>
+              <button class="copy-btn" id="copyPromptBtn" onclick="copyPrompt()" style="margin-left:auto;flex-shrink:0;">
+                ${svgCopy} Copy prompt
+              </button>
+            </div>
+            <div class="prompt-text" id="promptText" style="margin-top:10px;"></div>
+          </div>
+
+          <div class="dc-divider"><span>Each AI gives you a JSON — paste both below</span></div>
+
+          <!-- Phase 2a : JSON 1 -->
+          <div class="dc-phase">
+            <div class="dc-phase-header">
+              <span class="dc-phase-badge" style="background:linear-gradient(135deg,#f59e0b,#d97706);">2a</span>
+              <div>
+                <div class="dc-phase-title">JSON from Model 1</div>
+                <div class="dc-phase-sub">Paste the full JSON output from the first AI (object with "questions" and "audit" keys).</div>
+              </div>
+            </div>
+            <textarea class="tsv-textarea dc-tsv" id="dcJson1Input" style="margin-top:10px;min-height:110px;"
+              placeholder="Paste JSON from Model 1 here..."
+              oninput="dcUpdateCount1()"></textarea>
+            <span id="dcRowCount1" style="font-size:11px;color:var(--text3);display:block;margin-top:4px;"></span>
+          </div>
+
+          <!-- Phase 2b : JSON 2 -->
+          <div class="dc-phase" style="margin-top:10px;">
+            <div class="dc-phase-header">
+              <span class="dc-phase-badge" style="background:linear-gradient(135deg,#0ea5e9,#0284c7);">2b</span>
+              <div>
+                <div class="dc-phase-title">JSON from Model 2</div>
+                <div class="dc-phase-sub">Paste the full JSON output from the second AI.</div>
+              </div>
+            </div>
+            <textarea class="tsv-textarea dc-tsv" id="dcJson2Input" style="margin-top:10px;min-height:110px;"
+              placeholder="Paste JSON from Model 2 here..."
+              oninput="dcUpdateCount2()"></textarea>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:12px;">
+              <span id="dcRowCount2" style="font-size:11px;color:var(--text3);"></span>
+              <button class="btn btn-primary btn-sm" onclick="dcGenerateCheckPrompt()">
+                Generate comparison prompt →
+              </button>
+            </div>
+          </div>
+
+          <!-- Phase 3 : Comparison prompt (hidden until generated) -->
+          <div id="dcPhase3" style="display:none;">
+            <div class="dc-phase">
+              <div class="dc-phase-header">
+                <span class="dc-phase-badge" style="background:linear-gradient(135deg,#10b981,#059669);">3</span>
+                <div>
+                  <div class="dc-phase-title">Review report prompt — copy into a third AI model <button type="button" class="help-btn" aria-label="Review prompt help" data-help="Check the PDF outside the app. Edit only JSONF inside the review report. Keep the same conversation with the same third AI. When every ??? is resolved, send the full completed report back to that same AI. Paste only the final AI output containing VALIDATION PASSED and JSON FINAL in Step 3.">?</button></div>
+                  <div class="dc-phase-sub">No PDF attachment needed. The third AI compares both JSONs, returns a review report with JSONF proposals, then waits for the corrected report to produce VALIDATION PASSED + the final JSON.</div>
+                </div>
+                <button class="copy-btn" id="copyDcBtn" onclick="dcCopyCheckPrompt()" style="margin-left:auto;flex-shrink:0;">
+                  ${svgCopy} Copy comparison prompt
+                </button>
+              </div>
+              <div class="prompt-text" id="dcCheckPromptText" style="margin-top:10px;"></div>
+            </div>
+          </div>`;
+
+        return stepCardWrap(1, examId, state, "AI Digitization & Double Check", "Two AIs digitize, a third AI builds the review report, then the same third AI finalizes JSON after you return the corrected report", body, "");
+      }
+
+      function buildStep2Locked(examId, state, missingFields) {
+        const missingList = (missingFields || []).map(item => `<li>${item}</li>`).join("");
+        const body = `
+          <div class="instruction-box">
+            <strong>Save Step 1 first to unlock the digitization prompt.</strong>
+            <ul data-locked-missing>
+              ${missingList}
+            </ul>
+          </div>`;
+
+        return stepCardWrap(1, examId, state, "AI Digitization & Double Check", "This prompt appears only after the required Step 1 information is saved", body, "");
+      }
+
+      function buildStep4(examId, state, quizLink) {
+        const body = `
+          <div class="form-row">
+            <label>MBset Quiz link <span style="font-size:11px;font-weight:400;color:var(--text3);">(optional)</span></label>
+            <input type="url" id="field_Quiz_Link" value="${quizLink || ''}" placeholder="https://app.mbset.co/...">
+            <div class="field-hint">Paste the MBset quiz link for this exam once it has been imported</div>
+          </div>`;
+        const footer = `<button class="btn btn-sm btn-primary" id="saveStep4Btn" onclick="saveStep4()">Save link</button>`;
+        return stepCardWrap(3, examId, state, "Paste MBset quiz link", "Optional - paste after importing into MBset", body, footer);
+      }
+
+      function initSubcategories() {
+        if (!activeRow) {
+          subcategoriesState = [];
+          composedSubmodulesState = [];
+          return;
+        }
+        const savedSubcategories = getStoredSubcategories(activeRow);
+        subcategoriesState = savedSubcategories.length
+          ? mergeSubcategorySets(savedSubcategories, [])
+          : mergeSubcategorySets([], getDefaultSubcategoriesForRow(activeRow));
+        const savedComposedSubmodules = getStoredComposedSubmodules(activeRow);
+        composedSubmodulesState = savedComposedSubmodules.length
+          ? mergeComposedSubmoduleSets(savedComposedSubmodules, buildDefaultComposedSubmodules(activeRow))
+          : buildDefaultComposedSubmodules(activeRow);
+        renderSubcategories();
+        renderComposedSubmodules();
+        checkSubcategoryVisibility();
+      }
+
+      function addSubcategoryRow() {
+        subcategoriesState.push({ id: Date.now() + Math.random(), name: "", range: "" });
+        renderSubcategories();
+        refreshPromptText();
+      }
+
+      function removeSubcategoryRow(id) {
+        subcategoriesState = subcategoriesState.filter(sc => sc.id !== id);
+        renderSubcategories();
+        refreshPromptText();
+      }
+
+      function updateSubcategory(id, field, value) {
+        const item = subcategoriesState.find(sc => sc.id === id);
+        if (!item) return;
+        item[field] = value;
+        refreshPromptText();
+      }
+
+      function renderSubcategories() {
+        const container = document.getElementById("subcategoryList");
+        if (!container) return;
+
+        if (!subcategoriesState.length) {
+          container.innerHTML = `<div class="field-hint" style="padding:10px 12px;border:1px dashed var(--border2);border-radius:var(--radius);background:var(--bg2);">No subcategories added yet.</div>`;
+          return;
+        }
+
+        container.innerHTML = subcategoriesState.map(sc => `
+          <div
+            data-reorder-id="${String(sc.id)}"
+            ondragover="handleSubcategoryDragOver(event, ${JSON.stringify(sc.id)})"
+            ondragleave="handleSubcategoryDragLeave(event)"
+            ondrop="handleSubcategoryDrop(event, ${JSON.stringify(sc.id)})"
+            style="display:flex;gap:8px;align-items:center;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);touch-action:auto;"
+          >
+            <button
+              type="button"
+              draggable="true"
+              data-reorder-handle="subcategory"
+              data-reorder-id="${String(sc.id)}"
+              ondragstart="handleSubcategoryDragStart(event, ${JSON.stringify(sc.id)})"
+              ondragend="handleSubcategoryDragEnd()"
+              title="Drag to reorder (or use arrow keys)"
+              aria-label="Drag to reorder. Use arrow up or arrow down to move."
+              style="cursor:grab;border:1px solid var(--border2);background:var(--bg);border-radius:10px;padding:8px 10px;color:var(--text3);font-size:16px;line-height:1;user-select:none;touch-action:none;"
+            >⋮⋮</button>
+            <input
+              type="text"
+              value="${String(sc.name || "").replace(/"/g, "&quot;")}"
+              placeholder="Subcategory name (e.g. Anatomie)"
+              oninput="updateSubcategory(${JSON.stringify(sc.id)}, 'name', this.value)"
+              style="flex:1;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;"
+            >
+            <input
+              type="text"
+              value="${String(sc.range || "").replace(/"/g, "&quot;")}"
+              placeholder="Question range (e.g. 1-20)"
+              oninput="updateSubcategory(${JSON.stringify(sc.id)}, 'range', this.value)"
+              style="width:180px;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;"
+            >
+            <button type="button" class="btn btn-sm" onclick="removeSubcategoryRow(${JSON.stringify(sc.id)})" style="color:var(--red-text);border-color:var(--red-border);">Remove</button>
+          </div>
+        `).join("");
+        setupReorderHandles(container, subcategoryReorderConfig);
+      }
+
+      function renderComposedSubmodules() {
+        const container = document.getElementById("composedSubmoduleList");
+        if (!container) return;
+
+        if (!composedSubmodulesState.length) {
+          container.innerHTML = `<div class="field-hint" style="padding:10px 12px;border:1px dashed var(--border2);border-radius:var(--radius);background:var(--bg2);">No composed submodules detected for this exam.</div>`;
+          return;
+        }
+
+        container.innerHTML = `
+          <div style="display:flex;gap:8px;align-items:center;padding:0 6px 4px 6px;color:var(--text3);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">
+            <div style="width:42px;"></div>
+            <div style="flex:1;">Submodule</div>
+            <div style="width:220px;">Question range</div>
+          </div>
+          ${composedSubmodulesState.map(item => `
+          <div
+            data-reorder-id="${String(item.id)}"
+            ondragover="handleComposedSubmoduleDragOver(event, ${JSON.stringify(item.id)})"
+            ondragleave="handleComposedSubmoduleDragLeave(event)"
+            ondrop="handleComposedSubmoduleDrop(event, ${JSON.stringify(item.id)})"
+            style="display:flex;gap:8px;align-items:center;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);touch-action:auto;"
+          >
+            <button
+              type="button"
+              draggable="true"
+              data-reorder-handle="composed"
+              data-reorder-id="${String(item.id)}"
+              ondragstart="handleComposedSubmoduleDragStart(event, ${JSON.stringify(item.id)})"
+              ondragend="handleComposedSubmoduleDragEnd()"
+              title="Drag to reorder (or use arrow keys)"
+              aria-label="Drag to reorder. Use arrow up or arrow down to move."
+              style="cursor:grab;border:1px solid var(--border2);background:var(--bg);border-radius:10px;padding:8px 10px;color:var(--text3);font-size:16px;line-height:1;user-select:none;touch-action:none;"
+            >⋮⋮</button>
+            <div style="flex:1;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;">
+              <div style="font-weight:600;">${item.name}</div>
+            </div>
+            <input
+              type="text"
+              value="${String(item.range || "").replace(/"/g, "&quot;")}"
+              placeholder="Question range (e.g. 1-20)"
+              oninput="updateComposedSubmoduleRange(${JSON.stringify(item.id)}, this.value)"
+              style="width:220px;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;"
+            >
+          </div>
+        `).join("")}`;
+        setupReorderHandles(container, composedSubmoduleReorderConfig);
+      }
+
+      function handleSubcategoryDragStart(event, id) {
+        draggedSubcategoryId = id;
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", String(id));
+      }
+
+      function handleSubcategoryDragOver(event, id) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        const row = event.currentTarget;
+        if (!row) return;
+        row.style.borderColor = "var(--accent)";
+        row.style.background = "var(--blue-bg)";
+      }
+
+      function handleSubcategoryDragLeave(event) {
+        const row = event.currentTarget;
+        if (!row) return;
+        row.style.borderColor = "var(--border2)";
+        row.style.background = "var(--bg2)";
+      }
+
+      function handleSubcategoryDrop(event, targetId) {
+        event.preventDefault();
+        handleSubcategoryDragLeave(event);
+        const sourceId = draggedSubcategoryId;
+        draggedSubcategoryId = null;
+        if (sourceId == null || sourceId === targetId) return;
+
+        const sourceIndex = subcategoriesState.findIndex(sc => sc.id === sourceId);
+        const targetIndex = subcategoriesState.findIndex(sc => sc.id === targetId);
+        if (sourceIndex < 0 || targetIndex < 0) return;
+
+        const [movedItem] = subcategoriesState.splice(sourceIndex, 1);
+        subcategoriesState.splice(targetIndex, 0, movedItem);
+        renderSubcategories();
+        refreshPromptText();
+      }
+
+      function handleSubcategoryDragEnd() {
+        draggedSubcategoryId = null;
+        renderSubcategories();
+      }
+
+      function checkSubcategoryVisibility() {
+        const section = document.getElementById("subcategorySection");
+        const composedSection = document.getElementById("composedSubmoduleSection");
+        if (!section) return;
+        const shouldShow = shouldShowSubcategoriesForRow(activeRow);
+        section.style.display = shouldShow ? "flex" : "none";
+        if (composedSection) composedSection.style.display = isComposedExam(activeRow) ? "flex" : "none";
+      }
+
+      function updateComposedSubmoduleRange(id, value) {
+        const item = composedSubmodulesState.find(sc => sc.id === id);
+        if (!item) return;
+        item.range = value;
+        refreshPromptText();
+        refreshStep1Readiness();
+      }
+
+      // Re-render just the step 2 card in place so the "missing requirements"
+      // indicator reflects live composed-submodule state without rebuilding
+      // the whole step list (which would re-init state from tags and drop
+      // in-progress edits / focus).
+      //
+      // To avoid clobbering Step 2 textarea content (dcJson1Input / dcJson2Input)
+      // when a user edits a range while Step 2 is already unlocked, we only
+      // swap when the ready/locked state actually changes. When the card
+      // stays in the locked state we just update the missing-requirements
+      // list in place.
+      function refreshStep1Readiness() {
+        if (!activeRow) return;
+        const step2Card = document.getElementById("stepCard_1");
+        if (!step2Card) return;
+        const examId = cell(activeRow, "ID_Exams") || String(activeRow._rowIndex);
+        const state = loadStepState(examId);
+        const step1Prompt = getStep1PromptRequirements(activeRow);
+        const isCurrentlyUnlocked = !!step2Card.querySelector("#dcJson1Input");
+
+        if (step1Prompt.ready && isCurrentlyUnlocked) return; // nothing to change
+        if (!step1Prompt.ready && !isCurrentlyUnlocked) {
+          // Stay locked but refresh the missing-fields list in place.
+          const list = step2Card.querySelector("[data-locked-missing]");
+          if (list) {
+            list.innerHTML = step1Prompt.missing
+              .map(m => `<li>${m}</li>`)
+              .join("");
+            return;
+          }
+          // Fallback: if the locked card doesn't expose the list, swap.
+        }
+
+        const newHtml = step1Prompt.ready
+          ? buildStep2(examId, state)
+          : buildStep2Locked(examId, state, step1Prompt.missing);
+        step2Card.outerHTML = newHtml;
+      }
+
+      function handleComposedSubmoduleDragStart(event, id) {
+        draggedComposedSubmoduleId = id;
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", String(id));
+      }
+
+      function handleComposedSubmoduleDragOver(event) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        const row = event.currentTarget;
+        if (!row) return;
+        row.style.borderColor = "var(--accent)";
+        row.style.background = "var(--blue-bg)";
+      }
+
+      function handleComposedSubmoduleDragLeave(event) {
+        const row = event.currentTarget;
+        if (!row) return;
+        row.style.borderColor = "var(--border2)";
+        row.style.background = "var(--bg2)";
+      }
+
+      function handleComposedSubmoduleDrop(event, targetId) {
+        event.preventDefault();
+        handleComposedSubmoduleDragLeave(event);
+        const sourceId = draggedComposedSubmoduleId;
+        draggedComposedSubmoduleId = null;
+        if (sourceId == null || sourceId === targetId) return;
+
+        const sourceIndex = composedSubmodulesState.findIndex(sc => sc.id === sourceId);
+        const targetIndex = composedSubmodulesState.findIndex(sc => sc.id === targetId);
+        if (sourceIndex < 0 || targetIndex < 0) return;
+
+        const [movedItem] = composedSubmodulesState.splice(sourceIndex, 1);
+        composedSubmodulesState.splice(targetIndex, 0, movedItem);
+        renderComposedSubmodules();
+        refreshPromptText();
+      }
+
+      function handleComposedSubmoduleDragEnd() {
+        draggedComposedSubmoduleId = null;
+        renderComposedSubmodules();
+      }
+
+      // ----- Touch + keyboard reorder support (complements HTML5 DnD) -----
+      // The HTML5 drag-and-drop API above powers desktop mouse dragging, but
+      // it does not fire touch events on most phones/tablets. This helper
+      // wires up Pointer Events on the drag handles to produce the same
+      // reorder behavior via touch, and adds ArrowUp/ArrowDown keyboard
+      // reordering while a handle is focused.
+      function setupReorderHandles(container, config) {
+        if (!container) return;
+        const handles = container.querySelectorAll('[data-reorder-handle="' + config.handleType + '"]');
+        handles.forEach(handle => {
+          handle.addEventListener('pointerdown', ev => onReorderPointerDown(ev, config));
+          handle.addEventListener('keydown', ev => onReorderKeyDown(ev, config));
+        });
+      }
+
+      function findReorderRowFromPoint(container, x, y) {
+        const el = document.elementFromPoint(x, y);
+        if (!el) return null;
+        const row = el.closest('[data-reorder-id]');
+        if (!row || !container.contains(row)) return null;
+        // Prefer the row element (direct child of container), not the handle
+        // button which also carries data-reorder-id.
+        if (row.tagName === 'BUTTON') {
+          const parent = row.parentElement?.closest('[data-reorder-id]');
+          return parent && container.contains(parent) ? parent : null;
+        }
+        return row;
+      }
+
+      function onReorderPointerDown(ev, config) {
+        // Leave mouse interactions to native HTML5 drag-and-drop.
+        if (ev.pointerType === 'mouse') return;
+        ev.preventDefault();
+
+        const handle = ev.currentTarget;
+        const id = handle.getAttribute('data-reorder-id');
+        const container = document.getElementById(config.containerId);
+        if (!container) return;
+        const startRow = handle.closest('[data-reorder-id]:not(button)')
+          || container.querySelector('[data-reorder-id="' + CSS.escape(id) + '"]:not(button)');
+        if (!startRow) return;
+
+        try { handle.setPointerCapture(ev.pointerId); } catch (_) {}
+        handle.style.cursor = 'grabbing';
+        startRow.style.opacity = '0.6';
+        let lastOverRow = null;
+
+        const clearHover = (row) => {
+          if (!row) return;
+          row.style.borderColor = 'var(--border2)';
+          row.style.background = 'var(--bg2)';
+        };
+        const setHover = (row) => {
+          if (!row) return;
+          row.style.borderColor = 'var(--accent)';
+          row.style.background = 'var(--blue-bg)';
+        };
+
+        const onMove = (e) => {
+          e.preventDefault();
+          const overRow = findReorderRowFromPoint(container, e.clientX, e.clientY);
+          if (overRow !== lastOverRow) {
+            clearHover(lastOverRow);
+            if (overRow && overRow !== startRow) setHover(overRow);
+            lastOverRow = overRow;
+          }
+        };
+
+        const onUp = (e) => {
+          handle.removeEventListener('pointermove', onMove);
+          handle.removeEventListener('pointerup', onUp);
+          handle.removeEventListener('pointercancel', onUp);
+          try { handle.releasePointerCapture(ev.pointerId); } catch (_) {}
+          handle.style.cursor = 'grab';
+          startRow.style.opacity = '';
+          clearHover(lastOverRow);
+
+          const targetRow = findReorderRowFromPoint(container, e.clientX, e.clientY);
+          const targetId = targetRow ? targetRow.getAttribute('data-reorder-id') : null;
+          if (targetId && targetId !== id) {
+            config.reorder(id, targetId);
+          }
+        };
+
+        handle.addEventListener('pointermove', onMove);
+        handle.addEventListener('pointerup', onUp);
+        handle.addEventListener('pointercancel', onUp);
+      }
+
+      function onReorderKeyDown(ev, config) {
+        if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+        const id = ev.currentTarget.getAttribute('data-reorder-id');
+        ev.preventDefault();
+        const moved = config.nudge(id, ev.key === 'ArrowUp' ? -1 : 1);
+        if (!moved) return;
+        // Re-focus the moved handle after re-render so repeated arrow
+        // presses keep moving the same row.
+        requestAnimationFrame(() => {
+          const container = document.getElementById(config.containerId);
+          const next = container?.querySelector(
+            '[data-reorder-handle="' + config.handleType + '"][data-reorder-id="' + CSS.escape(id) + '"]'
+          );
+          next?.focus();
+        });
+      }
+
+      function reorderStateById(arr, sourceId, targetId) {
+        const sourceIndex = arr.findIndex(x => String(x.id) === String(sourceId));
+        const targetIndex = arr.findIndex(x => String(x.id) === String(targetId));
+        if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return false;
+        const [moved] = arr.splice(sourceIndex, 1);
+        arr.splice(targetIndex, 0, moved);
+        return true;
+      }
+
+      function nudgeStateById(arr, id, delta) {
+        const idx = arr.findIndex(x => String(x.id) === String(id));
+        if (idx < 0) return false;
+        const newIdx = Math.max(0, Math.min(arr.length - 1, idx + delta));
+        if (newIdx === idx) return false;
+        const [moved] = arr.splice(idx, 1);
+        arr.splice(newIdx, 0, moved);
+        return true;
+      }
+
+      const subcategoryReorderConfig = {
+        containerId: 'subcategoryList',
+        handleType: 'subcategory',
+        reorder(sourceId, targetId) {
+          if (reorderStateById(subcategoriesState, sourceId, targetId)) {
+            renderSubcategories();
+            refreshPromptText();
+          }
+        },
+        nudge(id, delta) {
+          if (nudgeStateById(subcategoriesState, id, delta)) {
+            renderSubcategories();
+            refreshPromptText();
+            return true;
+          }
+          return false;
+        },
+      };
+
+      const composedSubmoduleReorderConfig = {
+        containerId: 'composedSubmoduleList',
+        handleType: 'composed',
+        reorder(sourceId, targetId) {
+          if (reorderStateById(composedSubmodulesState, sourceId, targetId)) {
+            renderComposedSubmodules();
+            refreshPromptText();
+          }
+        },
+        nudge(id, delta) {
+          if (nudgeStateById(composedSubmodulesState, id, delta)) {
+            renderComposedSubmodules();
+            refreshPromptText();
+            return true;
+          }
+          return false;
+        },
+      };
+
+      // Context Extractor
+      function getExamContext() {
+        if (!activeRow) return {};
+        const tags = parseTags(activeRow);
+
+        const subcategories = document.getElementById("subcategorySection")
+          ? subcategoriesState.map(sc => ({ name: String(sc.name || "").trim(), range: String(sc.range || "").trim() })).filter(sc => sc.name || sc.range)
+          : getStoredSubcategories(activeRow);
+        const composedSubmodules = document.getElementById("composedSubmoduleSection")
+          ? composedSubmodulesState.map(item => ({
+              name: String(item.name || "").trim(),
+              categoryId: String(item.categoryId || "").trim(),
+              range: String(item.range || "").trim(),
+            })).filter(item => item.name || item.range || item.categoryId)
+          : getStoredComposedSubmodules(activeRow);
+
+        return {
+          module: cell(activeRow, "Module") || "[Preciser l'unite]",
+          categoryId: cell(activeRow, "categoryId") || "",
+          wilaya: cell(activeRow, "Wilaya") || "-",
+          year: cell(activeRow, "Year") || "XXXX",
+          level: cell(activeRow, "Level") || "-",
+          examSession: getExamSessionForRow(activeRow),
+          examSessionLabel: getSessionLongLabel(activeRow),
+          examSessionShort: getSessionShortLabel(activeRow),
+          periodLabelForTags: getPeriodLabelForTags(activeRow),
+          period: getExamSessionForRow(activeRow)?.phase === "clinical"
+            ? ((getExamSessionForRow(activeRow)?.period === "UNK") ? "Unknown period" : (getExamSessionForRow(activeRow)?.period || ""))
+            : "",
+          rotation: getExamSessionForRow(activeRow)?.groupType === "rotation" ? (getExamSessionForRow(activeRow)?.groupValue || "") : "",
+          examDate: cell(activeRow, "ExamDate") || cell(activeRow, "Exam Date") || "-",
+          membre: formatMemberHistorySummary(cell(activeRow, "Membre")) || googleUser?.email || "-",
+            status: getRowStatus(activeRow) || "-",
+          pdfUrl: cell(activeRow, "OrigPDF") || "",
+          affichagePdfUrl: cell(activeRow, "AffichagePDF") || "",
+          csvUrl: cell(activeRow, "Quiz_Tbl") || "",
+          quizLink: cell(activeRow, "Quiz_Link") || "",
+          lang: document.getElementById("tags_lang")?.value || tags.lang || "Francais",
+          nQst: parseInt(document.getElementById("tags_nQst")?.value || "") || tags.nQst || "[Preciser le nombre]",
+          hasCT: document.getElementById("tags_hasCT")?.checked || tags.hasCT || false,
+          hasCas: document.getElementById("tags_hasCas")?.checked || tags.hasCas || false,
+          hasComb: document.getElementById("tags_hasComb")?.checked || tags.hasComb || false,
+          missingPos: document.getElementById("tags_annotations") ? parseAnnotations(document.getElementById("tags_annotations").value || "").missingPos : (tags.missingPos || []),
+          schemaQsts: document.getElementById("tags_annotations") ? parseAnnotations(document.getElementById("tags_annotations").value || "").schemaQsts : (tags.schemaQsts || []),
+          subcategories: subcategories,
+          composedSubmodules: composedSubmodules,
+          isComposedExam: isComposedExam(activeRow),
+          isTwoColumn: document.getElementById("tags_isTwoColumn")?.checked || tags.isTwoColumn || false
+        };
+      }
+
+      // Prompt generation
+      function refreshPromptText() {
+        const el = document.getElementById("promptText");
+        if (el && activeRow) {
+          const context = getExamContext();
+          if (typeof generateDigitizePrompt === "function") el.textContent = generateDigitizePrompt(context);
+          else if (typeof generatePrompt === "function") el.textContent = generatePrompt();
+          else el.textContent = "";
+        }
+      }
+
+      // JSON count helpers
+      function dcParseJsonCount(raw) {
+        if (!raw) return null;
+        try {
+          const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+          const parsed  = JSON.parse(cleaned);
+          if (parsed && Array.isArray(parsed.questions)) return parsed.questions.length;
+        } catch (e) {}
+        return null;
+      }
+
+      function dcCountBadge(count, examId) {
+        if (count === null) return "";
+        const tags     = parseTags(activeRow);
+        const nQst     = parseInt(document.getElementById("tags_nQst")?.value || "") || tags.nQst || 0;
+        const missing  = (tags.missingPos || []).length;
+        const expected = nQst - missing;
+        if (!nQst) return `<span class="dc-count-badge dc-count-ok">${count} questions</span>`;
+        if (count === expected) return `<span class="dc-count-badge dc-count-ok">${count} / ${expected} ✓</span>`;
+        if (count < expected)  return `<span class="dc-count-badge dc-count-error">${count} / ${expected} — ${expected - count} missing</span>`;
+        return `<span class="dc-count-badge dc-count-warn">${count} / ${expected} — ${count - expected} extra</span>`;
+      }
+
+      function dcUpdateCount1() {
+        const raw = (document.getElementById("dcJson1Input")?.value || "").trim();
+        const el  = document.getElementById("dcRowCount1");
+        if (el) el.innerHTML = dcCountBadge(dcParseJsonCount(raw));
+      }
+
+      function dcUpdateCount2() {
+        const raw = (document.getElementById("dcJson2Input")?.value || "").trim();
+        const el  = document.getElementById("dcRowCount2");
+        if (el) el.innerHTML = dcCountBadge(dcParseJsonCount(raw));
+      }
+
+      // Generate comparison prompt (Step 1)
+      function dcGenerateCheckPrompt() {
+        const json1 = (document.getElementById("dcJson1Input")?.value || "").trim();
+        const json2 = (document.getElementById("dcJson2Input")?.value || "").trim();
+        if (!json1) { notify("Paste JSON from Model 1 first (Phase 2a)", "error"); return; }
+        if (!json2) { notify("Paste JSON from Model 2 first (Phase 2b)", "error"); return; }
+
+        const context = getExamContext();
+        const prompt  = typeof generateDoubleCheckPrompt === "function"
+          ? generateDoubleCheckPrompt(context, json1, json2)
+          : "";
+
+        const el     = document.getElementById("dcCheckPromptText");
+        const phase3 = document.getElementById("dcPhase3");
+        if (el) el.textContent = prompt;
+        if (phase3) {
+          phase3.style.display = "block";
+          phase3.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        notify("Comparison prompt ready — copy it (Phase 3)", "success");
+      }
+
+      // Copy helpers
+      function dcCopyCheckPrompt() {
+        const text = document.getElementById("dcCheckPromptText")?.textContent || "";
+        if (!text) { notify("Generate the comparison prompt first", "error"); return; }
+        navigator.clipboard.writeText(text).then(() => {
+          const btn = document.getElementById("copyDcBtn");
+          if (btn) { btn.classList.add("copied"); btn.textContent = "Copied"; }
+          setTimeout(() => {
+            if (btn) {
+              btn.classList.remove("copied");
+              btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy comparison prompt`;
+            }
+          }, 2500);
+        }).catch(() => notify("Copy failed - select text manually.", "error"));
+      }
+
+      function copyPrompt() {
+        const context = getExamContext();
+        const text = typeof generateDigitizePrompt === "function"
+          ? generateDigitizePrompt(context)
+          : "";
+        navigator.clipboard.writeText(text).then(() => {
+          const btn = document.getElementById("copyPromptBtn");
+          if (btn) { btn.classList.add("copied"); btn.textContent = "Copie"; }
+          setTimeout(() => { if (btn) { btn.classList.remove("copied"); btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier le prompt`; } }, 2500);
+        }).catch(() => notify("Impossible de copier - selectionnez le texte manuellement.", "error"));
+      }
+
+      // Step 1 save (PDF upload + metadata combined)
+      async function saveStep1() {
+        if (!activeRow) return;
+        const btn = document.getElementById("saveStep1Btn");
+        btn.textContent = "Saving..."; btn.disabled = true;
+
+        if (googleUser?.email) recordMemberActivity(activeRow, googleUser.email, "Step 1", googleUser.name);
+
+        const hasCTVal   = document.getElementById("tags_hasCT")?.checked   || false;
+        const hasCasVal  = document.getElementById("tags_hasCas")?.checked  || false;
+        const hasCombVal = document.getElementById("tags_hasComb")?.checked || false;
+        const nQstVal    = parseInt(document.getElementById("tags_nQst")?.value || "") || 0;
+        const examDateVal = document.getElementById("tags_examDate")?.value || "";
+        const langVal    = document.getElementById("tags_lang")?.value || "Francais";
+        const annotations = parseAnnotations(document.getElementById("tags_annotations")?.value || "");
+        const shouldSaveSubcategories = shouldShowSubcategoriesForRow(activeRow);
+        const cleanedSubcategories = shouldSaveSubcategories
+          ? subcategoriesState
+              .map(sc => ({ name: String(sc.name || "").trim(), range: String(sc.range || "").trim() }))
+              .filter(sc => sc.name || sc.range)
+          : [];
+        const shouldSaveComposedSubmodules = isComposedExam(activeRow);
+        const cleanedComposedSubmodules = shouldSaveComposedSubmodules
+          ? composedSubmodulesState
+              .map(item => ({
+                name: String(item.name || "").trim(),
+                categoryId: String(item.categoryId || "").trim(),
+                range: String(item.range || "").trim(),
+              }))
+              .filter(item => item.name || item.range || item.categoryId)
+          : [];
+
+        if (shouldSaveComposedSubmodules) {
+          const composedValidation = validateComposedSubmodulesState(cleanedComposedSubmodules, nQstVal, annotations.missingPos);
+          if (!composedValidation.ok) {
+            notify(composedValidation.message, "error");
+            btn.textContent = "Save"; btn.disabled = false;
+            return;
+          }
+        }
+
+        const noteValue = serializeStructuredNotes(noteEntriesState);
+        setCell(activeRow, "Note", noteValue);
+
+        if (examDateVal) setCell(activeRow, "ExamDate", examDateVal);
+
+        let serializedExamSession = "";
+        try {
+          ensureExamSessionColumn();
+          serializedExamSession = window.ExamSessionUtils.serializeExamSession(readExamSessionFromForm(activeRow));
+          setCell(activeRow, "ExamSession", serializedExamSession);
+          if (colIdx("Rotation") >= 0) setCell(activeRow, "Rotation", "");
+          if (colIdx("Period") >= 0) setCell(activeRow, "Period", "");
+        } catch (e) {
+          notify(e.message || "Exam session is invalid.", "error");
+          btn.textContent = "Save"; btn.disabled = false;
+          return;
+        }
+
+        const mergedTags = Object.assign({}, parseTags(activeRow), {
+          nQst: nQstVal,
+          lang: langVal,
+          missingPos: annotations.missingPos,
+          schemaQsts: annotations.schemaQsts,
+          hasCT:   hasCTVal,
+          hasCas:  hasCasVal,
+          hasComb: hasCombVal,
+          subcategories: cleanedSubcategories,
+          composedSubmodules: cleanedComposedSubmodules,
+        });
+        delete mergedTags.missingQsts;
+        setCell(activeRow, "Tags", JSON.stringify(mergedTags));
+
+        const uploadPdfKind = async (file, columnName, kind) => {
+          btn.textContent = "Uploading PDF...";
+          const existingUrl = cell(activeRow, columnName);
+          const ctSuffix = hasCTVal ? "_CT" : "";
+          const _pr = getSessionRef(activeRow);
+          const baseName = [cell(activeRow, "Wilaya"), cell(activeRow, "Year"), _pr || null, cell(activeRow, "Module")]
+            .filter(Boolean).join("_").replace(/\s+/g, "_");
+          const missCount = annotations.missingPos.length;
+          const stem = kind === "affichage"
+            ? `${baseName}${ctSuffix}_Affichage`
+            : [
+                `${baseName}${ctSuffix}`,
+                nQstVal ? `${nQstVal}Q` : null,
+                missCount > 0 ? `${missCount}miss` : null,
+              ].filter(Boolean).join("_");
+          const existingName = existingUrl ? await getDriveFileName(existingUrl) : "";
+          const fname = buildNextVersionedFilename(stem, "pdf", existingName);
+          const fd = new FormData();
+          fd.append("file", file, fname);
+          fd.append("filename", fname);
+          const r = await fetch(`${API}/api/upload`, { method: "POST", body: fd });
+          const d = await r.json();
+          if (d.error) throw new Error(d.error);
+          setCell(activeRow, columnName, d.url);
+        };
+
+        try {
+          if (pendingOrigPdfFile) {
+            await uploadPdfKind(pendingOrigPdfFile, "OrigPDF", "orig");
+            pendingOrigPdfFile = null;
+          }
+          if (pendingAffichagePdfFile) {
+            await uploadPdfKind(pendingAffichagePdfFile, "AffichagePDF", "affichage");
+            pendingAffichagePdfFile = null;
+          }
+        } catch (e) {
+          notify("PDF upload failed: " + e.message, "error");
+          btn.textContent = "Save"; btn.disabled = false;
+          return;
+        }
+
+        try {
+          await writeSheet();
+          notify("Saved OK", "success");
+          refreshPromptText();
+          renderNoteCards();
+          renderExam(activeRow);
+        } catch (e) {
+          notify("Sheet write failed: " + e.message, "error");
+        }
+        btn.textContent = "Save"; btn.disabled = false;
+      }
+
+      // Step 4 save
+      async function saveStep4() {
+        if (!activeRow) return;
+        const btn = document.getElementById("saveStep4Btn");
+        btn.textContent = "Saving..."; btn.disabled = true;
+
+        if (colIdx("Quiz_Link") < 0) {
+          notify('The "Quiz_Link" column was not found in the sheet header, so the link was not saved.', "error");
+          btn.textContent = "Save link"; btn.disabled = false;
+          return;
+        }
+
+        const quizLink = (document.getElementById("field_Quiz_Link")?.value || "").trim();
+        setCell(activeRow, "Quiz_Link", quizLink);
+
+        if (googleUser?.email) recordMemberActivity(activeRow, googleUser.email, "Step 4", googleUser.name);
+
+        try {
+          await writeSheet();
+          notify("Quiz link saved OK", "success");
+          renderReportCard(activeRow);
+        } catch (e) {
+          notify("Sheet write failed: " + e.message, "error");
+        }
+        btn.textContent = "Save link"; btn.disabled = false;
+      }
+
+      // Sheet write helper
+      async function writeSheet() {
+        await ensureNoteColumnPersisted();
+        syncDerivedStatus(activeRow);
+        const r = await fetch(`${API}/api/sheet/${activeRow._rowIndex}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cells: activeRow.cells }),
+        });
+        const d = await r.json();
+        if (d.error) throw new Error(d.error);
+      }
+
+      // PDF file handlers
+      function handlePdfSelect(input, kind = "orig") { if (input.files[0]) setPdfFile(input.files[0], kind); }
+      function handlePdfDrop(e, kind = "orig") {
+        e.preventDefault();
+        document.getElementById(`uploadZone_${kind}`)?.classList.remove("dragover");
+        if (e.dataTransfer.files[0]) setPdfFile(e.dataTransfer.files[0], kind);
+      }
+      function setPdfFile(f, kind = "orig") {
+        if (kind === "affichage") pendingAffichagePdfFile = f;
+        else pendingOrigPdfFile = f;
+        const el = document.getElementById(`pdfFileName_${kind}`);
+        if (el) { el.textContent = f.name + " (" + Math.round(f.size / 1024) + " KB)"; el.style.display = "block"; }
+      }
+
+      // Utilities
+      function showError(title, msg) {
+        document.getElementById("loadingScreen").style.display = "none";
+        document.getElementById("errorScreen").style.display = "flex";
+        document.getElementById("errorTitle").textContent = title;
+        document.getElementById("errorMsg").textContent = msg;
+      }
+      function notify(msg, type) {
+        const el = document.getElementById("notif");
+        el.textContent = msg; el.className = `notif ${type} show`;
+        setTimeout(() => el.classList.remove("show"), 3500);
+      }
+
+      // Help popovers
+      function initHelp() {
+        const popover = document.createElement("div");
+        popover.className = "help-popover"; popover.id = "helpPopover";
+        document.body.appendChild(popover);
+        document.addEventListener("click", (e) => {
+          const btn = e.target.closest(".help-btn");
+          if (btn) {
+            e.stopPropagation();
+            const text = btn.dataset.help || "";
+            if (popover.style.display === "block" && popover._source === btn) {
+              popover.style.display = "none"; popover._source = null; return;
+            }
+            popover.textContent = text; popover.style.display = "block"; popover._source = btn;
+            const rect = btn.getBoundingClientRect();
+            const scrollY = window.scrollY || document.documentElement.scrollTop;
+            const scrollX = window.scrollX || document.documentElement.scrollLeft;
+            popover.style.top  = (rect.bottom + scrollY + 7) + "px";
+            popover.style.left = (rect.left + scrollX + rect.width / 2) + "px";
+          } else { popover.style.display = "none"; popover._source = null; }
+        });
+      }
+
+      function buildStep3(examId, state, csvUrl) {
+        const openSheetsUrl = driveOpenInSheetsUrl(csvUrl);
+        const downloadHtml = csvUrl
+          ? `<div style="display:flex;gap:8px;flex-wrap:wrap;">
+               <a class="download-link" href="${driveDirectDownloadUrl(csvUrl)}" download>
+                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                 Download existing Excel
+               </a>
+               ${openSheetsUrl ? `<a class="download-link" href="${openSheetsUrl}" target="_blank" rel="noopener noreferrer">
+                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3h7v7"/><path d="M10 14L21 3"/><path d="M21 14v7h-7"/><path d="M3 10V3h7"/><path d="M3 21l7-7"/></svg>
+                 Open in Google Sheets
+               </a>` : ``}
+             </div>`
+          : "";
+
+        const body = `
+          ${downloadHtml ? `<div style="margin-bottom:12px;">${downloadHtml}</div>` : ''}
+          <div class="form-row">
+            <label>
+              Paste the final AI output
+              <span style="font-size:11px;font-weight:400;color:var(--red-text);margin-left:6px;">Must contain VALIDATION PASSED and the final JSON array in the same response</span>
+            </label>
+            <textarea class="tsv-textarea" id="combinedPasteInput"
+              placeholder='Paste the final AI output here: one single block containing VALIDATION PASSED summary and JSON FINAL array.'
+              oninput="updateStep3ButtonState()"></textarea>
+            <div id="validationStatusBanner" class="validation-status-banner" style="display:none;"></div>
+            <div id="incertainStatusBanner" class="validation-status-banner" style="display:none;margin-top:4px;"></div>
+            <div class="field-hint">Paste the complete final AI output. The app extracts the JSON array and converts it to Excel automatically.</div>
+          </div>`;
+        const footer = `<button class="btn btn-sm btn-primary" id="saveStep3Btn" onclick="saveStep3()" disabled style="opacity:.5;cursor:not-allowed;">Save &amp; Upload Excel</button>`;
+        return stepCardWrap(2, examId, state, "Upload verified QCM data", "Paste one final AI audit block: validation summary + TSV together", body, footer);
+      }
+
+      function updateStep3ButtonState() {
+        const combined = (document.getElementById("combinedPasteInput")?.value || "").trim();
+        const btn = document.getElementById("saveStep3Btn");
+        const vBanner = document.getElementById("validationStatusBanner");
+        const iBanner = document.getElementById("incertainStatusBanner");
+        if (!btn) return;
+
+        const CHECK_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+        const WARN_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+
+        if (!combined) {
+          if (vBanner) vBanner.style.display = "none";
+          if (iBanner) iBanner.style.display = "none";
+          btn.disabled = true;
+          btn.style.opacity = ".5";
+          btn.style.cursor = "not-allowed";
+          return;
+        }
+
+        const validationOk = hasValidationPassedSignal(combined);
+        const questions = extractVerifiedJson(combined);
+        const jsonOk = questions !== null && questions.length > 0;
+
+        if (vBanner) {
+          vBanner.style.display = "flex";
+          if (validationOk && jsonOk) {
+            vBanner.className = "validation-status-banner validation-ok";
+            vBanner.innerHTML = `${CHECK_SVG} VALIDATION PASSED detected + JSON array found (${questions.length} questions)`;
+          } else if (!validationOk) {
+            vBanner.className = "validation-status-banner validation-fail";
+            vBanner.innerHTML = `${WARN_SVG} No VALIDATION PASSED signal found in the pasted output`;
+          } else {
+            vBanner.className = "validation-status-banner validation-fail";
+            vBanner.innerHTML = `${WARN_SVG} No valid JSON array found — make sure the output includes the final JSON array`;
+          }
+        }
+
+        let incertainOk = true;
+        if (iBanner) {
+          if (jsonOk) {
+            const jsonText = JSON.stringify(questions);
+            const markers = jsonText.match(/\[(?:Here|SWAP|REVIEW)[^\]]*\]/gi) || [];
+            iBanner.style.display = "flex";
+            if (markers.length > 0) {
+              iBanner.className = "validation-status-banner validation-fail";
+              iBanner.innerHTML = `${WARN_SVG} ${markers.length} unresolved marker${markers.length > 1 ? "s" : ""} remain in the JSON`;
+              incertainOk = false;
+            } else {
+              iBanner.className = "validation-status-banner validation-ok";
+              iBanner.innerHTML = `${CHECK_SVG} JSON valid — ${questions.length} question${questions.length > 1 ? "s" : ""}, no unresolved markers`;
+            }
+          } else {
+            iBanner.style.display = "none";
+            incertainOk = false;
+          }
+        }
+
+        const ready = validationOk && jsonOk && incertainOk;
+        btn.disabled = !ready;
+        btn.style.opacity = ready ? "1" : ".5";
+        btn.style.cursor = ready ? "pointer" : "not-allowed";
+      }
+
+      async function saveStep3() {
+        if (!activeRow) return;
+
+        const combined = (document.getElementById("combinedPasteInput")?.value || "").trim();
+        if (!combined) { notify("Paste the final AI output first", "error"); return; }
+        if (!hasValidationPassedSignal(combined)) {
+          notify("No VALIDATION PASSED signal found in the output", "error"); return;
+        }
+
+        const rawQuestions = extractVerifiedJson(combined);
+        const questions = applyDerivedQuestionFields(rawQuestions);
+        if (!questions || !questions.length) {
+          notify("No valid JSON array found — make sure the output includes the final JSON array", "error"); return;
+        }
+
+        const jsonText = JSON.stringify(questions);
+        const residualMarkers = jsonText.match(/\[(?:Here|SWAP|REVIEW)[^\]]*\]/gi) || [];
+        if (residualMarkers.length > 0) {
+          notify(`${residualMarkers.length} unresolved marker(s) in JSON — fix them before importing`, "error"); return;
+        }
+        if (questions.some(q => !String(q.categoryId || "").trim())) {
+          notify("Some questions could not be assigned to a categoryId — check composed submodule ranges.", "error"); return;
+        }
+
+        const btn = document.getElementById("saveStep3Btn");
+        btn.textContent = "Uploading...";
+        btn.disabled = true;
+
+        if (googleUser?.email) recordMemberActivity(activeRow, googleUser.email, "Step 3", googleUser.name);
+
+        const hasCTVal = document.getElementById("tags_hasCT")?.checked || parseTags(activeRow).hasCT || false;
+        const nQstVal = parseInt(document.getElementById("tags_nQst")?.value || "") || parseTags(activeRow).nQst || 0;
+        const annotations = parseAnnotations(document.getElementById("tags_annotations")?.value || "");
+        const normalizeFilenamePart = (value) => String(value || "").trim().replace(/\s+/g, "_");
+        const wilaya   = normalizeFilenamePart(cell(activeRow, "Wilaya"));
+        const level    = normalizeFilenamePart(cell(activeRow, "Level"));
+        const module   = normalizeFilenamePart(cell(activeRow, "Module"));
+        const year     = String(cell(activeRow, "Year") || "").trim();
+        const yearShort = year ? year.slice(-2) : "";
+        const pr       = getSessionRef(activeRow);
+        const missCount = annotations.missingPos.length;
+        const stemParts = [
+          wilaya || null, level || null, module || null,
+          `${yearShort}${pr}` || null,
+          nQstVal ? `${nQstVal}Q` : null,
+          hasCTVal ? "CT" : null,
+          missCount > 0 ? `${missCount}miss` : null,
+        ].filter(Boolean);
+        const existingExcelName = cell(activeRow, "Quiz_Tbl") ? await getDriveFileName(cell(activeRow, "Quiz_Tbl")) : "";
+        const fname = buildNextVersionedFilename(stemParts.join("_"), "xlsx", existingExcelName);
+
+        try {
+          const workbookBlob = jsonToWorkbookBlob(questions);
+          const fd = new FormData();
+          fd.append("file", workbookBlob, fname);
+          fd.append("filename", fname);
+          const r = await fetch(`${API}/api/upload`, { method: "POST", body: fd });
+          const d = await r.json();
+          if (d.error) throw new Error(d.error);
+          setCell(activeRow, "Quiz_Tbl", d.url);
+          await writeSheet();
+          notify(`Excel uploaded to Drive OK (${questions.length} questions)`, "success");
+          const cp = document.getElementById("combinedPasteInput");
+          if (cp) cp.value = "";
+          updateStep3ButtonState();
+          renderExam(activeRow);
+        } catch (e) {
+          notify("Excel upload failed: " + e.message, "error");
+        }
+        btn.textContent = "Save & Upload Excel";
+        btn.disabled = false;
+      }
+
+      // Report card
+      function renderReportCard(row) {
+        const card = document.getElementById("reportPromptCard");
+        if (!card) return;
+        card.style.display = "block";
+
+        const { ok, missing } = validateReportReady();
+        const adminUrl = getStoredReportLink(row, "admin");
+        const publicUrl = getStoredReportLink(row, "public");
+        const disabledAttr = ok ? "" : "disabled";
+        const disabledStyle = ok ? "" : "opacity:.45;cursor:not-allowed;pointer-events:none;";
+        const fileIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+
+        const lockBanner = ok ? "" : `
+          <div class="report-lock-banner">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0;color:#b45309;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <div>
+              <div class="report-lock-title">Complete all steps before generating reports</div>
+              <ul class="report-lock-list">${missing.map(m => `<li>${m}</li>`).join("")}</ul>
+            </div>
+          </div>`;
+
+        const renderPanel = (type, title, subtitle, badgeColor, url) => {
+          const btnId = type === "admin" ? "generateAdminReportBtn" : "generatePublicReportBtn";
+          const btnText = url ? "Regenerate PDF" : "Generate PDF";
+          const linksHtml = url
+            ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+                 <a class="download-link" href="${url}" target="_blank" rel="noopener noreferrer">${fileIcon} View PDF</a>
+                 <a class="download-link" href="${driveDirectDownloadUrl(url)}" download>${fileIcon} Download PDF</a>
+                 <button class="copy-btn" type="button" onclick="copyReportLink('${type}')">${fileIcon} Copy link</button>
+               </div>
+                <div class="field-hint" style="margin-top:8px;word-break:break-all;">Public URL: ${url}</div>`
+            : `<div class="field-hint" style="margin-top:10px;">No generated PDF stored yet.</div>`;
+
+          return `
+            <div class="report-panel ${type === "admin" ? "report-panel-admin" : "report-panel-public"}">
+              <div class="report-panel-header">
+                <div>
+                  <div class="report-panel-title">
+                    <span class="report-panel-badge" style="background:${badgeColor};">${type === "admin" ? "Admin" : "Public"}</span>
+                    ${title}
+                  </div>
+                  <div class="report-panel-sub">${subtitle}</div>
+                </div>
+                <button class="copy-btn" id="${btnId}" onclick="generateReportPdf('${type}')" ${disabledAttr} style="${disabledStyle}">
+                  ${fileIcon} ${btnText}
+                </button>
+              </div>
+              <div class="prompt-text report-prompt-text" style="max-height:none;white-space:normal;overflow:visible;">
+                <div style="font-weight:700;color:var(--text);margin-bottom:6px;">Direct generation</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.5;">The app builds this PDF directly, uploads it to Google Drive, and stores the public reader URL for this exam.</div>
+                ${linksHtml}
+              </div>
+            </div>`;
+        };
+
+        card.innerHTML = `
+          <div class="step-card">
+            <div class="step-card-header">
+              <div class="step-num-badge" style="background:linear-gradient(135deg,#6c47d9,#4f46e5);">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              </div>
+              <div class="step-title-wrap">
+                <div class="step-title">Generate reports</div>
+                <div class="step-subtitle">Create polished Admin/Public PDFs and upload them directly to Drive</div>
+              </div>
+            </div>
+            <div class="step-body" style="padding:0;">
+              ${lockBanner}
+              <div class="report-panels" style="${ok ? "" : "opacity:.55;pointer-events:none;user-select:none;"}">
+                ${renderPanel("admin", "Admin report", "Internal PDF with metadata, workflow state, and source links", "#6c47d9", adminUrl)}
+                ${renderPanel("public", "Public report", "Student-facing PDF with clean practice summary and public access links", "#059669", publicUrl)}
+              </div>
+            </div>
+          </div>`;
+      }
+
+      function buildReportPayload(type) {
+        const tags = parseTags(activeRow);
+        return {
+          type,
+          data: {
+            module: cell(activeRow, "Module"),
+            wilaya: cell(activeRow, "Wilaya"),
+            year: cell(activeRow, "Year"),
+            level: cell(activeRow, "Level"),
+            rotation: getExamSessionForRow(activeRow)?.groupType === "rotation" ? (getExamSessionForRow(activeRow)?.groupValue || "") : "",
+            period: getExamSessionForRow(activeRow)?.phase === "clinical"
+              ? ((getExamSessionForRow(activeRow)?.period === "UNK") ? "Unknown period" : (getExamSessionForRow(activeRow)?.period || ""))
+              : "",
+            examSession: cell(activeRow, "ExamSession"),
+            examDate: cell(activeRow, "ExamDate") || cell(activeRow, "Exam Date") || "-",
+            member: formatMemberHistorySummary(cell(activeRow, "Membre")) || googleUser?.email || "",
+            status: getRowStatus(activeRow),
+            pdfUrl: cell(activeRow, "OrigPDF"),
+            affichagePdfUrl: cell(activeRow, "AffichagePDF"),
+            csvUrl: cell(activeRow, "Quiz_Tbl"),
+            quizLink: cell(activeRow, "Quiz_Link"),
+            adminReportUrl: getStoredReportLink(activeRow, "admin"),
+            publicReportUrl: getStoredReportLink(activeRow, "public"),
+            tags,
+          }
+        };
+      }
+
+      async function generateReportPdf(type) {
+        const { ok, missing } = validateReportReady();
+        if (!ok) { notify("Complete all steps first: " + missing[0], "error"); return; }
+        if (!activeRow) return;
+
+        const btnId = type === "admin" ? "generateAdminReportBtn" : "generatePublicReportBtn";
+        const btn = document.getElementById(btnId);
+        const original = btn?.innerHTML || "";
+        if (btn) { btn.innerHTML = "Generating..."; btn.disabled = true; }
+
+        try {
+          if (googleUser?.email) recordMemberActivity(activeRow, googleUser.email, type === "admin" ? "Admin report" : "Public report", googleUser.name);
+          const r = await fetch(`${API}/api/report-pdf`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(buildReportPayload(type)),
+          });
+          const raw = await r.text();
+          let d = null;
+          try {
+            d = raw ? JSON.parse(raw) : {};
+          } catch (parseError) {
+            if (!r.ok) {
+              throw new Error(`Server returned non-JSON response (${r.status}). The backend may need a restart to load /api/report-pdf.`);
+            }
+            throw new Error("Invalid JSON response from report endpoint");
+          }
+          if (!r.ok || d.error) throw new Error(d.error || "Report generation failed");
+
+          setStoredReportLink(activeRow, type, d.url);
+          await writeSheet();
+          notify(`${type === "admin" ? "Admin" : "Public"} report uploaded to Drive`, "success");
+          renderReportCard(activeRow);
+        } catch (e) {
+          notify(`Report generation failed: ${e.message}`, "error");
+          if (btn) { btn.innerHTML = original; btn.disabled = false; }
+        }
+      }
+
+      async function copyReportLink(type) {
+        if (!activeRow) return;
+        const url = getStoredReportLink(activeRow, type);
+        if (!url) {
+          notify(`No ${type} report link available yet`, "error");
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(url);
+          notify(`${type === "admin" ? "Admin" : "Public"} report link copied`, "success");
+        } catch (e) {
+          notify("Copy failed - select the link manually", "error");
+        }
+      }
+
+      if (typeof google !== "undefined") { initGoogleAuth(); }
+      else { window.addEventListener("load", initGoogleAuth); }
+      initHelp();
+

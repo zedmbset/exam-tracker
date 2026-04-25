@@ -1,9 +1,15 @@
 attached_assets/
 .env
-telegram_worker/.env
+workers/telegram/.env
 .env.*
-telegram_worker/.env.*
+workers/telegram/.env.*
 node_modules/
+.local/
+migration_reports/
+workers/telegram/runtime_data/
+tmp_pdf_pages/
+tmp_json*.json
+indesign_text_*.xml
 __pycache__/
 *.pyc
 *.log

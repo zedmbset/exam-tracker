@@ -10,9 +10,11 @@ A Node.js/Express web application for tracking the digitization progress of exam
 - **Authentication**: Google Service Account (JWT) + OAuth2 for owner Drive access
 
 ## Architecture
-- `server.js` - Main Express server and all API routes
-- `public/` - Static frontend files (index.html, exam.html, prompts/ JS modules)
-- `reports/` - PDF report generation logic (admin and public reports)
+- `server.js` - Tiny boot entrypoint that loads the Express app
+- `src/server/` - Backend app, routes, services, utilities, and PDF reports
+- `src/shared/` - Shared browser/server helpers served through stable `/lib/*` URLs
+- `public/` - Static frontend HTML, CSS, and JavaScript assets
+- `workers/telegram/` - Standalone Telethon worker service
 - `docs/` - Project documentation and data schemas
 
 ## Key API Routes

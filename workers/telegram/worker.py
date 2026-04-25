@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from flask import Flask, jsonify, request
 from dotenv import load_dotenv
 from telethon import TelegramClient
+from telethon.errors import RPCError
 from telethon.sessions import StringSession
 
 from channel_lister import list_channels
@@ -172,6 +173,90 @@ def run_async(coroutine):
     return future.result(timeout=None)
 
 
+def _normalize_channel_link(value):
+    raw = str(value or "").strip()
+    if not raw:
+        raise ValueError("Channel link is required.")
+    if raw.startswith("@"):
+        username = raw.lstrip("@").strip()
+        if not username:
+            raise ValueError("Telegram username is invalid.")
+        return {"kind": "public", "ref": username}
+    public_match = re.match(r"^https?://t\.me/([A-Za-z0-9_]{5,})/?$", raw, re.IGNORECASE)
+    if public_match:
+        return {"kind": "public", "ref": public_match.group(1)}
+    invite_match = re.match(r"^https?://t\.me/\+([A-Za-z0-9_-]+)/?$", raw, re.IGNORECASE)
+    if invite_match:
+        return {"kind": "invite", "ref": f"+{invite_match.group(1)}"}
+    raise ValueError("Supported formats: @username, https://t.me/USERNAME, https://t.me/+HASH")
+
+
+async def resolve_channel_reference(client, link, fallback_name=""):
+    normalized = _normalize_channel_link(link)
+    fallback_name = str(fallback_name or "").strip()
+
+    if normalized["kind"] == "public":
+        entity = await client.get_entity(normalized["ref"])
+        return {
+            "id": int(f"-100{entity.id}") if getattr(entity, "id", 0) > 0 else getattr(entity, "id", ""),
+            "name": getattr(entity, "title", "") or getattr(entity, "username", "") or fallback_name,
+            "username": getattr(entity, "username", "") or "",
+            "type": "group" if getattr(entity, "megagroup", False) else "channel" if getattr(entity, "broadcast", False) else "",
+            "membersCount": getattr(entity, "participants_count", "") or "",
+            "resolved": True,
+            "fallbackAllowed": False,
+            "normalizedRef": normalized["ref"],
+            "originalLink": str(link or "").strip(),
+        }
+
+    from telethon.tl.functions.messages import CheckChatInviteRequest
+
+    invite_hash = normalized["ref"].lstrip("+")
+    try:
+        invite_info = await client(CheckChatInviteRequest(hash=invite_hash))
+        chat = getattr(invite_info, "chat", None)
+        if chat is None:
+            return {
+                "id": normalized["ref"],
+                "name": getattr(invite_info, "title", "") or fallback_name or normalized["ref"],
+                "username": "",
+                "type": "",
+                "membersCount": getattr(invite_info, "participants_count", "") or "",
+                "resolved": False,
+                "fallbackAllowed": True,
+                "normalizedRef": normalized["ref"],
+                "originalLink": str(link or "").strip(),
+            }
+        return {
+            "id": int(f"-100{chat.id}") if getattr(chat, "id", 0) > 0 else getattr(chat, "id", ""),
+            "name": getattr(chat, "title", "") or fallback_name or normalized["ref"],
+            "username": getattr(chat, "username", "") or "",
+            "type": "group" if getattr(chat, "megagroup", False) else "channel" if getattr(chat, "broadcast", False) else "",
+            "membersCount": getattr(chat, "participants_count", "") or "",
+            "resolved": True,
+            "fallbackAllowed": True,
+            "normalizedRef": normalized["ref"],
+            "originalLink": str(link or "").strip(),
+        }
+    except RPCError:
+        return {
+            "id": normalized["ref"],
+            "name": fallback_name or normalized["ref"],
+            "username": "",
+            "type": "",
+            "membersCount": "",
+            "resolved": False,
+            "fallbackAllowed": True,
+            "normalizedRef": normalized["ref"],
+            "originalLink": str(link or "").strip(),
+        }
+
+
+async def resolve_channel_request(link, fallback_name=""):
+    client = await init_client()
+    return await resolve_channel_reference(client, link, fallback_name)
+
+
 async def shutdown_client():
     global CLIENT
     if CLIENT is not None and CLIENT.is_connected():
@@ -225,7 +310,7 @@ async def run_serialized_sheets_job(job_id, wait_summary, coroutine_factory):
 def require_worker_token():
     if request.path == "/health":
         return None
-    if request.path.startswith("/jobs/"):
+    if request.path.startswith("/jobs/") or request.path.startswith("/resolve/"):
         if not WORKER_AUTH_TOKEN:
             return jsonify({"error": "WORKER_AUTH_TOKEN is not configured on the worker."}), 503
         if request.headers.get("X-Worker-Token", "") != WORKER_AUTH_TOKEN:
@@ -252,6 +337,24 @@ def health():
             "workerAuthConfigured": bool(WORKER_AUTH_TOKEN),
         }
     )
+
+
+@app.post("/resolve/channel")
+def resolve_channel():
+    payload = request.get_json(silent=True) or {}
+    link = str(payload.get("link", "")).strip()
+    fallback_name = str(payload.get("name", "")).strip()
+    if not link:
+        return jsonify({"error": "link is required."}), 400
+
+    try:
+        channel = run_async(resolve_channel_request(link, fallback_name))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except Exception as error:
+        return jsonify({"error": redact_sensitive_text(error)}), 500
+
+    return jsonify({"ok": True, "channel": channel})
 
 
 @app.post("/jobs/list-channels")

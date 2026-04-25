@@ -1,0 +1,18 @@
+{
+  "files.exclude": {
+    "**/.git": true,
+    "**/.github": true,
+    "**/.local": true,
+    "**/.vscode": true,
+    "**/node_modules": true,
+    "**/.env": true,
+    "**/package-lock.json": true,
+    "**/.replit": true,
+    "**/railway.toml": true,
+    "**/pyproject.toml": true
+  },
+  "search.exclude": {
+    "**/.local": true,
+    "**/node_modules": true
+  }
+}

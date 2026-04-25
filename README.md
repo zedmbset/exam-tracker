@@ -36,6 +36,17 @@ A web-based dashboard for tracking the digitization progress of medical exams (Q
 | `docs/SCHEMA.md` | Full Google Sheet column schema |
 | `docs/PROJECT_DOCUMENTATION.md` | Full auto-generated project documentation |
 
+## Project Layout
+
+| Path | Purpose |
+|---|---|
+| `server.js` | Thin boot entrypoint for local, Railway, and Replit startup |
+| `src/server/` | Express app, API routes, backend services, utilities, and PDF report code |
+| `src/shared/` | Shared helpers used by browser and server code |
+| `public/` | No-build frontend pages and static assets |
+| `workers/telegram/` | Standalone Python Telegram worker |
+| `.local/` | Ignored local reports, temp files, and generated artifacts |
+
 ## Tech Stack
 
 - **Backend**: Node.js + Express

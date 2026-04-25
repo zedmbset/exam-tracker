@@ -36,14 +36,16 @@ If a future schema change renames `Exam Date` back to `ExamDate`, or adds/remove
 
 ## Completion rule
 
-A module/cell is **checked** only when at least one matching row has a non-empty `Quiz_Tbl` value.
+A module/cell is **checked** when at least one matching row has an effective `Completed` status. This includes normal completion via `Quiz_Tbl` and the supported manual override where the sheet `Status` is already `Completed`.
 
 ```js
-function isCompleted(row) { return isPresent(cell(row, 'Quiz_Tbl')); }
+function isCompleted(row) { return getRowStatus(row) === STATUS_COMPLETED; }
 ```
 
-- Status column (`✅ Completed`, `🕒 Pending`, etc.) is **not** consulted — we rely on the underlying truth (`Quiz_Tbl`), same as the status-derivation logic elsewhere in the app.
+- The stored Status column is consulted only for the manual `Completed` override. Otherwise, status is derived from `Quiz_Tbl`, `OrigPDF`, and `ExamDate`.
 - All other states (Pending, New Exam, Missing, blank, future-dated) render as an empty checkbox.
+
+For session button colors and the preview modal badge, the page also derives the workflow state from row data at runtime instead of trusting the stored `Status` cell. This avoids stale badges when a row has not been reopened and resaved yet in `public/exam.html`.
 
 ## Normalization rules (matrix matching)
 

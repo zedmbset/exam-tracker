@@ -71,33 +71,34 @@ These are the authoritative 0-based column indices. See `docs/SCHEMA.md` for ful
 | B | Wilaya | 1 |
 | C | Year | 2 |
 | D | Level | 3 |
-| E | Rotation | 4 |
-| F | Period | 5 |
-| G | categoryId | 6 |
-| H | Module | 7 |
-| I | Start | 8 |
-| J | End | 9 |
-| K | ExamDate | 10 |
-| L | Status | 11 |
-| M | OrigPDF | 12 |
-| N | AffichagePDF | 13 |
-| O | Quiz_Tbl | 14 |
-| P | Membre | 15 |
-| Q | Tags | 16 |
-| R | Quiz_Link | 17 |
-| S | Admin_Report | 18 |
-| T | Public_Report | 19 |
+| E | ExamSession | 4 |
+| F | categoryId | 5 |
+| G | Module | 6 |
+| H | Start | 7 |
+| I | End | 8 |
+| J | ExamDate | 9 |
+| K | Status | 10 |
+| L | OrigPDF | 11 |
+| M | AffichagePDF | 12 |
+| N | Quiz_Tbl | 13 |
+| O | Membre | 14 |
+| P | Tags | 15 |
+| Q | Quiz_Link | 16 |
+| R | Admin_Report | 17 |
+| S | Public_Report | 18 |
 
 ## Key Design Decisions
 
 - The backend acts as a secure proxy — Google API credentials are never sent to the browser.
 - The frontend reads the `GOOGLE_CLIENT_ID` from `/api/config` at runtime so it never needs to be hardcoded.
 - A row is considered "complete" when `Quiz_Tbl` and `Tags.nQst` are both filled.
-- Status is **fully derived** from row data — never set manually. Rules:
-  - `✅ Completed`: `Quiz_Tbl` exists
-  - `🕒 Pending`: `OrigPDF` exists, no `Quiz_Tbl`
-  - `🆕 New Exam`: exam date is past, no PDF, exam ≤ 15 days old
-  - `✖️ Missing`: exam date is past, no PDF, exam > 15 days old
+- `ExamSession` is stored as a compact code string such as `R1-P1`, `S1`, `RTRPG`, or `SYNTH`; parsing and validation live in `src/shared/examSession.js`.
+- Status is normally derived from row data, with one supported manual override: an existing `Completed` status is preserved even if `Quiz_Tbl` is empty. Rules:
+  - `Completed`: `Quiz_Tbl` exists
+  - manual `Completed`: stored Status is already `Completed` and `Quiz_Tbl` is empty
+  - `Pending`: `OrigPDF` exists, no `Quiz_Tbl`
+  - `New Exam`: exam date is past, no PDF, exam ≤ 15 days old
+  - `Missing`: exam date is past, no PDF, exam > 15 days old
   - *(blank)*: no exam date, or date is in the future
 - The exam detail page (`exam.html`) requires Google sign-in so that the contributor's email is recorded automatically.
 
@@ -105,7 +106,7 @@ These are the authoritative 0-based column indices. See `docs/SCHEMA.md` for ful
 
 | Tag | Columns |
 |---|---|
-| `[identity]` | Wilaya, Year, Level, Rotation, Period, Module, ExamDate |
+| `[identity]` | Wilaya, Year, Level, ExamSession, Module, ExamDate |
 | `[system]` | ID_Exams, Start, End, Status |
 | `[member-task]` | Membre, Tags |
 | `[links]` | OrigPDF, AffichagePDF, Quiz_Tbl, Quiz_Link |

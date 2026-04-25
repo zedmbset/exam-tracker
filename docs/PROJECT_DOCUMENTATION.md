@@ -784,13 +784,13 @@ exam-tracker/
 | `generateDoubleCheckPromptFromContext(data, tsvData)` | — |
 | `generateDoubleCheckPrompt(arg1, arg2)` | — |
 
-### 📁 `reports/`
+### 📁 `src/server/reports/`
 
 #### 📄 `adminReportPdf.js`
 
 | Property | Value |
 |----------|-------|
-| **Path** | `reports/adminReportPdf.js` |
+| **Path** | `src/server/reports/adminReportPdf.js` |
 | **Type** | JS |
 | **Lines** | 103 total · 83 code · 2 comments |
 
@@ -813,7 +813,7 @@ exam-tracker/
 
 | Property | Value |
 |----------|-------|
-| **Path** | `reports/publicReportPdf.js` |
+| **Path** | `src/server/reports/publicReportPdf.js` |
 | **Type** | JS |
 | **Lines** | 160 total · 129 code · 9 comments |
 
@@ -836,7 +836,7 @@ exam-tracker/
 
 | Property | Value |
 |----------|-------|
-| **Path** | `reports/reportPdfShared.js` |
+| **Path** | `src/server/reports/reportPdfShared.js` |
 | **Type** | JS |
 | **Lines** | 339 total · 301 code · 6 comments |
 
@@ -898,10 +898,10 @@ exam-tracker/
 
 Local module dependencies within the project:
 
-**`reports/adminReportPdf.js`** depends on:
+**`src/server/reports/adminReportPdf.js`** depends on:
 - `./reportPdfShared`
 
-**`reports/publicReportPdf.js`** depends on:
+**`src/server/reports/publicReportPdf.js`** depends on:
 - `./reportPdfShared`
 
 **`server.js`** depends on:
@@ -1016,9 +1016,9 @@ for (const file of fs.readdirSync(BACKUP)) {
 |------|---------------|
 | `public/prompts/digitizePrompt.js` | Step 1 extraction prompt only |
 | `public/prompts/doubleCheckPrompt.js` | Step 2 verification prompt only |
-| `reports/adminReportPdf.js` | Admin/internal PDF layout |
-| `reports/publicReportPdf.js` | Student-facing PDF layout |
-| `reports/reportPdfShared.js` | Shared PDF engine, colors, helpers |
+| `src/server/reports/adminReportPdf.js` | Admin/internal PDF layout |
+| `src/server/reports/publicReportPdf.js` | Student-facing PDF layout |
+| `src/server/reports/reportPdfShared.js` | Shared PDF engine, colors, helpers |
 | `server.js` | Express backend, Google API proxy, report endpoint |
 | `public/index.html` | Dashboard: stats, filters, table |
 | `public/exam.html` | Exam detail page: data entry, upload, prompts |
@@ -1043,7 +1043,7 @@ for (const file of fs.readdirSync(BACKUP)) {
 - Dynamic documentation generator added (`docs/project_doc_generator.js`)
 - Auto-generated Admin and Public PDF reports
 - Split prompt architecture (`public/prompts/digitizePrompt.js`, `public/prompts/doubleCheckPrompt.js`)
-- Shared PDF engine (`reports/reportPdfShared.js`)
+- Shared PDF engine (`src/server/reports/reportPdfShared.js`)
 - Railway deployment configuration
 
 ---

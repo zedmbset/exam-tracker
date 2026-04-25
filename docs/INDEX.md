@@ -37,5 +37,5 @@ This file describes the purpose of every important documentation file in the pro
 
 - The backend is a **secure proxy** — no Google credentials are ever sent to the browser
 - Google Sheets is the **only database** — no SQL, no Postgres
-- Status (`✅ Completed`, `🕒 Pending`, `🆕 New Exam`, `✖️ Missing`) is **fully derived** from row data, never set manually
+- Status (`Completed`, `Pending`, `New Exam`, `Missing`) is normally derived from row data; manual `Completed` is preserved when `Quiz_Tbl` is empty
 - The `Tags` column (Q, index 16) stores a JSON string with all per-exam metadata

@@ -1,5 +1,8 @@
 // Shared PDF primitives used by both admin and public reports.
 // Keep this file focused on low-level drawing, encoding, and shared data shaping.
+const {
+  parseExamSession,
+} = require("../../shared/examSession");
 
 const PDF_PAGE = { width: 595.28, height: 841.89, margin: 42 };
 
@@ -39,7 +42,12 @@ function buildRef(period, rotation) {
 
 function buildBaseReportFilename(data) {
   const yearShort = String(data.year || "").slice(-2);
-  const ref = buildRef(data.period, data.rotation);
+  const session = parseExamSession(data.examSession, {
+    level: data.level,
+    legacyRotation: data.rotation,
+    legacyPeriod: data.period,
+  });
+  const ref = session?.ref || buildRef(data.period, data.rotation);
   return [
     normalizeFilePart(data.wilaya),
     normalizeFilePart(data.level),
@@ -291,13 +299,25 @@ function buildReportContext(input) {
   const schemaQuestions = Array.isArray(tags.schemaQsts) ? tags.schemaQsts : [];
   const missingCount = missingPositions.length;
   const availableQuestions = totalQuestions ? totalQuestions - missingCount : 0;
+  const examSession = parseExamSession(input.examSession, {
+    level: input.level,
+    legacyRotation: input.rotation,
+    legacyPeriod: input.period,
+  });
   return {
     module: safeString(input.module),
     wilaya: safeString(input.wilaya),
     year: safeString(input.year),
     level: safeString(input.level),
-    rotation: safeString(input.rotation),
-    period: safeString(input.period),
+    rotation: safeString(examSession?.groupType === "rotation" ? examSession.groupValue : input.rotation),
+    period: safeString(
+      examSession?.phase === "clinical"
+        ? (examSession.period === "UNK" ? "Unknown period" : examSession.period)
+        : input.period
+    ),
+    examSession,
+    examSessionLabel: safeString(examSession?.label),
+    examSessionShort: safeString(examSession?.shortLabel),
     examDate: safeString(input.examDate),
     member: safeString(input.member),
     status: safeString(input.status),
@@ -314,7 +334,7 @@ function buildReportContext(input) {
     hasCT: !!tags.hasCT,
     hasCas: !!tags.hasCas,
     hasComb: !!tags.hasComb,
-    ref: buildRef(input.period, input.rotation) || "P?R?",
+    ref: examSession?.ref || buildRef(input.period, input.rotation) || "P?R?",
   };
 }
 

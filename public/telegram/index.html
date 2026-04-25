@@ -1,58 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Telegram Fetcher</title>
-<style>
-  :root { --bg:#eef1f5; --card:#fff; --border:#d0d7de; --primary:#1565c0; --primary-dark:#0d47a1; --accent:#5c35a0; --text:#1c2b3a; --muted:#6b7a88; --success:#2e7d32; --warn:#e65100; --danger:#c62828; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family:"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
-  .topbar{display:flex;align-items:center;gap:16px;padding:18px 24px;background:var(--primary);color:#fff;}
-  .topbar .right{margin-left:auto;display:flex;gap:10px;flex-wrap:wrap;}
-  .page{padding:18px;display:grid;gap:16px;max-width:1600px;margin:0 auto;}
-  .layout{display:grid;grid-template-columns:minmax(0,1.85fr) minmax(340px,.95fr);gap:16px;}
-  .stack{display:grid;gap:16px;}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
-  .card-header{padding:14px 16px 0;}
-  .card-body{padding:14px 16px 16px;}
-  .stripe{height:4px;background:var(--primary);}
-  .card h2{margin:0;font-size:14px;color:var(--primary);}
-  .grid{display:grid;gap:12px;}
-  .grid.two{grid-template-columns:1fr 1fr;}
-  .row,.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
-  label{font-size:13px;color:var(--muted);}
-  input,select,button,textarea{font:inherit;}
-  input,select,textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#fff;}
-  button{border:0;border-radius:10px;padding:10px 14px;cursor:pointer;background:#dfe6ee;color:var(--text);font-weight:600;}
-  button.primary{background:var(--primary);color:#fff;}
-  button.primary:hover{background:var(--primary-dark);}
-  button.accent{background:var(--accent);color:#fff;}
-  button.ghost{background:#fff;border:1px solid var(--border);}
-  button.warn{background:#fff4e8;color:var(--warn);border:1px solid #f0c59b;}
-  .muted{color:var(--muted);font-size:12px;}
-  .pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;}
-  .pill.ok{background:#e7f4ea;color:var(--success);}
-  .pill.warn{background:#fff3e0;color:var(--warn);}
-  .pill.err{background:#fdeceb;color:var(--danger);}
-  .toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
-  .group-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
-  .group-chip{padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:12px;}
-  .group-chip.active{background:#e3f2fd;color:var(--primary);border-color:#b9d7f4;}
-  .channel-list{border:1px solid var(--border);border-radius:12px;background:#fff;max-height:440px;overflow:auto;}
-  .channel-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;padding:10px 12px;border-bottom:1px solid #edf1f5;align-items:start;}
-  .channel-row:last-child{border-bottom:0;}
-  .channel-name{font-weight:600;}
-  .channel-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
-  .tag{display:inline-flex;padding:2px 8px;border-radius:999px;background:#eef4fb;color:var(--primary);font-size:11px;}
-  .tag.alt{background:#f0ebfb;color:var(--accent);}
-  .jobs{display:grid;gap:10px;}
-  .job{border:1px solid var(--border);border-radius:12px;background:#fff;padding:12px;}
-  .progress{height:8px;background:#e7ebef;border-radius:999px;overflow:hidden;margin-top:8px;}
-  .progress>div{height:100%;background:linear-gradient(90deg,var(--primary),var(--accent));}
-  .log{white-space:pre-wrap;font-family:Consolas,monospace;background:#0f1720;color:#d7e5f6;border-radius:12px;padding:12px;min-height:140px;max-height:340px;overflow:auto;}
-  @media (max-width: 1100px){ .layout,.grid.two{grid-template-columns:1fr;} }
-</style>
+<link rel="stylesheet" href="/assets/css/telegram.css">
 </head>
 <body>
   <div class="topbar">
@@ -67,8 +19,16 @@
     </div>
   </div>
 
+  <div class="page-tabs">
+    <div class="tabbar">
+      <a href="/telegram" class="page-tab" id="fetchTabLink">Fetch</a>
+      <a href="/telegram/collections" class="page-tab" id="collectionsTabLink">Collections</a>
+      <div class="tab-summary" id="tabSummary">Manage fetching, channels, and collection actions from one place.</div>
+    </div>
+  </div>
+
   <div class="page">
-    <div class="layout">
+    <div class="layout" id="fetchWorkspace">
       <div class="stack">
         <section class="card">
           <div class="stripe"></div>
@@ -93,6 +53,8 @@
             <div class="toolbar">
               <div class="controls">
                 <button id="reloadChannelsBtn" type="button">Refresh</button>
+                <button id="refreshChannelsFromTelegramBtn" type="button">Refresh From Telegram</button>
+                <button id="addChannelBtn" class="primary" type="button">Add Channel</button>
                 <button id="selectVisibleBtn" type="button">Select Visible</button>
                 <button id="clearVisibleBtn" class="warn" type="button">Clear</button>
               </div>
@@ -172,6 +134,337 @@
       </div>
     </div>
 
+    <section class="card" id="collectionsWorkspace">
+      <div class="stripe" style="background:#e65100;"></div>
+      <div class="card-header"><h2 style="color:#e65100;">Action Builder</h2></div>
+      <div class="card-body">
+        <div class="collections-hero section-hidden" id="collectionsHero">
+          <h2>Collections Workspace</h2>
+          <p>See every collection in one place, load them quickly, and edit the selected collection without staying at the bottom of the Fetch page.</p>
+        </div>
+        <div class="toolbar">
+          <div class="controls">
+            <button id="loadActionRowsBtn" type="button">Load Collections</button>
+            <button id="saveActionRowBtn" class="primary" type="button">Save Collection</button>
+            <button id="createGroupBtn" type="button" style="display:none;">Create Group</button>
+            <button id="ungroupRowsBtn" class="warn" type="button" style="display:none;">Ungroup Selected</button>
+          </div>
+          <div class="muted" id="actionBuilderSummary">No Collection groups loaded.</div>
+        </div>
+        <div class="preset-toolbar">
+          <div class="preset-toolbar-head">
+            <div class="preset-title">Collection Presets</div>
+            <div class="preset-badge">Action logic only</div>
+          </div>
+          <div class="preset-toolbar-grid">
+            <div>
+              <label for="presetSelect">Collection action preset</label>
+              <select id="presetSelect">
+                <option value="">Choose a preset</option>
+              </select>
+            </div>
+            <div class="preset-inline-actions">
+              <button id="applyPresetBtn" type="button">Apply To Selected</button>
+            </div>
+            <div class="preset-inline-actions">
+              <button id="savePresetBtn" type="button">Save Current</button>
+            </div>
+            <div class="preset-inline-actions">
+              <button id="togglePresetManagerBtn" type="button">Manage Library</button>
+            </div>
+          </div>
+          <div class="preset-match" id="presetStatus">Presets are shared across sheets and only change action logic, not destination.</div>
+          <div class="preset-manager section-hidden" id="presetManager">
+            <div class="preset-manager-head">
+              <div>
+                <div class="preset-manager-title">Preset Library Manager</div>
+                <div class="preset-manager-copy">Build a reusable structured preset for common grouped actions, or switch to raw override for advanced action strings that donâ€™t fit the normal switches.</div>
+              </div>
+              <div class="preset-mode-pills">
+                <label class="preset-mode-pill">
+                  <input id="presetModeStructuredRadio" type="radio" name="presetModeRadio" value="structured" checked>
+                  Structured
+                </label>
+                <label class="preset-mode-pill">
+                  <input id="presetModeRawRadio" type="radio" name="presetModeRadio" value="raw_override">
+                  Raw override
+                </label>
+              </div>
+            </div>
+            <div class="action-section stack-sm">
+              <h3>Section 1: Action setup</h3>
+              <div class="preset-structured-grid">
+              <div>
+                <label for="presetNameInput">Preset name</label>
+                <input id="presetNameInput" type="text" placeholder="Special grouped comments preset">
+              </div>
+              <div>
+                <label for="presetModeSelect">Mode</label>
+                <select id="presetModeSelect">
+                  <option value="structured">Structured</option>
+                  <option value="raw_override">Raw override</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label for="presetDescriptionInput">Description</label>
+              <input id="presetDescriptionInput" type="text" placeholder="Use this for comment transfer collections with Join Us links">
+              <div class="field-help">Optional note for humans only. It helps explain when to use the preset and does not change the generated action or destination.</div>
+            </div>
+            <div>
+              <label for="presetRawActionInput">Raw action override</label>
+              <textarea id="presetRawActionInput" placeholder='Transfer[Cmts], Pub_lnk[Num_Sequence_, Punct__, Joinus_CHN_LNK[Cmts_Desp_Joinus]]'></textarea>
+              <div class="field-help">Use raw override only for advanced special cases. Structured mode uses the preset switches below.</div>
+            </div>
+              <div class="preset-structured-grid">
+                <div class="toggle-row">
+                  <div class="toggle-copy">
+                    <div class="toggle-title">Grouped</div>
+                    <div class="toggle-help">Keep the first row as leader.</div>
+                  </div>
+                  <label class="toggle-switch" for="presetGroupedInput">
+                    <input id="presetGroupedInput" type="checkbox" checked>
+                    <span class="toggle-ui" aria-hidden="true"></span>
+                  </label>
+                </div>
+                <div>
+                  <label for="presetTransferModeSelect">Transfer mode</label>
+                  <select id="presetTransferModeSelect">
+                    <option value="comments">Transfer comments</option>
+                    <option value="posts">Transfer posts</option>
+                    <option value="none">No transfer</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="action-section stack-sm">
+              <h3>Section 2: Pub link</h3>
+              <div id="presetPubLinkBody">
+              <div class="toggle-row">
+                <div class="toggle-copy">
+                  <div class="toggle-title">Enable Pub link</div>
+                  <div class="toggle-help">Turn the public link block on or off for this preset.</div>
+                </div>
+                <label class="toggle-switch" for="presetPubLnkEnabledInput">
+                  <input id="presetPubLnkEnabledInput" type="checkbox" checked>
+                  <span class="toggle-ui" aria-hidden="true"></span>
+                </label>
+              </div>
+              <input id="presetNumSequenceInput" type="checkbox" hidden>
+              <input id="presetPunctBlankInput" type="checkbox" hidden>
+              <div>
+                <label for="presetPubLinkModeSelect">Pub link list style</label>
+                <select id="presetPubLinkModeSelect">
+                  <option value="numbered">Number Pub link list</option>
+                  <option value="symbol">Add new bullet</option>
+                </select>
+                <div class="field-help">The preset always clears the existing punctuation first, then applies your chosen list style.</div>
+              </div>
+              <div id="presetPunctControlsWrap">
+              <label for="presetPunctValueInput">Choose or add a bullet</label>
+              <div class="symbol-picker">
+                <select id="presetPunctPresetSelect" class="symbol-input">
+                  <option value="">No custom symbol</option>
+                  <option value="*">`*` Star</option>
+                  <option value="-">`-` Dash</option>
+                  <option value="â€¢">`â€¢` Bullet</option>
+                  <option value=">>">`>>` Double chevron</option>
+                  <option value="ًں”¹">`ًں”¹` Blue diamond</option>
+                  <option value="custom">Other...</option>
+                </select>
+                <input id="presetPunctValueInput" class="symbol-input inline-input" type="text" placeholder="Type another symbol">
+              </div>
+              <div class="field-help">Pick a common symbol from the dropdown or choose `Other...`. The app saves it as `Punct_symbol_` automatically.</div>
+              </div>
+              </div>
+            </div>
+            <div class="action-section stack-sm">
+              <h3>Section 3: Join Us</h3>
+              <div class="toggle-row">
+                <div class="toggle-copy">
+                  <div class="toggle-title">Enable Join Us</div>
+                  <div class="toggle-help">Keep Join Us separate from Pub link and control it on its own.</div>
+                </div>
+                <label class="toggle-switch" for="presetJoinUsInput">
+                  <input id="presetJoinUsInput" type="checkbox">
+                  <span class="toggle-ui" aria-hidden="true"></span>
+                </label>
+              </div>
+              <div id="presetJoinUsBody">
+                <label for="presetCommentJoinUsModeSelect">Join Us behavior inside comments</label>
+                <select id="presetCommentJoinUsModeSelect">
+                  <option value="append_joinus">Append Join Us after each comment description</option>
+                  <option value="joinus_only">Post only the Join Us block in each comment</option>
+                  <option value="none">Only on the pub-link post</option>
+                </select>
+                <div class="field-help">Default behavior is to append Join Us after each comment description.</div>
+              </div>
+            </div>
+            <div>
+              <label for="presetPreviewOutput">Preset preview</label>
+              <textarea id="presetPreviewOutput" class="readonly-box" readonly></textarea>
+            </div>
+            <div class="preset-manager-actions">
+              <button id="createPresetBtn" class="primary" type="button">Create Preset</button>
+              <button id="updatePresetBtn" type="button">Update Selected Preset</button>
+              <button id="deletePresetBtn" class="warn" type="button">Delete Selected Preset</button>
+            </div>
+          </div>
+        </div>
+        <div class="action-builder-layout">
+          <div class="action-list-column">
+            <div class="collection-toolbar">
+              <input id="collectionSearchInput" type="search" placeholder="Search collections by title, destination, preview, or hub">
+              <div class="controls">
+                <div class="collection-sort-tools" id="collectionSortTools">
+                  <button class="view-chip" type="button" data-sort="sheet">Sheet order</button>
+                  <button class="view-chip" type="button" data-sort="az">A-Z</button>
+                </div>
+                <div class="collection-view-tabs" id="collectionViewTabs">
+                  <button class="view-chip active" type="button" data-view="toggle">Toggle</button>
+                  <button class="view-chip" type="button" data-view="detailed">Detailed</button>
+                  <button class="view-chip" type="button" data-view="board">Board</button>
+                </div>
+              </div>
+            </div>
+            <div class="action-row-list" id="actionRowList">
+              <div class="action-row-card"><div class="muted">Choose a sheet and load Collection groups to edit actions.</div></div>
+            </div>
+            <div class="collection-snapshot" id="collectionSnapshot">
+              <div class="collection-empty">Load collections and pick one to see a richer grouped overview here.</div>
+            </div>
+          </div>
+          <div class="action-editor">
+            <div class="action-section stack-sm">
+              <h3>Execute</h3>
+              <button class="accent collections-execute-btn" id="collectionsExecuteActionsBtn" type="button">Execute Actions</button>
+              <div class="field-help">Run the current sheet actions directly from the Collections page.</div>
+            </div>
+            <div class="action-section stack-sm">
+              <h3>Selected Collection</h3>
+              <div id="actionEditorStatus" class="muted">Select a Collection group to edit its action professionally.</div>
+              <div id="selectedPresetMatch" class="field-help">Preset match will appear here when the selected collection matches a saved preset.</div>
+              <div class="field-help">This panel always edits the currently selected collection leader. When you save, the leader keeps the main action and the follower rows are normalized automatically.</div>
+            </div>
+            <div class="action-section stack-sm">
+              <h3>Section 1: Action setup</h3>
+              <div>
+                <label for="actionModeSelect">Mode</label>
+                <select id="actionModeSelect">
+                  <option value="structured">Structured</option>
+                  <option value="raw_override">Raw override</option>
+                </select>
+              </div>
+              <div id="actionRawWrap" class="section-hidden">
+                <label for="actionRawActionInput">Raw action override</label>
+                <textarea id="actionRawActionInput" placeholder='Transfer[Cmts], Pub_lnk[Num_Sequence_, Punct__, Joinus_CHN_LNK[Cmts__Joinus]]'></textarea>
+                <div class="field-help">Use raw override only for advanced cases. When raw mode is active, the structured options below are disabled.</div>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-copy">
+                  <div class="toggle-title">Grouped</div>
+                  <div class="toggle-help">Keep the first row as the collection leader.</div>
+                </div>
+                <label class="toggle-switch" for="actionGroupedInput">
+                  <input id="actionGroupedInput" type="checkbox" checked>
+                  <span class="toggle-ui" aria-hidden="true"></span>
+                </label>
+              </div>
+              <div>
+                <label for="actionDestinationInput">Destination</label>
+                <div class="search-select">
+                  <input id="actionDestinationInput" type="search" autocomplete="off" placeholder="Type to search destination channel">
+                  <div id="actionDestinationSuggestions" class="search-suggestions hidden"></div>
+                </div>
+                <div class="field-help">Type a channel name, @username, or id. Fuzzy matching will also match reordered words like `dz zed` to `ZED MED DZ`.</div>
+              </div>
+              <div class="extra-msg-field">
+                <label for="actionExtraMsgInput">Extra_Msg / Hub title</label>
+                <input id="actionExtraMsgInput" type="text" placeholder="Title used for grouped actions / pub-link hub">
+                <div class="field-help">For Collections, the pub-link title now uses the Collection name automatically.</div>
+              </div>
+              <div>
+                <label for="actionTransferModeSelect">Transfer mode</label>
+                <select id="actionTransferModeSelect">
+                  <option value="comments">Transfer comments</option>
+                  <option value="posts">Transfer posts</option>
+                  <option value="none">No transfer</option>
+                </select>
+              </div>
+            </div>
+            <div class="action-section stack-sm">
+              <h3>Section 2: Pub link</h3>
+              <div id="actionPubLinkBody">
+              <div class="toggle-row">
+                <div class="toggle-copy">
+                  <div class="toggle-title">Enable Pub link</div>
+                  <div class="toggle-help">Turn the public link block on or off for this collection.</div>
+                </div>
+                <label class="toggle-switch" for="actionPubLnkEnabledInput">
+                  <input id="actionPubLnkEnabledInput" type="checkbox" checked>
+                  <span class="toggle-ui" aria-hidden="true"></span>
+                </label>
+              </div>
+              <input id="actionNumSequenceInput" type="checkbox" hidden>
+              <input id="actionPunctBlankInput" type="checkbox" hidden>
+              <div>
+                <label for="actionPubLinkModeSelect">Pub link list style</label>
+                <select id="actionPubLinkModeSelect">
+                  <option value="numbered">Number Pub link list</option>
+                  <option value="symbol">Add new bullet</option>
+                </select>
+                <div class="field-help">The app always clears the existing punctuation first, then applies your chosen list style.</div>
+              </div>
+              <div id="actionPunctControlsWrap">
+                <label for="actionPunctValueInput">Choose or add a bullet</label>
+                <div class="symbol-picker">
+                  <select id="actionPunctPresetSelect" class="symbol-input">
+                    <option value="">No custom symbol</option>
+                    <option value="*">`*` Star</option>
+                    <option value="-">`-` Dash</option>
+                    <option value="â€¢">`â€¢` Bullet</option>
+                    <option value=">>">`>>` Double chevron</option>
+                    <option value="ًں”¹">`ًں”¹` Blue diamond</option>
+                    <option value="custom">Other...</option>
+                  </select>
+                  <input id="actionPunctValueInput" class="symbol-input inline-input" type="text" placeholder="Type another symbol">
+                </div>
+                <div class="field-help">Pick a common symbol from the dropdown or choose `Other...`. The app will generate `Punct_symbol_` for you.</div>
+              </div>
+              </div>
+            </div>
+            <div class="action-section stack-sm">
+              <h3>Section 3: Join Us</h3>
+              <div class="toggle-row">
+                <div class="toggle-copy">
+                  <div class="toggle-title">Enable Join Us</div>
+                  <div class="toggle-help">Keep Join Us separate from Pub link and control it on its own.</div>
+                </div>
+                <label class="toggle-switch" for="actionJoinUsInput">
+                  <input id="actionJoinUsInput" type="checkbox">
+                  <span class="toggle-ui" aria-hidden="true"></span>
+                </label>
+              </div>
+              <div id="actionJoinUsBody">
+                <label for="actionCommentJoinUsModeSelect">Join Us behavior inside comments</label>
+                <select id="actionCommentJoinUsModeSelect">
+                  <option value="append_joinus">Append Join Us after each comment description</option>
+                  <option value="joinus_only">Post only the Join Us block in each comment</option>
+                  <option value="none">Only on the pub-link post</option>
+                </select>
+                <div class="field-help">Default behavior is to append Join Us after each comment description.</div>
+              </div>
+            </div>
+            <div class="action-section stack-sm">
+              <h3>Canonical Preview</h3>
+              <textarea id="actionPreviewOutput" class="readonly-box" readonly></textarea>
+              <div id="actionPreviewSummary" class="muted">No action selected.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="card">
       <div class="stripe" style="background:#334155;"></div>
       <div class="card-header"><h2 style="color:#334155;">Activity Log</h2></div>
@@ -181,275 +474,37 @@
     </section>
   </div>
 
-<script>
-const state = { config:null, spreadsheets:[], sheets:[], channels:[], groups:[], selectedChannels:new Set(), activeGroup:'All', jobs:new Map(), timers:new Map() };
-const MAX_POLL_ERRORS = 5;
-const POLL_INTERVAL = 3000;
-const els = {
-  spreadsheetSelect: document.getElementById('spreadsheetSelect'),
-  sheetSelect: document.getElementById('sheetSelect'),
-  sheetHint: document.getElementById('sheetHint'),
-  groupBar: document.getElementById('groupBar'),
-  channelSearch: document.getElementById('channelSearch'),
-  channelList: document.getElementById('channelList'),
-  selectedCount: document.getElementById('selectedCount'),
-  workerPill: document.getElementById('workerPill'),
-  workerSummary: document.getElementById('workerSummary'),
-  jobs: document.getElementById('jobs'),
-  log: document.getElementById('log'),
-  dateFromInput: document.getElementById('dateFromInput'),
-  startMessageInput: document.getElementById('startMessageInput'),
-  endMessageInput: document.getElementById('endMessageInput'),
-  fetchCommentsInput: document.getElementById('fetchCommentsInput'),
-  maxCommentsInput: document.getElementById('maxCommentsInput'),
-  openSheetBtn: document.getElementById('openSheetBtn'),
-};
-
-const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-
-function log(message) {
-  const timestamp = new Date().toLocaleTimeString();
-  els.log.textContent = `[${timestamp}] ${message}\n` + els.log.textContent;
-}
-
-async function api(url, options = {}) {
-  const response = await fetch(url, options);
-  const text = await response.text();
-  let data = {};
-  try { data = text ? JSON.parse(text) : {}; } catch (error) { data = null; }
-  if (!response.ok) {
-    if (data && data.error) throw new Error(data.error);
-    throw new Error(`HTTP ${response.status}${text ? `: ${text.slice(0, 180)}` : ''}`);
-  }
-  return data || {};
-}
-
-function presentError(error, fallback = 'Something went wrong.') {
-  const message = String(error?.message || fallback).trim();
-  if (message.includes('Google Sheets is temporarily unavailable')) {
-    return 'Google Sheets is temporarily unavailable. Please wait a few seconds and try again.';
-  }
-  if (message.includes('"status":"UNAVAILABLE"') || message.includes('The service is currently unavailable.')) {
-    return 'Google Sheets is temporarily unavailable. Please wait a few seconds and try again.';
-  }
-  if (message.includes('Contacts session is missing or expired')) {
-    return 'Your contacts session expired. Reload the page and try again.';
-  }
-  return message || fallback;
-}
-
-function renderWorkerStatus() {
-  const health = state.config?.workerHealth || {};
-  const connected = Boolean(health.telethonConnected);
-  els.workerPill.className = `pill ${connected ? 'ok' : (health.ok ? 'warn' : 'err')}`;
-  els.workerPill.textContent = connected ? 'Worker connected' : (health.ok ? 'Worker reachable' : 'Worker unavailable');
-  els.workerSummary.textContent = connected
-    ? 'Telethon is connected and ready for fetch/action jobs.'
-    : (health.error || 'Worker is reachable but Telethon is not fully connected yet.');
-}
-
-function renderSpreadsheets() {
-  els.spreadsheetSelect.innerHTML = state.spreadsheets.map((entry) => `<option value="${escapeHtml(entry.key)}">${escapeHtml(entry.label)}</option>`).join('');
-}
-
-function renderSheets() {
-  els.sheetSelect.innerHTML = state.sheets.map((sheet) => `<option value="${escapeHtml(sheet.title)}">${escapeHtml(sheet.title)}</option>`).join('');
-  const spreadsheet = state.spreadsheets.find((entry) => entry.key === els.spreadsheetSelect.value);
-  els.sheetHint.textContent = spreadsheet
-    ? `${spreadsheet.label} → ${spreadsheet.spreadsheetId}`
-    : '';
-}
-
-function renderGroups() {
-  const groups = ['All', ...state.groups];
-  els.groupBar.innerHTML = groups.map((group) => `<button class="group-chip ${group === state.activeGroup ? 'active' : ''}" type="button" data-group="${escapeHtml(group)}">${escapeHtml(group)}</button>`).join('');
-}
-
-function getVisibleChannels() {
-  const search = els.channelSearch.value.trim().toLowerCase();
-  return state.channels.filter((channel) => {
-    const matchesGroup = state.activeGroup === 'All' || (channel.tags || []).includes(state.activeGroup);
-    const haystack = [channel.name, channel.username, channel.id, ...(channel.tags || [])].join(' ').toLowerCase();
-    const matchesSearch = !search || haystack.includes(search);
-    return matchesGroup && matchesSearch;
-  });
-}
-
-function renderChannels() {
-  const visible = getVisibleChannels();
-  if (!visible.length) {
-    els.channelList.innerHTML = '<div class="channel-row"><div class="muted">No channels match the current filters.</div></div>';
-  } else {
-    els.channelList.innerHTML = visible.map((channel) => {
-      const checked = state.selectedChannels.has(channel.id || channel.username || channel.name);
-      const tagHtml = (channel.tags || []).map((tag) => `<span class="tag alt">${escapeHtml(tag)}</span>`).join('');
-      return `<label class="channel-row">
-        <input type="checkbox" class="channel-check" data-channel-key="${escapeHtml(channel.id || channel.username || channel.name)}" ${checked ? 'checked' : ''}>
+  <div id="addChannelModal" class="modal-backdrop section-hidden" aria-hidden="true">
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="addChannelModalTitle">
+      <div class="modal-head">
         <div>
-          <div class="channel-name">${escapeHtml(channel.name || channel.username || channel.id)}</div>
-          <div class="muted">${escapeHtml(channel.username ? `@${channel.username}` : channel.id || '')}</div>
-          <div class="channel-tags">${tagHtml}</div>
+          <div id="addChannelModalTitle" class="modal-title">Add Channel</div>
+          <div class="modal-copy">Save a destination directly into the fetch channels sheet and local JSON cache. Supported formats: <code>https://t.me/USERNAME</code>, <code>@username</code>, <code>https://t.me/+HASH</code>.</div>
         </div>
-        <div class="muted">${escapeHtml(channel.type || '')}</div>
-      </label>`;
-    }).join('');
-  }
-  els.selectedCount.textContent = `${state.selectedChannels.size} channels selected`;
-}
-
-function renderJobs() {
-  const jobs = [...state.jobs.values()].reverse();
-  if (!jobs.length) {
-    els.jobs.innerHTML = '<div class="muted">No jobs yet.</div>';
-    return;
-  }
-  els.jobs.innerHTML = jobs.map((job) => {
-    const total = Number(job.total || 0);
-    const progress = Number(job.progress || 0);
-    const pct = total > 0 ? Math.min(100, Math.round((progress / total) * 100)) : (job.status === 'done' ? 100 : 0);
-    const statusClass = job.status === 'done' ? 'ok' : job.status === 'error' ? 'err' : 'warn';
-    return `<div class="job">
-      <div class="row" style="justify-content:space-between;">
-        <strong>${escapeHtml(job.type)}</strong>
-        <span class="pill ${statusClass}">${escapeHtml(job.status || 'queued')}</span>
+        <button id="closeAddChannelModalBtn" class="ghost" type="button">Close</button>
       </div>
-      <div class="muted" style="margin-top:6px;">${escapeHtml(job.channel || '')}</div>
-      <div class="muted" style="margin-top:6px;">${escapeHtml(job.summary || job.error || '')}</div>
-      <div class="progress"><div style="width:${pct}%"></div></div>
-    </div>`;
-  }).join('');
-}
+      <form id="addChannelForm" class="grid" autocomplete="off">
+        <div>
+          <label for="addChannelNameInput">Channel Name</label>
+          <input id="addChannelNameInput" type="text" required placeholder="Example: ZED Draft">
+        </div>
+        <div>
+          <label for="addChannelLinkInput">Channel Link</label>
+          <input id="addChannelLinkInput" type="text" required placeholder="https://t.me/USERNAME or @username or https://t.me/+HASH">
+          <div class="field-help">Use the public link, <code>@username</code>, or a private invite link.</div>
+        </div>
+        <div id="addChannelStatus" class="muted">The channel will be upserted into Google Sheets and cached locally right away.</div>
+        <div class="modal-actions">
+          <button id="cancelAddChannelBtn" class="ghost" type="button">Cancel</button>
+          <button id="saveAddChannelBtn" class="primary" type="submit">Save Channel</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
-async function loadConfig() {
-  state.config = await api('/api/telegram/fetch/config');
-  state.spreadsheets = state.config.spreadsheets || [];
-  renderWorkerStatus();
-  renderSpreadsheets();
-}
-
-async function loadSheets() {
-  const spreadsheetKey = els.spreadsheetSelect.value;
-  const data = await api(`/api/telegram/fetch/sheets?spreadsheet=${encodeURIComponent(spreadsheetKey)}`);
-  state.sheets = data.sheets || [];
-  renderSheets();
-}
-
-async function loadChannels() {
-  const data = await api('/api/telegram/fetch/channels');
-  state.channels = data.channels || [];
-  state.groups = data.groups || [];
-  renderGroups();
-  renderChannels();
-  log(`Loaded ${state.channels.length} channels from ${data.sheetName || 'channel sheet'}.`);
-}
-
-function getSelectedChannels() {
-  return state.channels.filter((channel) => state.selectedChannels.has(channel.id || channel.username || channel.name));
-}
-
-function stopPolling(jobId) {
-  clearTimeout(state.timers.get(jobId)?.timer);
-  state.timers.delete(jobId);
-}
-
-async function pollJob(jobId) {
-  const meta = state.timers.get(jobId) || { failures: 0 };
-  stopPolling(jobId);
-  try {
-    const job = await api(`/api/telegram/fetch/jobs/${encodeURIComponent(jobId)}`);
-    state.jobs.set(jobId, job);
-    renderJobs();
-    if (!['done', 'error'].includes(job.status)) {
-      state.timers.set(jobId, { failures: 0, timer: setTimeout(() => pollJob(jobId), POLL_INTERVAL) });
-    } else {
-      log(`${job.type} finished with status ${job.status}.`);
-    }
-  } catch (error) {
-    const failures = (meta.failures || 0) + 1;
-    if (failures >= MAX_POLL_ERRORS) {
-      log(`Lost connection while polling job ${jobId}: ${error.message}`);
-      return;
-    }
-    state.timers.set(jobId, { failures, timer: setTimeout(() => pollJob(jobId), POLL_INTERVAL + 1000) });
-  }
-}
-
-async function startJob(type) {
-  const spreadsheetKey = els.spreadsheetSelect.value;
-  const sheetName = els.sheetSelect.value;
-  if (!spreadsheetKey || !sheetName) {
-    alert('Choose spreadsheet and sheet first.');
-    return;
-  }
-  const payload = { type, spreadsheetKey, sheetName };
-  if (type === 'fetch-messages') {
-    payload.channels = getSelectedChannels();
-    payload.rangeMode = document.querySelector('input[name="rangeMode"]:checked').value;
-    payload.dateFrom = els.dateFromInput.value.trim();
-    payload.startMessageId = els.startMessageInput.value.trim();
-    payload.endMessageId = els.endMessageInput.value.trim();
-    payload.fetchComments = els.fetchCommentsInput.checked;
-    payload.maxCommentsPerPost = Number(els.maxCommentsInput.value || 50);
-  }
-  const result = await api('/api/telegram/fetch/jobs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  state.jobs.set(result.jobId, { jobId: result.jobId, type, status: 'queued', channel: sheetName, summary: 'Queued...' });
-  renderJobs();
-  log(`Started ${type} job ${result.jobId}.`);
-  pollJob(result.jobId);
-}
-
-function openSheet() {
-  const spreadsheet = state.spreadsheets.find((entry) => entry.key === els.spreadsheetSelect.value);
-  const sheet = els.sheetSelect.value;
-  if (!spreadsheet) return;
-  const url = `https://docs.google.com/spreadsheets/d/${spreadsheet.spreadsheetId}/edit#gid=0`;
-  window.open(url, '_blank', 'noopener');
-}
-
-document.getElementById('reloadChannelsBtn').addEventListener('click', () => loadChannels().catch((error) => alert(presentError(error))));
-document.getElementById('selectVisibleBtn').addEventListener('click', () => {
-  getVisibleChannels().forEach((channel) => state.selectedChannels.add(channel.id || channel.username || channel.name));
-  renderChannels();
-});
-document.getElementById('clearVisibleBtn').addEventListener('click', () => {
-  getVisibleChannels().forEach((channel) => state.selectedChannels.delete(channel.id || channel.username || channel.name));
-  renderChannels();
-});
-document.getElementById('fetchMessagesBtn').addEventListener('click', () => startJob('fetch-messages').catch((error) => alert(presentError(error))));
-document.getElementById('executeActionsBtn').addEventListener('click', () => startJob('execute-actions').catch((error) => alert(presentError(error))));
-els.spreadsheetSelect.addEventListener('change', () => loadSheets().catch((error) => alert(presentError(error))));
-els.channelSearch.addEventListener('input', renderChannels);
-els.channelList.addEventListener('change', (event) => {
-  if (!event.target.classList.contains('channel-check')) return;
-  const key = event.target.dataset.channelKey;
-  if (event.target.checked) state.selectedChannels.add(key); else state.selectedChannels.delete(key);
-  renderChannels();
-});
-els.groupBar.addEventListener('click', (event) => {
-  const button = event.target.closest('[data-group]');
-  if (!button) return;
-  state.activeGroup = button.dataset.group;
-  renderGroups();
-  renderChannels();
-});
-els.openSheetBtn.addEventListener('click', openSheet);
-window.addEventListener('pagehide', () => [...state.timers.keys()].forEach(stopPolling));
-
-(async function init() {
-  try {
-    await loadConfig();
-    await loadSheets();
-    await loadChannels();
-  } catch (error) {
-    const message = presentError(error);
-    alert(message);
-    log(message);
-  }
-})();
-</script>
+<script src="/telegram/action-builder.js"></script>
+<script src="/assets/js/telegram.js"></script>
 </body>
 </html>
+
+

@@ -594,9 +594,9 @@ function generateMarkdown(data) {
   p("|------|---------------|");
   p("| `public/prompts/digitizePrompt.js` | Step 1 extraction prompt only |");
   p("| `public/prompts/doubleCheckPrompt.js` | Step 2 verification prompt only |");
-  p("| `reports/adminReportPdf.js` | Admin/internal PDF layout |");
-  p("| `reports/publicReportPdf.js` | Student-facing PDF layout |");
-  p("| `reports/reportPdfShared.js` | Shared PDF engine, colors, helpers |");
+  p("| `src/server/reports/adminReportPdf.js` | Admin/internal PDF layout |");
+  p("| `src/server/reports/publicReportPdf.js` | Student-facing PDF layout |");
+  p("| `src/server/reports/reportPdfShared.js` | Shared PDF engine, colors, helpers |");
   p("| `server.js` | Express backend, Google API proxy, report endpoint |");
   p("| `public/index.html` | Dashboard: stats, filters, table |");
   p("| `public/exam.html` | Exam detail page: data entry, upload, prompts |");
@@ -616,7 +616,7 @@ function generateMarkdown(data) {
   p("- Dynamic documentation generator added (`docs/project_doc_generator.js`)");
   p("- Auto-generated Admin and Public PDF reports");
   p("- Split prompt architecture (`public/prompts/digitizePrompt.js`, `public/prompts/doubleCheckPrompt.js`)");
-  p("- Shared PDF engine (`reports/reportPdfShared.js`)");
+  p("- Shared PDF engine (`src/server/reports/reportPdfShared.js`)");
   p("- Railway deployment configuration");
   br(); hr(); br();
 

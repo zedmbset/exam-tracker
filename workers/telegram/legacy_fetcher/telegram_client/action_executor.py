@@ -208,6 +208,79 @@ class ActionExecutor:
         print(f"  🔍 Resolved invite {cache_key} → numeric ID: {real_id}")
         return resolved
 
+    async def _resolve_channel_ref(self, channel_ref):
+        """
+        Resolve a channel reference to numeric ID, display name, and username.
+
+        Supported references:
+        - invite hash: +HASH
+        - public username: mychannel
+        - private numeric ID from t.me/c/... links: -1001234567890
+        """
+        ref = str(channel_ref).strip()
+        if not ref:
+            raise ValueError("Empty channel reference")
+
+        if ref.startswith('+'):
+            # Try cached invite resolution. If the account is not a member
+            # (CheckChatInviteRequest raises), fall back to returning the raw
+            # hash so Telethon can use it directly in send_message / get_entity.
+            try:
+                return await self._resolve_invite_link(ref)
+            except Exception as _inv_err:
+                print(f"  ⚠️  CheckChatInviteRequest failed for {ref}: {_inv_err}")
+                print(f"  ↩️  Falling back to direct invite hash – Telethon will resolve at send time")
+                return {
+                    'id':       ref,   # kept as string; Telethon accepts +HASH as entity
+                    'name':     ref,
+                    'username': ref,
+                    'entity':   ref,
+                }
+
+        if ref.lstrip('-').isdigit():
+            target_id = int(ref)
+            input_ent = None
+            try:
+                input_ent = await self.client.get_input_entity(target_id)
+            except Exception:
+                input_ent = None
+
+            try:
+                ent = await self.client.get_entity(target_id)
+            except Exception:
+                ent = None
+                async for dialog in self.client.iter_dialogs():
+                    entity = getattr(dialog, 'entity', None)
+                    if not entity:
+                        continue
+                    ent_id = getattr(entity, 'id', None)
+                    if ent_id is None:
+                        continue
+                    real_id = int(f"-100{ent_id}") if ent_id > 0 else ent_id
+                    if real_id == target_id:
+                        ent = entity
+                        break
+
+                if ent is None:
+                    raise
+
+            real_id = int(f"-100{ent.id}") if getattr(ent, 'id', 0) > 0 else ent.id
+            return {
+                'id': real_id,
+                'name': getattr(ent, 'title', '') or '',
+                'username': getattr(ent, 'username', '') or '',
+                'entity': input_ent or ent,
+            }
+
+        ent = await self.client.get_entity(ref)
+        real_id = int(f"-100{ent.id}") if getattr(ent, 'id', 0) > 0 else ent.id
+        return {
+            'id': real_id,
+            'name': getattr(ent, 'title', '') or '',
+            'username': getattr(ent, 'username', '') or ref,
+            'entity': ent,
+        }
+
     def _parse_message_id(self, composite_id):
         """
         Parse composite ID into channel_id and message_id.
@@ -342,6 +415,7 @@ class ActionExecutor:
         
         Supports multiple formats:
         - Channel name: "My Channel" (looks up in spreadsheet)
+        - Raw channel ID: "-1003430105919"
         - Telegram link (private): "https://t.me/c/3138994143/2461"
         - Telegram link (public): "https://t.me/ZEDP22MED" or "https://t.me/ZEDP22MED/123"
         - Telegram link (forum): "https://t.me/c/2338021745/123/6409"
@@ -360,6 +434,14 @@ class ActionExecutor:
             return None, False, None, None
         
         destination = destination.strip()
+
+        # Check if it's a raw numeric Telegram destination ID (e.g. -1003430105919)
+        import re as _re_destination
+        if _re_destination.fullmatch(r'-?\d+', destination):
+            try:
+                return int(destination), True, None, None
+            except ValueError:
+                return None, False, destination, None
         
         # Check if it's a Telegram link (private channel with /c/)
         if 'https://t.me/c/' in destination:
@@ -1290,6 +1372,7 @@ class ActionExecutor:
             'punct': None | '' | 'emoji ',   # None=default dash
             'num': None | 'remove' | 'sequence',
             'joinus_tag': None | 'Joinus_...',
+            'comment_joinus_mode': None | 'append_joinus' | 'joinus_only',
           }
         """
         import re as _re
@@ -1297,7 +1380,7 @@ class ActionExecutor:
         _lbracket = token.find('[')
         _rbracket = token.rindex(']') if ']' in token else -1
         opts_str = token[_lbracket+1:_rbracket] if _lbracket != -1 and _rbracket > _lbracket else ''
-        result = {'punct': None, 'num': None, 'joinus_tag': None, 'joinus_cmts': False}
+        result = {'punct': None, 'num': None, 'joinus_tag': None, 'comment_joinus_mode': None}
         for opt in opts_str.split(','):
             opt = opt.strip()
             if not opt:
@@ -1313,11 +1396,15 @@ class ActionExecutor:
                 result['num'] = 'remove'
             elif ol.startswith('joinus_'):
                 # Check for joinus_CHN_LNK[Cmts] → append Join Us to each comment too
-                if '[cmts]' in ol:
-                    result['joinus_cmts'] = True
-                    # Strip the [Cmts] suffix before storing the tag
-                    import re as _re2
-                    opt = _re2.sub(r'\[Cmts\]', '', opt, flags=_re2.IGNORECASE).strip()
+                if '[cmts__joinus]' in ol:
+                    result['comment_joinus_mode'] = 'joinus_only'
+                    opt = _re.sub(r'\[Cmts__Joinus\]', '', opt, flags=_re.IGNORECASE).strip()
+                elif '[cmts_desp_joinus]' in ol:
+                    result['comment_joinus_mode'] = 'append_joinus'
+                    opt = _re.sub(r'\[Cmts_Desp_Joinus\]', '', opt, flags=_re.IGNORECASE).strip()
+                elif '[cmts]' in ol:
+                    result['comment_joinus_mode'] = 'append_joinus'
+                    opt = _re.sub(r'\[Cmts\]', '', opt, flags=_re.IGNORECASE).strip()
                 result['joinus_tag'] = opt
         return result
 
@@ -1358,6 +1445,7 @@ class ActionExecutor:
         Recognised patterns (case-insensitive):
           "Title P1"                  -> base="Title",          num=1
           "Title P1 (Suffix)"         -> base="Title (Suffix)", num=1
+          "Title Pt 1 By Source"      -> base="Title By Source", num=1
           "Title part 1"              -> base="Title",          num=1
           "Title Pt 01 (Author)"      -> base="Title (Author)", num=1
           "Title partie I"            -> base="Title",          num=1
@@ -1383,6 +1471,12 @@ class ActionExecutor:
             rf'\(\s*(?:{_KW}){_SEP}{_NUM}\s*\)\s*$',
             _re.IGNORECASE
         )
+        # Pattern B: indicator before a trailing attribution
+        #   "Title Pt 1 By 2MED|P2021|Genetique" -> suffix="By 2MED|P2021|Genetique"
+        PAT_BY = _re.compile(
+            rf'{_SEP}(?:{_KW}){_SEP}{_NUM}\s+((?:by|par)\b.+)\s*$',
+            _re.IGNORECASE
+        )
         # Pattern B: indicator before optional trailing parenthetical
         #   "Title P1"              -> suffix=None
         #   "Title P1 (Pr Mehdadi)" -> suffix="(Pr Mehdadi)"
@@ -1398,7 +1492,7 @@ class ActionExecutor:
             _re.IGNORECASE
         )
 
-        for pat, keep_suffix in ((PAT_QUOTED, False), (PAT_PAREN, False), (PAT_MID, True)):
+        for pat, keep_suffix in ((PAT_QUOTED, False), (PAT_PAREN, False), (PAT_BY, True), (PAT_MID, True)):
             m = pat.search(title)
             if not m:
                 continue
@@ -1420,6 +1514,11 @@ class ActionExecutor:
                 base = (base_raw + ' ' + suffix).strip() if suffix else base_raw
             else:
                 base = base_raw
+
+            # Normalize harmless trailing punctuation so
+            # "Title Pt 1 By Source." and "Title Pt 2 By Source"
+            # still belong to the same logical part series.
+            base = base.rstrip(' .!?,;:\u060c\u061b').strip()
 
             return base, part_num, f"Pt {part_num}"
 
@@ -1599,7 +1698,25 @@ class ActionExecutor:
                     dest_channel['username'] = getattr(ent, 'username', '') or dest_channel_id
                     dest_channel_id = real_id
             except Exception as e:
-                print(f"  ✗ Could not resolve Pub_lnk destination '{dest_channel_id}': {e}")
+                print(f"  ⚠️  Could not resolve Pub_lnk destination '{dest_channel_id}': {e}")
+                if isinstance(dest_channel_id, str) and dest_channel_id.startswith('+'):
+                    print(f"  ↩️  Invite hash kept as entity: {dest_channel_id}")
+                else:
+                    return None
+
+        dest_channel_entity = None
+        dest_channel_entity = None
+        if _is_numeric_channel_id(dest_channel_id):
+            try:
+                resolved = await self._resolve_channel_ref(dest_channel_id)
+                dest_channel['id'] = str(resolved['id'])
+                dest_channel['name'] = resolved['name'] or dest_channel.get('name', '')
+                dest_channel['username'] = resolved['username']
+                dest_channel_id = resolved['id']
+                dest_channel_entity = resolved.get('entity')
+                dest_channel_entity = resolved.get('entity')
+            except Exception as e:
+                print(f"  Could not resolve Pub_lnk destination '{dest_channel_id}': {e}")
                 return None
 
         # Build post content
@@ -1681,7 +1798,7 @@ class ActionExecutor:
         channel_id, is_link, channel_name, topic_id = self._parse_destination(destination_name)
         
         if is_link:
-            # It's a Telegram link - channel_id could be numeric ID or username
+            # It's a direct destination - channel_id could be numeric ID or username
             if isinstance(channel_id, int):
                 # Private channel with numeric ID
                 print(f"  📎 Detected private channel link → Channel ID: {channel_id}")
@@ -1735,11 +1852,20 @@ class ActionExecutor:
                         'name': f"@{channel_id}"
                     }
         else:
-            # It's a channel name - look it up in spreadsheet
-            dest_channel = google_sheets_helper.get_channel_by_name(
-                spreadsheet_id,
-                channel_name
-            )
+            import re as _re_destination
+            normalized_destination = str(channel_name or '').strip()
+
+            if _re_destination.fullmatch(r'-?\d+', normalized_destination):
+                dest_channel = google_sheets_helper.get_channel_by_id(
+                    spreadsheet_id,
+                    normalized_destination
+                )
+            else:
+                # It's a channel name - look it up in spreadsheet
+                dest_channel = google_sheets_helper.get_channel_by_name(
+                    spreadsheet_id,
+                    channel_name
+                )
             
             if not dest_channel:
                 print(f"✗ Destination channel '{channel_name}' not found in spreadsheet")
@@ -1785,6 +1911,26 @@ class ActionExecutor:
             # It's a username (e.g., 'ZEDP20MED')
             dest_channel_id = channel_id_value
         
+        if _is_numeric_channel_id(dest_channel_id):
+            try:
+                resolved = await self._resolve_channel_ref(dest_channel_id)
+                dest_channel['id'] = str(resolved['id'])
+                dest_channel['name'] = resolved['name'] or dest_channel.get('name', '')
+                dest_channel['username'] = resolved['username']
+                dest_channel_id = resolved['id']
+            except Exception as e:
+                return None, f"Could not resolve destination '{dest_channel_id}': {e}"
+
+        if _is_numeric_channel_id(dest_channel_id):
+            try:
+                resolved = await self._resolve_channel_ref(dest_channel_id)
+                dest_channel['id'] = str(resolved['id'])
+                dest_channel['name'] = resolved['name'] or dest_channel.get('name', '')
+                dest_channel['username'] = resolved['username']
+                dest_channel_id = resolved['id']
+            except Exception as e:
+                return None, f"Could not resolve destination '{dest_channel_id}': {e}"
+
         topic_id = dest_channel.get('topic_id')  # None for regular channels
         extra_msg_id = await self._add_message_before(msg_info, dest_channel_id, topic_id=topic_id)
         
@@ -1863,7 +2009,12 @@ class ActionExecutor:
                     dest_channel['username'] = getattr(ent, 'username', '') or dest_channel_id
                     dest_channel_id = real_id
             except Exception as e:
-                return None, f"Could not resolve destination '{dest_channel_id}': {e}"
+                if isinstance(dest_channel_id, str) and dest_channel_id.startswith('+'):
+                    # Keep the +HASH directly — Telethon accepts it as entity natively.
+                    # Do NOT convert to https://t.me/+HASH (Telethon rejects URL strings).
+                    print(f"  ↩️  Invite hash kept as entity (not a member yet, Telethon will handle): {dest_channel_id}")
+                else:
+                    return None, f"Could not resolve destination '{dest_channel_id}': {e}"
 
         topic_id = dest_channel.get('topic_id')  # None for regular channels
 
@@ -1924,6 +2075,16 @@ class ActionExecutor:
                 else:
                     ent = await self.client.get_entity(dest_channel_id)
                     dest_channel_id = int(f"-100{ent.id}") if ent.id > 0 else ent.id
+            except Exception as e:
+                if dest_channel_id.startswith('+'):
+                    print(f"  ↩️  Invite hash kept as entity: {dest_channel_id}")
+                else:
+                    return None, f"Could not resolve destination '{dest_channel_id}': {e}"
+
+        if _is_numeric_channel_id(dest_channel_id):
+            try:
+                resolved = await self._resolve_channel_ref(dest_channel_id)
+                dest_channel_id = resolved['id']
             except Exception as e:
                 return None, f"Could not resolve destination '{dest_channel_id}': {e}"
 
@@ -2976,7 +3137,7 @@ class ActionExecutor:
         # discussion group with a NEW message ID. We need that ID for reply_to,
         # NOT the channel post ID.
         try:
-            dest_full = await self.client(GetFullChannelRequest(dest_channel_id))
+            dest_full = await self.client(GetFullChannelRequest(dest_channel_entity or dest_channel_id))
             dest_discussion_id = getattr(dest_full.full_chat, 'linked_chat_id', None)
         except Exception as e:
             print(f"  ⚠️  Could not get destination discussion group: {e}")
@@ -3265,16 +3426,40 @@ class ActionExecutor:
                     dest_channel_id = real_id
             except Exception as e:
                 print(f"  ⚠️  Could not resolve '{dest_channel_id}': {e}")
+                if dest_channel_id.startswith('+'):
+                    # Keep the +HASH directly as the entity.
+                    # Telethon's send_message accepts '+HASH' natively.
+                    # Converting to 'https://t.me/+HASH' causes entity resolution failures.
+                    print(f"  ↩️  Keeping invite hash as entity: {dest_channel_id}")
+
+        # If dest_channel_id is a numeric int (raw ID from spreadsheet or t.me/c/ link),
+        # use _resolve_channel_ref which tries get_entity first, then falls back to
+        # scanning dialogs — needed when the channel isn't in Telethon's session cache.
+        elif isinstance(dest_channel_id, int):
+            try:
+                resolved = await self._resolve_channel_ref(dest_channel_id)
+                dest_channel['id']       = str(resolved['id'])
+                dest_channel['name']     = resolved['name'] or dest_channel.get('name', '')
+                dest_channel['username'] = resolved.get('username', '')
+                dest_channel_id          = resolved['id']
+                print(f"  🔍 Resolved numeric ID {dest_channel_id} → '{dest_channel['name']}'")
+            except Exception as e:
+                print(f"  ⚠️  Could not resolve numeric ID '{dest_channel_id}': {e}")
 
         # ── Step 2: create the hub post ──────────────────────────────────────
         hub_md   = f"#Pub_lnk    #ZED_MBset\n🔥 ***{post_title}***"
+        # dest_channel_entity is set when Step 1 resolved via _resolve_channel_ref
+        # (numeric-ID path). For invite hashes and usernames it stays None — that is
+        # fine: Telethon accepts all three forms (int, username str, +HASH str) as entity.
+        dest_channel_entity = resolved.get('entity') if 'resolved' in locals() else None
+
         hub_plain, hub_ents = markdown_to_telegram_entities(hub_md)
         if hub_ents:
             hub_ents = adjust_entity_offsets(hub_plain, hub_ents)
 
         try:
             hub_msg = await self.client.send_message(
-                entity=dest_channel_id,
+                entity=dest_channel_entity or dest_channel_id,
                 message=hub_plain,
                 formatting_entities=hub_ents or None,
                 link_preview=False,
@@ -3290,7 +3475,7 @@ class ActionExecutor:
 
         # ── Step 3: find hub's forwarded copy in the discussion group ────────
         try:
-            dest_full = await self.client(GetFullChannelRequest(dest_channel_id))
+            dest_full = await self.client(GetFullChannelRequest(dest_channel_entity or dest_channel_id))
             dest_disc_id = getattr(dest_full.full_chat, 'linked_chat_id', None)
         except Exception as e:
             print(f"  ⚠️  Could not get discussion group: {e}")
@@ -3332,21 +3517,21 @@ class ActionExecutor:
         comment_links = []   # (title, link)
         sheet_updates = []
 
-        # Resolve joinus_cmts: if set, we append the Join Us line to every comment
+        # Resolve comment-specific Join Us behavior for Transfer[Cmts].
         _leader_acts_pre  = leader.get('actions', [])
         _pub_lnk_tok_pre  = next((a for a in _leader_acts_pre if a.startswith('Pub_lnk[')), '')
         _opts_pre         = self._parse_pub_lnk_token(_pub_lnk_tok_pre)
-        _joinus_cmts      = _opts_pre.get('joinus_cmts', False)
+        _comment_joinus_mode = _opts_pre.get('comment_joinus_mode')
         _joinus_name_cmts = None
         _joinus_link_cmts = None
-        if _joinus_cmts and _opts_pre.get('joinus_tag'):
+        if _comment_joinus_mode and _opts_pre.get('joinus_tag'):
             _joinus_name_cmts, _joinus_link_cmts = await self._resolve_joinus_tag(
                 _opts_pre['joinus_tag'], dest_channel=dest_channel)
             if _joinus_name_cmts and _joinus_link_cmts:
                 print(f"  ☛ Join Us (comments): {_joinus_name_cmts} → {_joinus_link_cmts}")
             else:
                 print("  ⚠️  joinus_CHN_LNK[Cmts]: could not resolve name/link — skipping append")
-                _joinus_cmts = False
+                _comment_joinus_mode = None
 
         for idx, msg_info in enumerate(group):
             print(f"\n  [{idx+1}/{len(group)}] Transferring: {msg_info['id']}")
@@ -3378,40 +3563,55 @@ class ActionExecutor:
                            src_msg.media.__class__.__name__ != 'MessageMediaWebPage'
                         else None)
 
-            # Append Join Us line to comment text if joinus_cmts is active
-            if _joinus_cmts and _joinus_name_cmts and _joinus_link_cmts:
+            # Comment-specific Join Us modes for comment transfer.
+            if _comment_joinus_mode and _joinus_name_cmts and _joinus_link_cmts:
                 # ── Strip any existing Join Us block first (prevent duplication) ──
                 import re as _re_joinus
-                _JOINUS_PAT = _re_joinus.compile(
-                    r'\n{0,2}[>\s]*Join us\s*☛[^\n]*',
-                    _re_joinus.IGNORECASE
-                )
-                _match = _JOINUS_PAT.search(text)
-                if _match:
-                    _strip_start = _match.start()
-                    # Remove trailing whitespace/newlines before the joinus block
-                    while _strip_start > 0 and text[_strip_start - 1] in ('\n', ' '):
-                        _strip_start -= 1
-                    text = text[:_strip_start]
-                    # Drop entities that fall inside the stripped region
-                    from .utils.markdown_converter import _python_offset_to_utf16
-                    _strip_utf16 = _python_offset_to_utf16(text, len(text))
-                    entities = [_e for _e in entities
-                                if _e.offset + _e.length <= _strip_utf16]
-                    print(f"    ♻️  Stripped existing Join Us from comment")
+                if _comment_joinus_mode == 'joinus_only':
+                    _joinus_md   = f"\n\n> ***Join us ☛*** [***{_joinus_name_cmts}***]({_joinus_link_cmts})"
+                    _joinus_md = _joinus_md.lstrip()
+                    _joinus_plain, _joinus_ents = markdown_to_telegram_entities(_joinus_md)
+                    if _joinus_ents:
+                        _joinus_ents = adjust_entity_offsets(_joinus_plain, _joinus_ents)
+                    text = _joinus_plain
+                    entities = list(_joinus_ents or [])
+                else:
+                    _JOINUS_PAT = _re_joinus.compile(
+                        r'\n{0,2}[>\s]*Join us\s*☛[^\n]*',
+                        _re_joinus.IGNORECASE
+                    )
+                    _match = _JOINUS_PAT.search(text)
+                    if _match:
+                        _strip_start = _match.start()
+                        # Remove trailing whitespace/newlines before the joinus block
+                        while _strip_start > 0 and text[_strip_start - 1] in ('\n', ' '):
+                            _strip_start -= 1
+                        text = text[:_strip_start]
+                        # Drop entities that fall inside the stripped region
+                        from .utils.markdown_converter import _python_offset_to_utf16
+                        _strip_utf16 = _python_offset_to_utf16(text, len(text))
+                        entities = [_e for _e in entities
+                                    if _e.offset + _e.length <= _strip_utf16]
+                        print(f"    ♻️  Stripped existing Join Us from comment")
                 # ── Now append the fresh Join Us block ──────────────────────────
                 _joinus_md   = f"\n\n> ***Join us ☛*** [***{_joinus_name_cmts}***]({_joinus_link_cmts})"
+                if _comment_joinus_mode == 'joinus_only':
+                    _joinus_md = _joinus_md.lstrip()
                 _joinus_plain, _joinus_ents = markdown_to_telegram_entities(_joinus_md)
                 if _joinus_ents:
                     _joinus_ents = adjust_entity_offsets(_joinus_plain, _joinus_ents)
-                # Shift joinus entities by current text length (UTF-16 aware)
-                from .utils.markdown_converter import _python_offset_to_utf16
-                _shift = _python_offset_to_utf16(text, len(text))
-                if _joinus_ents:
-                    for _je in _joinus_ents:
-                        _je.offset += _shift
-                    entities = entities + _joinus_ents
-                text = text + _joinus_plain
+                if _comment_joinus_mode == 'joinus_only':
+                    text = _joinus_plain
+                    entities = list(_joinus_ents or [])
+                else:
+                    # Shift joinus entities by current text length (UTF-16 aware)
+                    from .utils.markdown_converter import _python_offset_to_utf16
+                    _shift = _python_offset_to_utf16(text, len(text))
+                    if _joinus_ents:
+                        for _je in _joinus_ents:
+                            _je.offset += _shift
+                        entities = entities + _joinus_ents
+                    text = text + _joinus_plain
 
             try:
                 if media:

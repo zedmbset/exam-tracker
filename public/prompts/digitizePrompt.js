@@ -10,8 +10,11 @@ function generateDigitizePrompt(data) {
   const moduleName  = data.module  || "[Preciser l'unite]";
   const year        = String(data.year   || "").trim();
   const yearShort   = year ? year.slice(-2) : "XX";
-  const period      = String(data.period || "").replace(/\s+/g, "");
-  const imagePrefix = `${moduleName}_${yearShort}${period || String(data.rotation || "").trim()}`;
+  const periodLabel = String(data.periodLabelForTags || data.period || "").replace(/\s+/g, "");
+  const rotationLabel = String(data.rotation || "").replace(/\s+/g, "");
+  const sessionShort = String(data.examSessionShort || "").trim();
+  const sessionLabel = String(data.examSessionLabel || "").trim();
+  const imagePrefix = `${moduleName}_${yearShort}${periodLabel || rotationLabel || sessionShort.replace(/\s+/g, "")}`;
 
   const levelValue  = String(data.level  || "").trim();
   const moduleValue = String(data.module || "").trim().toLowerCase();
@@ -39,7 +42,7 @@ function generateDigitizePrompt(data) {
 
   const tagTemplate = isResidanat
     ? `["${examType} ${data.wilaya || '[Wilaya]'}", "<tagSuggere> ${year}", "No. <num>", "${data.hasCT ? 'Corrigé type' : 'Corrigé proposé'}"]`
-    : `["${examType} ${data.wilaya || '[Wilaya]'}", "${period ? period + ' ' : ''}${year}", "No. <num>", "${data.hasCT ? 'Corrigé type' : 'Corrigé proposé'}"]`;
+    : `["${examType} ${data.wilaya || '[Wilaya]'}", "${periodLabel ? periodLabel + ' ' : ''}${year}", "No. <num>", "${data.hasCT ? 'Corrigé type' : 'Corrigé proposé'}"]`;
 
   return `Tu es un assistant specialise en extraction d'examens medicaux.
 Ta mission est double :
@@ -59,7 +62,8 @@ CONTEXTE DE L'EXAMEN
 - Unite             : ${moduleName}
 - Annee             : ${year}
 - Niveau            : ${data.level || "[Preciser le niveau]"}
-${period ? `- Periode           : ${period}` : ""}
+${sessionLabel ? `- Session           : ${sessionLabel}` : ""}
+${periodLabel ? `- Etiquette tags    : ${periodLabel}` : ""}
 ${data.rotation ? `- Rotation          : ${data.rotation}` : ""}
 - Type d'examen     : ${examType}
 - Nombre total QCMs : ${data.nQst || "[Preciser le nombre]"}

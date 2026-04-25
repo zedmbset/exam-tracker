@@ -16,15 +16,15 @@ This document explains how the direct Admin and Public PDF reports are organized
 - returns the public URL
 
 3. Report builders
-- `reports/adminReportPdf.js`
-- `reports/publicReportPdf.js`
+- `src/server/reports/adminReportPdf.js`
+- `src/server/reports/publicReportPdf.js`
 
 4. Shared PDF layer
-- `reports/reportPdfShared.js`
+- `src/server/reports/reportPdfShared.js`
 
 ## File Ownership
 
-### `reports/adminReportPdf.js`
+### `src/server/reports/adminReportPdf.js`
 Edit this file when you want to change:
 - internal/admin report layout
 - metadata emphasis
@@ -38,7 +38,7 @@ Main sections:
 - `drawAdminAccessSection(...)`
 - `drawAdminFooter(...)`
 
-### `reports/publicReportPdf.js`
+### `src/server/reports/publicReportPdf.js`
 Edit this file when you want to change:
 - student-facing report layout
 - public summary presentation
@@ -52,7 +52,7 @@ Main sections:
 - `drawPublicAccessSection(...)`
 - `drawPublicFooter(...)`
 
-### `reports/reportPdfShared.js`
+### `src/server/reports/reportPdfShared.js`
 Edit this file when you want to change:
 - shared PDF engine behavior
 - text encoding
@@ -76,9 +76,9 @@ Main exports:
 
 ## Editing Rules
 
-- If the change is Admin-only, edit only `reports/adminReportPdf.js`.
-- If the change is Public-only, edit only `reports/publicReportPdf.js`.
-- If the change affects both PDFs, edit `reports/reportPdfShared.js`.
+- If the change is Admin-only, edit only `src/server/reports/adminReportPdf.js`.
+- If the change is Public-only, edit only `src/server/reports/publicReportPdf.js`.
+- If the change affects both PDFs, edit `src/server/reports/reportPdfShared.js`.
 - Do not move report layout logic back into `public/exam.html`.
 - Keep these exports stable:
   - `buildAdminReportBuffer`
@@ -107,12 +107,12 @@ Both report builders receive a normalized exam payload containing values like:
 - `tags.schemaQsts`
 
 The canonical normalization happens in:
-- `reports/reportPdfShared.js`
+- `src/server/reports/reportPdfShared.js`
 - `buildReportContext(...)`
 
 If you add a new report field:
 1. update `buildReportPayload()` in `public/exam.html`
-2. update `buildReportContext()` in `reports/reportPdfShared.js`
+2. update `buildReportContext()` in `src/server/reports/reportPdfShared.js`
 3. update the relevant PDF file
 
 Current Admin-only document links include:
