@@ -400,6 +400,9 @@
     line-height: 1.4;
     word-break: break-word;
   }
+  .detail-empty {
+    color: #6b7280;
+  }
   .detail-value a {
     color: #2563eb;
     text-decoration: none;
