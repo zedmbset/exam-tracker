@@ -287,6 +287,15 @@ function closeExamPreview() {
   document.getElementById('examPreviewModal')?.classList.remove('open');
 }
 
+function emptyDetail(label) {
+  return `<span class="detail-empty">${escapeHtml(label)}</span>`;
+}
+
+function textDetail(value, emptyLabel) {
+  const clean = String(value || '').trim();
+  return clean ? escapeHtml(clean) : emptyDetail(emptyLabel);
+}
+
 function openExamPreview(examId) {
   const row = findRowByExamId(examId);
   if (!row) return;
@@ -311,12 +320,12 @@ function openExamPreview(examId) {
   const quizTableUrl = cell(row, 'Quiz_Tbl');
   const quizTableOpenUrl = driveOpenInSheetsUrl(quizTableUrl) || quizTableUrl;
   const items = [
-    { label: 'Module', value: escapeHtml(cell(row, 'Module') || 'â€”') },
-    { label: 'Session', value: escapeHtml(session?.label || getSessionBaseLabel(session, row) || 'â€”') },
+    { label: 'Module', html: textDetail(cell(row, 'Module'), 'Not set') },
+    { label: 'Session', html: textDetail(session?.label || getSessionBaseLabel(session, row), 'Not set') },
     { label: 'Status', html: getStatusBadgeHtml(status) },
-    { label: 'Exam Date', value: escapeHtml(cell(row, 'ExamDate') || 'â€”') },
-    { label: 'Original PDF', html: cell(row, 'OrigPDF') ? `<a href="${escapeHtml(cell(row, 'OrigPDF'))}" target="_blank" rel="noopener">Drive link</a>` : 'â€”' },
-    { label: 'Quiz Table', html: quizTableUrl ? `<a href="${escapeHtml(quizTableOpenUrl)}" target="_blank" rel="noopener">Quiz table</a>` : 'â€”' },
+    { label: 'Exam Date', html: textDetail(cell(row, 'ExamDate'), 'Not set') },
+    { label: 'Original PDF', html: cell(row, 'OrigPDF') ? `<a href="${escapeHtml(cell(row, 'OrigPDF'))}" target="_blank" rel="noopener">Drive link</a>` : emptyDetail('No PDF') },
+    { label: 'Quiz Table', html: quizTableUrl ? `<a href="${escapeHtml(quizTableOpenUrl)}" target="_blank" rel="noopener">Quiz table</a>` : emptyDetail('No quiz table') },
   ];
 
   body.innerHTML = items.map(item => `
