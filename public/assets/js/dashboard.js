@@ -147,7 +147,7 @@ async function boot() {
 }
 
 async function loadSheet() {
-  setSyncStatus('syncing','Loadingâ€¦');
+  setSyncStatus('syncing','Loading...');
   try {
     const data = await (await fetch(`${API}/api/sheet`)).json();
     if (data.error) throw new Error(data.error);
@@ -160,7 +160,7 @@ async function loadSheet() {
     });
     showDashboard();
     setSyncStatus('synced','Synced');
-    notify('Data loaded â€” ' + sheetData.length + ' rows', 'success');
+    notify('Data loaded - ' + sheetData.length + ' rows', 'success');
   } catch(e) {
     setSyncStatus('error','Error');
     document.getElementById('loadingScreen').style.display = 'none';
@@ -286,7 +286,7 @@ function buildMultiSelect(wrapId, label, getSelected, setSelected, getOpts) {
     const opts = getOpts();
     const sel = getSelected();
     panel.innerHTML = `
-      <div class="fd-panel-search"><input type="text" placeholder="Searchâ€¦" id="${wrapId}-srch" autocomplete="off"></div>
+      <div class="fd-panel-search"><input type="text" placeholder="Search..." id="${wrapId}-srch" autocomplete="off"></div>
       <div class="fd-panel-opts" id="${wrapId}-opts"></div>
       <div class="fd-panel-footer">
         <span class="fd-footer-count" id="${wrapId}-cnt">${sel.length} selected</span>
@@ -363,7 +363,7 @@ function buildYearFilter(wrapId, getOpts) {
       btn.innerHTML = `Year: <strong>${escapeHtml(yearSingle)}</strong> ${CARET_SVG}`;
     } else if (yearMode === 'range' && (yearFrom || yearTo)) {
       btn.className = 'fd-btn is-active';
-      btn.innerHTML = `Year: <strong>${escapeHtml(yearFrom||'â€¦')} â€“ ${escapeHtml(yearTo||'â€¦')}</strong> ${CARET_SVG}`;
+      btn.innerHTML = `Year: <strong>${escapeHtml(yearFrom||'...')} - ${escapeHtml(yearTo||'...')}</strong> ${CARET_SVG}`;
     } else {
       btn.className = 'fd-btn';
       btn.innerHTML = `Year ${CARET_SVG}`;
@@ -404,7 +404,7 @@ function buildYearFilter(wrapId, getOpts) {
         const mkOpts = (cur) => opts.map(y=>`<option value="${escapeHtml(y)}" ${cur===y?'selected':''}>${escapeHtml(y)}</option>`).join('');
         body.innerHTML = `<div class="fd-year-range">
           <select id="${wrapId}-from"><option value="">From</option>${mkOpts(yearFrom)}</select>
-          <span class="fd-year-range-sep">â€“</span>
+          <span class="fd-year-range-sep">-</span>
           <select id="${wrapId}-to"><option value="">To</option>${mkOpts(yearTo)}</select>
         </div>`;
         const fromEl = document.getElementById(`${wrapId}-from`);
@@ -465,7 +465,7 @@ function renderChips() {
   if (filterState.wilayas.length)
     chips.push({ label: `Wilaya: ${filterState.wilayas.join(', ')}`, key: 'w', clear: () => { filterState.wilayas=[]; multiSelectControls['fd-wilaya']?.refreshBtn(); } });
   if (filterState.yearMode !== 'all' && (filterState.yearSingle || filterState.yearFrom || filterState.yearTo)) {
-    const yl = filterState.yearMode==='single' ? filterState.yearSingle : `${filterState.yearFrom||'â€¦'} â€“ ${filterState.yearTo||'â€¦'}`;
+    const yl = filterState.yearMode==='single' ? filterState.yearSingle : `${filterState.yearFrom||'...'} - ${filterState.yearTo||'...'}`;
     chips.push({ label: `Year: ${yl}`, key: 'y', clear: () => { filterState.yearMode='all'; filterState.yearSingle=''; filterState.yearFrom=''; filterState.yearTo=''; yearFilterControl?.refreshBtn(); } });
   }
   if (filterState.sessions.length)
@@ -555,7 +555,7 @@ function getMissing(row) {
   const m=[];
   if (!cell(row,'OrigPDF'))                             m.push('OrigPDF');
   if (!cell(row,'Quiz_Tbl'))                            m.push('Quiz_Tbl');
-  if (!tags.nQst)                                       m.push('Nآ° Qst');
+  if (!tags.nQst)                                       m.push('N° Qst');
   return m;
 }
 function isComplete(row){ return getMissing(row).length===0; }
@@ -677,14 +677,14 @@ function renderTableHeader() {
     { key:null,       label:'OrigPDF' },
     { key:null,       label:'Quiz_Tbl' },
     { key:null,       label:'Saved By' },
-    { key:'nQst',     label:'Nآ° Qst' },
+    { key:'nQst',     label:'N° Qst' },
     { key:'Missing',  label:'Missing' },
     { key:null,       label:'' },
   ];
   thead.innerHTML = cols.map(c => {
     if (!c.key) return `<th>${c.label}</th>`;
     const active = sortState.col === c.key;
-    const arrow  = active ? (sortState.dir==='asc' ? 'â†‘' : 'â†“') : 'â†•';
+    const arrow  = active ? (sortState.dir==='asc' ? '&uarr;' : '&darr;') : '&varr;';
     return `<th class="sortable${active?' sort-active':''}" onclick="setSort('${c.key}')">${c.label} <i class="sort-icon">${arrow}</i></th>`;
   }).join('');
 }
@@ -713,19 +713,19 @@ function renderTable() {
       ? (missingCount > 0
           ? `<span style="font-size:12px;color:var(--amber-text);font-weight:500;">${missingCount}</span>`
           : `<span style="font-size:11px;color:var(--green-text)">0</span>`)
-      : '<span class="empty-val">â€”</span>';
+      : '<span class="empty-val">&mdash;</span>';
     const idx    = sheetData.indexOf(r);
     const examId = cell(r,'ID_Exams') || r._rowIndex;
     return `<tr class="${comp?'complete':'has-missing'}" onclick="location.href='/exam?id='+encodeURIComponent('${examId}')" style="cursor:pointer;">
       <td>${wilayaBadge(cell(r,'Wilaya'))}</td>
       <td>${cell(r,'Year')}</td>
-      <td>${cell(r,'Rotation')||'<span class="empty-val">â€”</span>'}</td>
+      <td>${cell(r,'Rotation')||'<span class="empty-val">&mdash;</span>'}</td>
       <td style="max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${cell(r,'Module')}">${cell(r,'Module')}</td>
       <td>${getStatusBadgeHtml(status)}</td>
-      <td>${drive?`<div class="link-cell"><a href="${drive}" target="_blank" onclick="event.stopPropagation()">Drive â†—</a></div>`:'<span class="empty-val">â€”</span>'}</td>
-      <td>${quiz?`<div class="link-cell"><a href="${quiz}" target="_blank" onclick="event.stopPropagation()">Quiz â†—</a></div>`:'<span class="empty-val">â€”</span>'}</td>
-      <td onclick="event.stopPropagation()">${cell(r,'Membre')?`<span class="saver-cell" title="${escapeHtml(cell(r,'Membre'))}">${escapeHtml(cell(r,'Membre'))}</span>`:'<span class="empty-val">â€”</span>'}</td>
-      <td style="text-align:center;">${nqst||'<span class="empty-val">â€”</span>'}</td>
+      <td>${drive?`<div class="link-cell"><a href="${drive}" target="_blank" onclick="event.stopPropagation()">Drive &nearr;</a></div>`:'<span class="empty-val">&mdash;</span>'}</td>
+      <td>${quiz?`<div class="link-cell"><a href="${quiz}" target="_blank" onclick="event.stopPropagation()">Quiz &nearr;</a></div>`:'<span class="empty-val">&mdash;</span>'}</td>
+      <td onclick="event.stopPropagation()">${cell(r,'Membre')?`<span class="saver-cell" title="${escapeHtml(cell(r,'Membre'))}">${escapeHtml(cell(r,'Membre'))}</span>`:'<span class="empty-val">&mdash;</span>'}</td>
+      <td style="text-align:center;">${nqst||'<span class="empty-val">&mdash;</span>'}</td>
       <td style="text-align:center;">${missingQstsLabel}</td>
       <td onclick="event.stopPropagation()" style="text-align:center;padding:6px 8px;">
         <div class="table-actions">
@@ -747,7 +747,7 @@ function shareExam(id, e) {
   // Make sure id is treated as a string
   const safeId = String(id).trim();
   const url = `${location.origin}/exam?id=${encodeURIComponent(safeId)}`;
-  navigator.clipboard.writeText(url).then(() => notify('Share link copied! ًں”—', 'success'));
+  navigator.clipboard.writeText(url).then(() => notify('Share link copied!', 'success'));
 }
 // â”€â”€ Fill modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function writeRowToSheet(row){
@@ -765,7 +765,7 @@ function openFill(idx){
   activeRowIdx=idx; pendingFile=null;
   const row=sheetData[idx];
   const missing=getMissing(row);
-  document.getElementById('modalTitle').textContent = cell(row,'Module') + ' â€” ' + cell(row,'Wilaya') + ' ' + cell(row,'Year');
+  document.getElementById('modalTitle').textContent = cell(row,'Module') + ' - ' + cell(row,'Wilaya') + ' ' + cell(row,'Year');
 
   const chips = [cell(row,'Level'), getSessionLabel(row), missing.length + ' missing field' + (missing.length!==1?'s':'')]
     .filter(Boolean)
@@ -813,7 +813,7 @@ function openFill(idx){
   };
 
   // â”€â”€ Section 1: Files â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const filesGrid = addSection('ًں“پ', 'Files');
+  const filesGrid = addSection('📁', 'Files');
 
   // â”€â”€ OrigPDF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const origPDFCurrent = cell(row,'OrigPDF');
@@ -824,7 +824,7 @@ function openFill(idx){
     ${origPDFCurrent
       ? `<div class="file-status has-file">
            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-           File stored â€” <a href="${origPDFCurrent}" target="_blank">View PDF â†—</a>
+           File stored &mdash; <a href="${origPDFCurrent}" target="_blank">View PDF &nearr;</a>
            <span style="margin-left:auto;color:var(--text3);font-size:11px;">Replace below</span>
          </div>`
       : `<div class="file-status no-file">
@@ -847,12 +847,12 @@ function openFill(idx){
     </div>
     <input type="file" id="fileInput" accept=".pdf" style="display:none" onchange="handleFileSelect(this)">
     <div style="margin-top:6px;">
-      <input type="url" id="field_OrigPDF" value="${origPDFCurrent||''}" placeholder="Or paste Drive URL directlyâ€¦" style="font-size:12px;">
+      <input type="url" id="field_OrigPDF" value="${origPDFCurrent||''}" placeholder="Or paste Drive URL directly..." style="font-size:12px;">
     </div>`;
   filesGrid.appendChild(uploadDiv);
 
   // â”€â”€ Section 2: QCM Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const quizGrid = addSection('ًں“ٹ', 'QCM Table (Quiz_Tbl)');
+  const quizGrid = addSection('📊', 'QCM Table (Quiz_Tbl)');
   const quizCurrent = cell(row,'Quiz_Tbl');
 
   addRow(quizGrid, `
@@ -860,7 +860,7 @@ function openFill(idx){
     ${quizCurrent
       ? `<div class="file-status has-file" style="margin-bottom:6px;">
            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-           CSV stored â€” <a href="${quizCurrent}" target="_blank">View file â†—</a>
+           CSV stored &mdash; <a href="${quizCurrent}" target="_blank">View file &nearr;</a>
            <span style="margin-left:auto;color:var(--text3);font-size:11px;">Paste below to replace</span>
          </div>`
       : `<div class="file-status no-file" style="margin-bottom:6px;">
@@ -875,7 +875,7 @@ function openFill(idx){
   if (membreVal) {
     addRow(quizGrid, `
       <div class="last-saved-info">
-        <span class="ls-icon">ًں‘¤</span>
+        <span class="ls-icon">👤</span>
         <span><strong>Last saved by:</strong> ${escapeHtml(membreVal)}</span>
       </div>`);
   }
@@ -884,11 +884,11 @@ function openFill(idx){
   const quizLinkCurrent = cell(row,'Quiz_Link') || '';
   addRow(quizGrid, `
     <label>Quiz Link <span style="font-size:11px;font-weight:400;color:var(--text3);">(optional)</span></label>
-    <input type="url" id="field_Quiz_Link" value="${quizLinkCurrent}" placeholder="https://app.mbset.co/â€¦">
+    <input type="url" id="field_Quiz_Link" value="${quizLinkCurrent}" placeholder="https://app.mbset.co/...">
     <div class="field-hint">Paste the MBset quiz link for this exam</div>`);
 
   // â”€â”€ Section 3: Tags / Metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const tagsGrid = addSection('ًںڈ·ï¸ڈ', 'Tags & Metadata');
+  const tagsGrid = addSection('🏷️', 'Tags & Metadata');
   const rowTags = parseTags(row);
 
   const rawExamDate = cell(row,'ExamDate') || cell(row,'Exam Date') || '';
@@ -906,10 +906,10 @@ function openFill(idx){
   addRow(tagsGrid, `
     <label>Question annotations</label>
     <input type="text" id="tags_annotations" value="${annotationsToString(rowTags)}" placeholder="e.g. 3m, 7s, 15-17m, 20s">
-    <div class="field-hint"><b>m</b> = missing &nbsp;آ·&nbsp; <b>s</b> = has schema/table &nbsp;آ·&nbsp; ranges ok (e.g. 5-8m) &nbsp;آ·&nbsp; missing count is auto-calculated</div>`, true);
+    <div class="field-hint"><b>m</b> = missing &nbsp;&middot;&nbsp; <b>s</b> = has schema/table &nbsp;&middot;&nbsp; ranges ok (e.g. 5-8m) &nbsp;&middot;&nbsp; missing count is auto-calculated</div>`, true);
 
   addRow(tagsGrid, `
-    <label>Has Corrigأ© Type (CT)</label>
+    <label>Has Corrigé Type (CT)</label>
     <label style="flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:400;margin-top:2px;cursor:pointer;">
       <input type="checkbox" id="tags_hasCT" ${rowTags.hasCT?'checked':''} style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;">
       Original PDF includes a correction key
@@ -963,13 +963,13 @@ async function saveRow(){
   }
 
   const btn=document.getElementById('saveBtn');
-  btn.textContent='Savingâ€¦';btn.disabled=true;
+  btn.textContent='Saving...';btn.disabled=true;
 
   // Save OrigPDF if manually pasted URL
   const origPDFVal = origPDFEl && origPDFEl.value.trim();
   if(origPDFVal) setCell(row,'OrigPDF',origPDFVal);
 
-  // TSV â†’ CSV upload for Quiz_Tbl
+  // TSV to CSV upload for Quiz_Tbl
   const tsvContent = tsvEl && tsvEl.value.trim();
   if(tsvContent){
     try{
@@ -986,7 +986,7 @@ async function saveRow(){
       const d = await r.json();
       if(d.error) throw new Error(d.error);
       setCell(row,'Quiz_Tbl',d.url);
-      notify('QCM CSV uploaded to Drive âœ…','success');
+      notify('QCM CSV uploaded to Drive OK','success');
     }catch(e){ notify('CSV upload failed: '+e.message,'error'); }
   }
 
@@ -1033,7 +1033,7 @@ async function saveRow(){
       const d=await r.json();
       if(d.error)throw new Error(d.error);
       setCell(row,'OrigPDF',d.url);
-      notify('PDF uploaded to Drive âœ…','success');
+      notify('PDF uploaded to Drive OK','success');
     }catch(e){notify('Drive upload failed: '+e.message,'error');}
   }
 
@@ -1043,7 +1043,7 @@ async function saveRow(){
 
   try{
     await writeRowToSheet(row);
-    notify('Row saved successfully âœ…','success');
+    notify('Row saved successfully OK','success');
   }catch(e){notify('Sheet write failed: '+e.message,'error');}
 
   btn.textContent='Save to sheet';btn.disabled=false;
@@ -1143,7 +1143,7 @@ function changeIdentity() { showIdentityModal(null, false); }
 function buildMembreStamp() {
   const email = getIdentity();
   if (!email) return '';
-  return `${email} â€” ${formatAlgeriaTime(new Date())}`;
+  return `${email} - ${formatAlgeriaTime(new Date())}`;
 }
 
 boot();

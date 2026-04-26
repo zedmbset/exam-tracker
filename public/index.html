@@ -19,11 +19,11 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Contacts
       </a>
-      <a class="btn btn-sm" id="availabilityLink" href="/availability.html" title="Aperأ§u des QCM disponibles par annأ©e"
+      <a class="btn btn-sm" id="availabilityLink" href="/availability.html" title="Aper&ccedil;u des QCM disponibles par ann&eacute;e"
          onclick="try{const w=(filterState&&filterState.wilayas&&filterState.wilayas[0])||''; if(w){this.href='/availability.html?wilaya='+encodeURIComponent(w);}}catch(e){}"
          style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-        Disponibilitأ©
+        Disponibilit&eacute;
       </a>
       <a class="btn btn-sm" href="/contacts/" title="Gestion des contacts"
          style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
@@ -31,7 +31,7 @@
         Contacts
       </a>
       <button class="identity-btn" id="identityBtn" onclick="changeIdentity()" title="Change your identity">
-        <span class="id-icon">ًں‘¤</span><span id="identityBtnLabel">Set identity</span>
+        <span class="id-icon" aria-hidden="true">&#128100;</span><span id="identityBtnLabel">Set identity</span>
       </button>
       <div class="sync-pill synced" id="syncStatus"><span>Ready</span></div>
       <button class="btn btn-sm btn-primary" id="refreshStatusBtn" onclick="refreshAllStatuses()">Refresh Status</button>
@@ -43,7 +43,7 @@
     <!-- Loading -->
     <div id="loadingScreen" class="loading-screen">
       <div class="spinner-lg"></div>
-      <span>Loading exam dataâ€¦</span>
+      <span>Loading exam data&hellip;</span>
     </div>
     <!-- Error -->
     <div id="errorScreen" class="error-screen" style="display:none;">
@@ -54,7 +54,7 @@
     <div id="dashboard" style="display:none;">
       <div class="stats-row" id="statsRow"></div>
       <div class="filters">
-        <input type="text" id="searchBox" placeholder="Search module, wilayaâ€¦" oninput="onFilterChange()">
+        <input type="text" id="searchBox" placeholder="Search module, wilaya&hellip;" oninput="onFilterChange()">
         <div class="fd-wrap" id="fd-wilaya"></div>
         <div class="fd-wrap" id="fd-year"></div>
         <div class="fd-wrap" id="fd-session"></div>
