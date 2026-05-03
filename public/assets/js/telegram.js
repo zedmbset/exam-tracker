@@ -345,6 +345,23 @@ function getRangeMode() {
   return document.querySelector('input[name="rangeMode"]:checked')?.value || 'date';
 }
 
+function extractTelegramMessageId(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (/^\d+$/.test(text)) return text;
+
+  const patterns = [
+    /(?:https?:\/\/)?t\.me\/c\/\d+\/(\d+)(?:\?.*)?$/i,
+    /(?:https?:\/\/)?t\.me\/[^/\s?#]+\/(\d+)(?:\?.*)?$/i,
+    /\/(\d+)(?:\?.*)?$/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return text;
+}
+
 function loadPersistedUi() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -1666,8 +1683,8 @@ async function startJob(type) {
     payload.channels = getSelectedChannels();
     payload.rangeMode = document.querySelector('input[name="rangeMode"]:checked').value;
     payload.dateFrom = els.dateFromInput.value.trim();
-    payload.startMessageId = els.startMessageInput.value.trim();
-    payload.endMessageId = els.endMessageInput.value.trim();
+    payload.startMessageId = extractTelegramMessageId(els.startMessageInput.value);
+    payload.endMessageId = extractTelegramMessageId(els.endMessageInput.value);
     payload.fetchComments = els.fetchCommentsInput.checked;
     payload.maxCommentsPerPost = Number(els.maxCommentsInput.value || 50);
   }
@@ -1772,6 +1789,14 @@ document.querySelectorAll('input[name="rangeMode"]').forEach((input) => input.ad
 els.dateFromInput.addEventListener('input', savePersistedUi);
 els.startMessageInput.addEventListener('input', savePersistedUi);
 els.endMessageInput.addEventListener('input', savePersistedUi);
+els.startMessageInput.addEventListener('blur', () => {
+  els.startMessageInput.value = extractTelegramMessageId(els.startMessageInput.value);
+  savePersistedUi();
+});
+els.endMessageInput.addEventListener('blur', () => {
+  els.endMessageInput.value = extractTelegramMessageId(els.endMessageInput.value);
+  savePersistedUi();
+});
 els.fetchCommentsInput.addEventListener('change', savePersistedUi);
 els.maxCommentsInput.addEventListener('input', savePersistedUi);
 els.loadActionRowsBtn.addEventListener('click', () => loadActionRows().catch((error) => alert(presentError(error))));

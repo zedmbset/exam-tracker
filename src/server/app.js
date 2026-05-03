@@ -100,6 +100,24 @@ function compactString(value) {
   return String(value || '').trim();
 }
 
+function extractTelegramMessageId(value) {
+  const text = compactString(value);
+  if (!text) return '';
+  if (/^\d+$/.test(text)) return text;
+
+  const patterns = [
+    /(?:https?:\/\/)?t\.me\/c\/\d+\/(\d+)(?:\?.*)?$/i,
+    /(?:https?:\/\/)?t\.me\/[^/\s?#]+\/(\d+)(?:\?.*)?$/i,
+    /\/(\d+)(?:\?.*)?$/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return '';
+}
+
 function base64url(buf) {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
@@ -797,8 +815,14 @@ function sanitizeFetchJobPayload(body, spreadsheet) {
 
   let rangeMode = compactString(body?.rangeMode) === 'message_id' ? 'message_id' : 'date';
   let dateFrom = compactString(body?.dateFrom);
-  const startMessageId = compactString(body?.startMessageId);
-  const endMessageId = compactString(body?.endMessageId);
+  const rawStartMessageId = compactString(body?.startMessageId);
+  const rawEndMessageId = compactString(body?.endMessageId);
+  const startMessageId = extractTelegramMessageId(rawStartMessageId);
+  const endMessageId = extractTelegramMessageId(rawEndMessageId);
+  if (rangeMode === 'message_id') {
+    if (rawStartMessageId && !startMessageId) throw new Error('Start must be a message ID or Telegram post link.');
+    if (rawEndMessageId && !endMessageId) throw new Error('End must be a message ID or Telegram post link.');
+  }
   if (rangeMode === 'message_id' && !startMessageId && !endMessageId) {
     rangeMode = 'date';
     dateFrom = '';
