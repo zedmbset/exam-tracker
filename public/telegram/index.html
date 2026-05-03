@@ -178,7 +178,7 @@
             <div class="preset-manager-head">
               <div>
                 <div class="preset-manager-title">Preset Library Manager</div>
-                <div class="preset-manager-copy">Build a reusable structured preset for common grouped actions, or switch to raw override for advanced action strings that donâ€™t fit the normal switches.</div>
+                <div class="preset-manager-copy">Build a reusable structured preset for common grouped actions, or switch to raw override for advanced action strings that don't fit the normal switches.</div>
               </div>
               <div class="preset-mode-pills">
                 <label class="preset-mode-pill">
@@ -267,9 +267,9 @@
                   <option value="">No custom symbol</option>
                   <option value="*">`*` Star</option>
                   <option value="-">`-` Dash</option>
-                  <option value="â€¢">`â€¢` Bullet</option>
+                  <option value="&#8226;">`&#8226;` Bullet</option>
                   <option value=">>">`>>` Double chevron</option>
-                  <option value="ًں”¹">`ًں”¹` Blue diamond</option>
+                  <option value="&#128313;">`&#128313;` Blue diamond</option>
                   <option value="custom">Other...</option>
                 </select>
                 <input id="presetPunctValueInput" class="symbol-input inline-input" type="text" placeholder="Type another symbol">
@@ -422,9 +422,9 @@
                     <option value="">No custom symbol</option>
                     <option value="*">`*` Star</option>
                     <option value="-">`-` Dash</option>
-                    <option value="â€¢">`â€¢` Bullet</option>
+                    <option value="&#8226;">`&#8226;` Bullet</option>
                     <option value=">>">`>>` Double chevron</option>
-                    <option value="ًں”¹">`ًں”¹` Blue diamond</option>
+                    <option value="&#128313;">`&#128313;` Blue diamond</option>
                     <option value="custom">Other...</option>
                   </select>
                   <input id="actionPunctValueInput" class="symbol-input inline-input" type="text" placeholder="Type another symbol">
@@ -467,7 +467,10 @@
 
     <section class="card">
       <div class="stripe" style="background:#334155;"></div>
-      <div class="card-header"><h2 style="color:#334155;">Activity Log</h2></div>
+      <div class="card-header card-header-inline">
+        <h2 style="color:#334155;">Activity Log</h2>
+        <button id="copyLogBtn" class="ghost log-copy-btn" type="button">Copy Log</button>
+      </div>
       <div class="card-body">
         <div class="log" id="log">Ready.</div>
       </div>

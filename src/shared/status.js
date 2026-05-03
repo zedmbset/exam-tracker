@@ -56,14 +56,9 @@
       var first = Number(match[1]);
       var second = Number(match[2]);
       year = Number(match[3]);
-      if (second > 12) {
-        month = first;
-        day = second;
-      } else {
-        day = first;
-        month = second;
-      }
-      return buildValidDate(year, month, day);
+      var monthDayDate = buildValidDate(year, first, second);
+      var dayMonthDate = buildValidDate(year, second, first);
+      return monthDayDate || dayMonthDate;
     }
 
     direct = new Date(raw);
