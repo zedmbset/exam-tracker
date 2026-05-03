@@ -416,6 +416,7 @@ class ActionExecutor:
         Supports multiple formats:
         - Channel name: "My Channel" (looks up in spreadsheet)
         - Raw channel ID: "-1003430105919"
+        - Telegram invite link: "https://t.me/+NhiHWMUBAyY2YWNk"
         - Telegram link (private): "https://t.me/c/3138994143/2461"
         - Telegram link (public): "https://t.me/ZEDP22MED" or "https://t.me/ZEDP22MED/123"
         - Telegram link (forum): "https://t.me/c/2338021745/123/6409"
@@ -443,6 +444,17 @@ class ActionExecutor:
             except ValueError:
                 return None, False, destination, None
         
+        # Check if it's an invite link (https://t.me/+HASH)
+        if (destination.startswith('https://t.me/+') or destination.startswith('http://t.me/+')):
+            hash_part = destination.split('/+', 1)[1].split('/')[0]
+            return f'+{hash_part}', True, None, None
+
+        # Legacy Telegram invite links can also appear as /joinchat/HASH
+        if (destination.startswith('https://t.me/joinchat/') or destination.startswith('http://t.me/joinchat/')):
+            hash_part = destination.rsplit('/', 1)[-1]
+            if hash_part:
+                return f'+{hash_part}', True, None, None
+
         # Check if it's a Telegram link (private channel with /c/)
         if 'https://t.me/c/' in destination:
             try:
@@ -465,11 +477,6 @@ class ActionExecutor:
             except (ValueError, IndexError):
                 return None, False, destination, None
         
-        # Check if it's an invite link (https://t.me/+HASH)
-        elif (destination.startswith('https://t.me/+') or destination.startswith('http://t.me/+')):
-            hash_part = destination.split('/+', 1)[1].split('/')[0]
-            return f'+{hash_part}', True, None, None
-
         # Check if it's a public channel link (https://t.me/USERNAME)
         elif destination.startswith('https://t.me/') or destination.startswith('http://t.me/'):
             try:
@@ -1783,7 +1790,8 @@ class ActionExecutor:
         
         Supports multiple formats:
         - Channel name: "My Channel" (looks up in spreadsheet)
-        - Telegram link (private): "https://t.me/c/3138994143/2461" (extracts channel ID)
+        - Telegram invite link: "https://t.me/+NhiHWMUBAyY2YWNk" (extracts invite hash)
+        - Telegram link (private post): "https://t.me/c/3138994143/2461" (extracts channel ID)
         - Telegram link (public): "https://t.me/ZEDP22MED" (extracts username)
         
         Args:
