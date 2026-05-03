@@ -21,8 +21,9 @@
 
   <div class="page-tabs">
     <div class="tabbar">
-      <a href="/telegram" class="page-tab" id="fetchTabLink">Fetch</a>
-      <a href="/telegram/collections" class="page-tab" id="collectionsTabLink">Collections</a>
+      <a href="/telegram?tab=fetch" class="page-tab" id="fetchTabLink">Fetch</a>
+      <a href="/telegram?tab=collections" class="page-tab" id="collectionsTabLink">Collections</a>
+      <a href="/telegram?tab=cache" class="page-tab" id="cacheTabLink">Cache</a>
       <div class="tab-summary" id="tabSummary">Manage fetching, channels, and collection actions from one place.</div>
     </div>
   </div>
@@ -157,14 +158,19 @@
             <div class="preset-badge">Action logic only</div>
           </div>
           <div class="preset-toolbar-grid">
-            <div>
+            <div class="preset-toolbar-main">
               <label for="presetSelect">Collection action preset</label>
               <select id="presetSelect">
                 <option value="">Choose a preset</option>
               </select>
-            </div>
-            <div class="preset-inline-actions">
-              <button id="applyPresetBtn" type="button">Apply To Selected</button>
+              <div class="preset-destination-wrap">
+                <label for="actionDestinationInput">Destination</label>
+                <div class="search-select">
+                  <input id="actionDestinationInput" type="search" autocomplete="off" placeholder="Type to search destination channel">
+                  <div id="actionDestinationSuggestions" class="search-suggestions hidden"></div>
+                </div>
+                <div class="field-help">Choose a preset, choose a destination, then click Save Collection to write the action tags and destination to all selected collections.</div>
+              </div>
             </div>
             <div class="preset-inline-actions">
               <button id="savePresetBtn" type="button">Save Current</button>
@@ -172,8 +178,11 @@
             <div class="preset-inline-actions">
               <button id="togglePresetManagerBtn" type="button">Manage Library</button>
             </div>
+            <div class="preset-inline-actions">
+              <button id="toggleCollectionCustomizeBtn" type="button">Customize Selected Collection</button>
+            </div>
           </div>
-          <div class="preset-match" id="presetStatus">Presets are shared across sheets and only change action logic, not destination.</div>
+          <div class="preset-match" id="presetStatus">Quick flow: preset + destination + Save Collection. Use Customize Selected Collection only when you need exceptions.</div>
           <div class="preset-manager section-hidden" id="presetManager">
             <div class="preset-manager-head">
               <div>
@@ -340,12 +349,14 @@
               <button class="accent collections-execute-btn" id="collectionsExecuteActionsBtn" type="button">Execute Actions</button>
               <div class="field-help">Run the current sheet actions directly from the Collections page.</div>
             </div>
+            <div id="collectionsLogMount"></div>
             <div class="action-section stack-sm">
               <h3>Selected Collection</h3>
               <div id="actionEditorStatus" class="muted">Select a Collection group to edit its action professionally.</div>
               <div id="selectedPresetMatch" class="field-help">Preset match will appear here when the selected collection matches a saved preset.</div>
-              <div class="field-help">This panel always edits the currently selected collection leader. When you save, the leader keeps the main action and the follower rows are normalized automatically.</div>
+              <div class="field-help">This panel is optional. Open it only when you want to customize the selected collection beyond the quick preset flow.</div>
             </div>
+            <div id="collectionCustomizePanel" class="section-hidden">
             <div class="action-section stack-sm">
               <h3>Section 1: Action setup</h3>
               <div>
@@ -369,14 +380,6 @@
                   <input id="actionGroupedInput" type="checkbox" checked>
                   <span class="toggle-ui" aria-hidden="true"></span>
                 </label>
-              </div>
-              <div>
-                <label for="actionDestinationInput">Destination</label>
-                <div class="search-select">
-                  <input id="actionDestinationInput" type="search" autocomplete="off" placeholder="Type to search destination channel">
-                  <div id="actionDestinationSuggestions" class="search-suggestions hidden"></div>
-                </div>
-                <div class="field-help">Type a channel name, @username, or id. Fuzzy matching will also match reordered words like `dz zed` to `ZED MED DZ`.</div>
               </div>
               <div class="extra-msg-field">
                 <label for="actionExtraMsgInput">Extra_Msg / Hub title</label>
@@ -460,21 +463,82 @@
               <textarea id="actionPreviewOutput" class="readonly-box" readonly></textarea>
               <div id="actionPreviewSummary" class="muted">No action selected.</div>
             </div>
+            </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="card">
-      <div class="stripe" style="background:#334155;"></div>
-      <div class="card-header card-header-inline">
-        <h2 style="color:#334155;">Activity Log</h2>
-        <button id="copyLogBtn" class="ghost log-copy-btn" type="button">Copy Log</button>
-      </div>
+    <section class="card section-hidden" id="cacheWorkspace">
+      <div class="stripe" style="background:#0f766e;"></div>
+      <div class="card-header"><h2 style="color:#0f766e;">Cache Workspace</h2></div>
       <div class="card-body">
-        <div class="log" id="log">Ready.</div>
+        <div class="collections-hero" id="cacheHero">
+          <h2>Cache Controls</h2>
+          <p>Keep the fast local caches visible and refresh them only when you need newer data from Google Sheets or Telegram.</p>
+        </div>
+        <div class="cache-grid">
+          <section class="cache-card">
+            <div class="cache-card-head">
+              <div>
+                <div class="cache-card-title">Sheet Tabs Cache</div>
+                <div class="muted" id="sheetTabsCachePath">Runtime file: workers/telegram/runtime_data/fetch_sheets_cache.json</div>
+              </div>
+              <span class="pill warn" id="sheetTabsCachePill">Not loaded</span>
+            </div>
+            <div class="cache-copy" id="sheetTabsCacheSummary">The app will show whether the current spreadsheet tabs came from live Google Sheets or cached JSON.</div>
+            <div class="cache-meta" id="sheetTabsCacheMeta"></div>
+            <div class="controls">
+              <button id="refreshSheetTabsCacheBtn" type="button">Refresh Sheet Tabs</button>
+            </div>
+          </section>
+
+          <section class="cache-card">
+            <div class="cache-card-head">
+              <div>
+                <div class="cache-card-title">Destination Channels Cache</div>
+                <div class="muted" id="channelsCachePath">Runtime file: workers/telegram/runtime_data/fetch_channels_cache.json</div>
+              </div>
+              <span class="pill warn" id="channelsCachePill">Not loaded</span>
+            </div>
+            <div class="cache-copy" id="channelsCacheSummary">This cache drives destination search and the channel picker for quick posting.</div>
+            <div class="cache-meta" id="channelsCacheMeta"></div>
+            <div class="controls">
+              <button id="refreshChannelsFromSheetBtn" type="button">Refresh From Sheet</button>
+              <button id="refreshChannelsFromTelegramCacheBtn" type="button">Refresh From Telegram</button>
+            </div>
+          </section>
+
+          <section class="cache-card">
+            <div class="cache-card-head">
+              <div>
+                <div class="cache-card-title">Presets Cache</div>
+                <div class="muted" id="presetsCachePath">Runtime file: workers/telegram/runtime_data/action_presets_cache.json</div>
+              </div>
+              <span class="pill warn" id="presetsCachePill">Not loaded</span>
+            </div>
+            <div class="cache-copy" id="presetsCacheSummary">Shared source of truth: Draft spreadsheet tab <strong>Cache_presets</strong>.</div>
+            <div class="cache-meta" id="presetsCacheMeta"></div>
+            <div class="controls">
+              <button id="refreshPresetsCacheBtn" type="button">Refresh Presets</button>
+            </div>
+          </section>
+        </div>
       </div>
     </section>
+
+    <div id="defaultLogMount">
+      <section class="card" id="activityLogCard">
+        <div class="stripe" style="background:#334155;"></div>
+        <div class="card-header card-header-inline">
+          <h2 style="color:#334155;">Activity Log</h2>
+          <button id="copyLogBtn" class="ghost log-copy-btn" type="button">Copy Log</button>
+        </div>
+        <div class="card-body">
+          <div class="log" id="log">Ready.</div>
+        </div>
+      </section>
+    </div>
   </div>
 
   <div id="addChannelModal" class="modal-backdrop section-hidden" aria-hidden="true">

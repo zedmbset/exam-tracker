@@ -178,6 +178,12 @@ app.get('/telegram/collections', (req, res) => {
   res.sendFile(path.join(ROOT_DIR, 'public', 'telegram', 'index.html'));
 });
 
+app.get(['/telegram/cache', '/telegram/cache/'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  ensureContactsSessionCookie(req, res);
+  res.sendFile(path.join(ROOT_DIR, 'public', 'telegram', 'index.html'));
+});
+
 app.get('/lib/examSession.js', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.type('application/javascript');

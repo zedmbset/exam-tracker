@@ -5,6 +5,7 @@ import re
 import signal
 import sys
 import threading
+import time
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -35,6 +36,8 @@ TELEGRAM_SESSION = os.environ.get("TELEGRAM_SESSION", "")
 WORKER_AUTH_TOKEN = os.environ.get("WORKER_AUTH_TOKEN", "")
 PORT = int(os.environ.get("PORT", "8000"))
 ASYNC_TIMEOUT_SECONDS = int(os.environ.get("TELEGRAM_REQUEST_TIMEOUT_SECONDS", "45"))
+LOG_PERSIST_INTERVAL_SECONDS = float(os.environ.get("WORKER_LOG_PERSIST_INTERVAL_SECONDS", "2"))
+LOG_PERSIST_EVERY_N = int(os.environ.get("WORKER_LOG_PERSIST_EVERY_N", "8"))
 
 WORKER_LOOP = asyncio.new_event_loop()
 LOOP_THREAD = None
@@ -95,6 +98,10 @@ def base_job(job_id, job_type, channel=""):
         "error": "",
         "summary": "",
         "logs": [],
+        "_lastPersistAt": time.monotonic(),
+        "_pendingLogCount": 0,
+        "_currentItem": 0,
+        "_currentTotal": 0,
     }
 
 
@@ -117,10 +124,22 @@ def persist_job(job):
     )
 
 
+def _should_persist_logs(job, level="info", force=False):
+    if force or str(level).lower() == "error":
+        return True
+    pending = int(job.get("_pendingLogCount") or 0)
+    if pending >= max(1, LOG_PERSIST_EVERY_N):
+        return True
+    last_persist_at = float(job.get("_lastPersistAt") or 0.0)
+    return (time.monotonic() - last_persist_at) >= max(0.25, LOG_PERSIST_INTERVAL_SECONDS)
+
+
 def set_job(job_id, **updates):
     with LOCK:
         job = JOBS[job_id]
         job.update(updates)
+        job["_lastPersistAt"] = time.monotonic()
+        job["_pendingLogCount"] = 0
         snapshot = dict(job)
         persist_job(snapshot)
     return snapshot
@@ -137,9 +156,55 @@ def append_job_log(job_id, message, level="info"):
         logs = list(job.get("logs") or [])
         logs.append(entry)
         job["logs"] = logs[-200:]
+        job["_pendingLogCount"] = int(job.get("_pendingLogCount") or 0) + 1
+        should_persist = _should_persist_logs(job, level=level)
+        snapshot = dict(job)
+        if should_persist:
+            job["_lastPersistAt"] = time.monotonic()
+            job["_pendingLogCount"] = 0
+            persist_job(snapshot)
+    return entry
+
+
+def flush_job_persistence(job_id):
+    with LOCK:
+        job = JOBS.get(job_id)
+        if not job:
+            return
+        job["_lastPersistAt"] = time.monotonic()
+        job["_pendingLogCount"] = 0
         snapshot = dict(job)
         persist_job(snapshot)
-    return entry
+
+
+def build_execute_actions_log_cb(job_id):
+    transfer_pattern = re.compile(r"^\[(\d+)/(\d+)\]\s+Transferring:\s+(.+)$")
+
+    def _callback(message):
+        append_job_log(job_id, message)
+        match = transfer_pattern.match(str(message or "").strip())
+        if not match:
+            return
+        item_index = int(match.group(1))
+        item_total = int(match.group(2))
+        item_ref = match.group(3).strip()
+        with LOCK:
+            job = JOBS.get(job_id)
+            if not job:
+                return
+            job["_currentItem"] = item_index
+            job["_currentTotal"] = item_total
+            job["progress"] = max(0, item_index - 1)
+            job["total"] = item_total
+            job["summary"] = f"Executing item {item_index}/{item_total}: {item_ref}"
+            should_persist = _should_persist_logs(job, force=False)
+            snapshot = dict(job)
+            if should_persist:
+                job["_lastPersistAt"] = time.monotonic()
+                job["_pendingLogCount"] = 0
+                persist_job(snapshot)
+
+    return _callback
 
 
 def set_active_sheets_job(job_id):
@@ -550,11 +615,12 @@ def start_execute_actions():
                 client,
                 spreadsheet_id=spreadsheet_id,
                 sheet_name=sheet_name,
-                log_cb=lambda message: append_job_log(job_id, message),
+                log_cb=build_execute_actions_log_cb(job_id),
             )
             summary = json.dumps(stats)
             append_job_log(job_id, f"Action execution complete for {sheet_name}.")
             set_job(job_id, status="done", progress=int(stats.get("total", 0) or 0), total=int(stats.get("total", 0) or 0), finished=now_iso(), summary=summary)
+            flush_job_persistence(job_id)
 
         await run_serialized_sheets_job(
             job_id,

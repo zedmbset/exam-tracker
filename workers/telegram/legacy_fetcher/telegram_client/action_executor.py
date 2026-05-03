@@ -156,8 +156,33 @@ class ActionExecutor:
         # destination when processing a group of messages, which would
         # trigger Telegram's rate-limit (FloodWait ~181 s after ~6 calls).
         self._invite_link_cache = {}
+        # Runtime timeout for Telegram calls during action execution.
+        # Keeps one stalled post from freezing the whole batch forever.
+        self._request_timeout_seconds = max(
+            5,
+            int(os.environ.get(
+                "TELEGRAM_ACTION_ITEM_TIMEOUT_SECONDS",
+                os.environ.get("TELEGRAM_REQUEST_TIMEOUT_SECONDS", "45"),
+            )),
+        )
     
     # ==================== HELPER METHODS ====================
+
+    async def _await_telegram_call(self, awaitable, operation_name="Telegram request", timeout_seconds=None):
+        """
+        Await a Telegram API call with a bounded timeout.
+
+        This preserves the current execution semantics, but converts hangs into
+        normal exceptions that can be logged per item so the executor can
+        continue with the remaining posts.
+        """
+        timeout = timeout_seconds if timeout_seconds is not None else self._request_timeout_seconds
+        try:
+            if timeout and timeout > 0:
+                return await asyncio.wait_for(awaitable, timeout=timeout)
+            return await awaitable
+        except asyncio.TimeoutError as exc:
+            raise TimeoutError(f"{operation_name} timed out after {timeout}s") from exc
 
     async def _resolve_invite_link(self, invite_hash: str) -> dict:
         """
@@ -3466,11 +3491,14 @@ class ActionExecutor:
             hub_ents = adjust_entity_offsets(hub_plain, hub_ents)
 
         try:
-            hub_msg = await self.client.send_message(
-                entity=dest_channel_entity or dest_channel_id,
-                message=hub_plain,
-                formatting_entities=hub_ents or None,
-                link_preview=False,
+            hub_msg = await self._await_telegram_call(
+                self.client.send_message(
+                    entity=dest_channel_entity or dest_channel_id,
+                    message=hub_plain,
+                    formatting_entities=hub_ents or None,
+                    link_preview=False,
+                ),
+                operation_name=f"Create hub post for '{post_title}'",
             )
             hub_post_id = hub_msg.id
             print(f"  ✅ Hub post created → ID: {hub_post_id}")
@@ -3483,7 +3511,10 @@ class ActionExecutor:
 
         # ── Step 3: find hub's forwarded copy in the discussion group ────────
         try:
-            dest_full = await self.client(GetFullChannelRequest(dest_channel_entity or dest_channel_id))
+            dest_full = await self._await_telegram_call(
+                self.client(GetFullChannelRequest(dest_channel_entity or dest_channel_id)),
+                operation_name=f"Load discussion group for '{post_title}'",
+            )
             dest_disc_id = getattr(dest_full.full_chat, 'linked_chat_id', None)
         except Exception as e:
             print(f"  ⚠️  Could not get discussion group: {e}")
@@ -3498,28 +3529,49 @@ class ActionExecutor:
 
         print(f"  💬 Discussion group ID: {dest_disc_id}")
 
-        # Wait for Telegram to forward the hub post into the discussion group
+        # Wait for Telegram to forward the hub post into the discussion group.
+        # If we do not find the forwarded copy, replies will become plain group
+        # messages instead of real comments under the channel post.
         import asyncio as _asyncio
         await _asyncio.sleep(3)
 
         reply_to_id = None
-        try:
-            dest_ch_clean = int(str(dest_channel_id).replace('-100', ''))
-            async for disc_msg in self.client.iter_messages(dest_disc_id, limit=30):
-                if (disc_msg.fwd_from
-                        and disc_msg.fwd_from.from_id
-                        and hasattr(disc_msg.fwd_from.from_id, 'channel_id')):
-                    fwd_ch = int(str(disc_msg.fwd_from.from_id.channel_id).replace('-100', ''))
-                    if fwd_ch == dest_ch_clean and disc_msg.fwd_from.channel_post == hub_post_id:
-                        reply_to_id = disc_msg.id
-                        print(f"  🔗 Hub forwarded msg in group → ID: {reply_to_id}")
-                        break
-        except Exception as e:
-            print(f"  ⚠️  Error finding hub in discussion group: {e}")
+        dest_ch_clean = int(str(dest_channel_id).replace('-100', ''))
+        anchor_attempts = 6
+        anchor_scan_limit = 120
+        for anchor_attempt in range(1, anchor_attempts + 1):
+            try:
+                print(f"  … Looking for forwarded hub in discussion group (attempt {anchor_attempt}/{anchor_attempts})")
+                async for disc_msg in self.client.iter_messages(dest_disc_id, limit=anchor_scan_limit):
+                    if (disc_msg.fwd_from
+                            and disc_msg.fwd_from.from_id
+                            and hasattr(disc_msg.fwd_from.from_id, 'channel_id')):
+                        fwd_ch = int(str(disc_msg.fwd_from.from_id.channel_id).replace('-100', ''))
+                        if fwd_ch == dest_ch_clean and disc_msg.fwd_from.channel_post == hub_post_id:
+                            reply_to_id = disc_msg.id
+                            print(f"  🔗 Hub forwarded msg in group → ID: {reply_to_id}")
+                            break
+                if reply_to_id:
+                    break
+            except Exception as e:
+                print(f"  ⚠️  Error finding hub in discussion group: {e}")
+            if anchor_attempt < anchor_attempts:
+                await _asyncio.sleep(2)
 
         if not reply_to_id:
-            print("  ⚠️  Hub forwarded message not found – using hub_post_id as fallback.")
-            reply_to_id = hub_post_id
+            print("  ✗ Hub forwarded message was not found in the discussion group.")
+            print("    Aborting this group to avoid posting standalone messages outside the channel comment thread.")
+            stats['errors'] += 1
+            return [
+                {
+                    'row_num': msg['row_num'],
+                    'action': 'ERROR: hub forwarded comment thread not found',
+                    'destination': '',
+                    'extra_msg': '',
+                    'scheduled_time': '',
+                }
+                for msg in group
+            ]
 
         # ── Step 4: transfer each post as a comment on the hub ───────────────
         comment_links = []   # (title, link)
@@ -3545,12 +3597,19 @@ class ActionExecutor:
             print(f"\n  [{idx+1}/{len(group)}] Transferring: {msg_info['id']}")
 
             src_channel_id, src_message_id = self._parse_message_id(msg_info['id'])
+            print(f"    … Parsed source ids for item {idx+1}/{len(group)}: channel={src_channel_id}, message={src_message_id}")
 
             try:
-                src_msg = await self.client.get_messages(src_channel_id, ids=src_message_id)
+                print(f"    … Fetching source payload for item {idx+1}/{len(group)}")
+                src_msg = await self._await_telegram_call(
+                    self.client.get_messages(src_channel_id, ids=src_message_id),
+                    operation_name=f"Fetch source message {msg_info['id']}",
+                )
             except Exception as e:
                 print(f"    ✗ Could not fetch source message: {e}")
                 stats['errors'] += 1
+                if isinstance(e, TimeoutError):
+                    print(f"    Timed out on item {idx+1}/{len(group)} while fetching. Continuing...")
                 sheet_updates.append({'row_num': msg_info['row_num'],
                                       'action': f'ERROR: fetch failed: {e}',
                                       'destination': '', 'extra_msg': '', 'scheduled_time': ''})
@@ -3623,19 +3682,27 @@ class ActionExecutor:
 
             try:
                 if media:
-                    sent = await self.client.send_file(
-                        entity=dest_disc_id,
-                        file=media,
-                        caption=text,
-                        formatting_entities=entities or None,
-                        reply_to=reply_to_id,
+                    print(f"    … Sending media comment for item {idx+1}/{len(group)}")
+                    sent = await self._await_telegram_call(
+                        self.client.send_file(
+                            entity=dest_disc_id,
+                            file=media,
+                            caption=text,
+                            formatting_entities=entities or None,
+                            reply_to=reply_to_id,
+                        ),
+                        operation_name=f"Send media comment for {msg_info['id']}",
                     )
                 else:
-                    sent = await self.client.send_message(
-                        entity=dest_disc_id,
-                        message=text,
-                        formatting_entities=entities or None,
-                        reply_to=reply_to_id,
+                    print(f"    … Sending text comment for item {idx+1}/{len(group)}")
+                    sent = await self._await_telegram_call(
+                        self.client.send_message(
+                            entity=dest_disc_id,
+                            message=text,
+                            formatting_entities=entities or None,
+                            reply_to=reply_to_id,
+                        ),
+                        operation_name=f"Send text comment for {msg_info['id']}",
                     )
 
                 stats['transferred'] += 1
@@ -3691,6 +3758,8 @@ class ActionExecutor:
             except Exception as e:
                 print(f"    ✗ Failed: {e}")
                 stats['errors'] += 1
+                if isinstance(e, TimeoutError):
+                    print(f"    Timed out on item {idx+1}/{len(group)} during transfer. Continuing...")
                 sheet_updates.append({'row_num': msg_info['row_num'],
                                       'action': f'ERROR: {e}',
                                       'destination': '', 'extra_msg': '', 'scheduled_time': ''})
@@ -3736,7 +3805,10 @@ class ActionExecutor:
                 if _links_ents:
                     _links_ents = adjust_entity_offsets(_links_plain, _links_ents)
 
-                _hub = await self.client.get_messages(dest_channel_id, ids=hub_post_id)
+                _hub = await self._await_telegram_call(
+                    self.client.get_messages(dest_channel_id, ids=hub_post_id),
+                    operation_name=f"Load hub post {hub_post_id}",
+                )
                 if _hub:
                     _cur_text  = _hub.message or ''
                     _cur_ents  = list(_hub.entities or [])
@@ -3752,12 +3824,15 @@ class ActionExecutor:
                             _e.offset += _shift
                         _merged.extend(_links_ents)
 
-                    await self.client.edit_message(
-                        entity=dest_channel_id,
-                        message=hub_post_id,
-                        text=_cur_text + _sep + _links_plain,
-                        formatting_entities=_merged or None,
-                        link_preview=False,
+                    await self._await_telegram_call(
+                        self.client.edit_message(
+                            entity=dest_channel_id,
+                            message=hub_post_id,
+                            text=_cur_text + _sep + _links_plain,
+                            formatting_entities=_merged or None,
+                            link_preview=False,
+                        ),
+                        operation_name=f"Edit hub post {hub_post_id}",
                     )
                     print(f"  ✅ Hub post edited – {len(comment_links)} embed link(s) appended.")
             except Exception as _e5:

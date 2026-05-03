@@ -1,6 +1,10 @@
 ﻿function registerTelegramFetchRoutes(app, deps) {
   const {
     ACTION_PRESETS_PATH,
+    ACTION_PRESETS_CACHE_PATH,
+    ACTION_PRESETS_CACHE_TTL_MS,
+    ACTION_PRESETS_SHEET_NAME,
+    ACTION_PRESETS_SPREADSHEET_ID,
     aggregateContacts,
     APP_URL,
     appendSheetObject,
@@ -84,6 +88,7 @@
     loadFetchChannels,
     loadFetchChannelSheetState,
     loadSheetObjects,
+    loadSharedActionPresets,
     makeContactVersion,
     makeId,
     matchJoinToContactId,
@@ -149,21 +154,30 @@
     WORKER_PROXY_ERROR,
     WORKER_URL_VALID,
     writeActionPresets,
+    writeActionPresetsCache,
     writeFetchChannelsCache,
     writeFetchSheetsCache,
     writeJsonFileSafe,
-    writeWholeSheet
+    writeWholeSheet,
+    saveSharedActionPresets
   } = deps;
 
 app.get('/api/telegram/fetch/config', async (req, res) => {
   try {
-    const workerHealth = await getWorkerHealth();
     res.json({
-      workerHealth,
       channelsSheetName: TELEGRAM_FETCH_CHANNELS_SHEET_NAME,
       defaultSheetName: TELEGRAM_FETCH_DEFAULT_SHEET,
       spreadsheets: getFetchSpreadsheetOptions(),
     });
+  } catch (error) {
+    sendSafeError(res, 500, error);
+  }
+});
+
+app.get('/api/telegram/fetch/worker-health', async (req, res) => {
+  try {
+    const workerHealth = await getWorkerHealth();
+    res.json({ workerHealth });
   } catch (error) {
     sendSafeError(res, 500, error);
   }
@@ -182,7 +196,8 @@ app.get('/api/telegram/fetch/sheets', async (req, res) => {
     const spreadsheet = getFetchSpreadsheetByKey(compactString(req.query.spreadsheet));
     if (!spreadsheet) return res.status(400).json({ error: 'Unknown spreadsheet.' });
     const token = await getAccessToken();
-    const result = await listSpreadsheetTabsCached(token, spreadsheet);
+    const forceFresh = ['1', 'true', 'yes'].includes(compactString(req.query.refresh).toLowerCase());
+    const result = await listSpreadsheetTabsCached(token, spreadsheet, { forceFresh });
     res.json({ spreadsheet, sheets: result.sheets, cache: result.cache });
   } catch (error) {
     if ([429, 500, 502, 503, 504].includes(Number(error?.status))) {
@@ -337,8 +352,11 @@ app.post('/api/telegram/fetch/channels/add', async (req, res) => {
 
 app.get('/api/telegram/fetch/action-presets', async (req, res) => {
   try {
-    const presets = readActionPresets().map(serializePresetForResponse);
-    res.json({ presets });
+    const token = await getAccessToken();
+    const forceFresh = ['1', 'true', 'yes'].includes(compactString(req.query.refresh).toLowerCase());
+    const result = await loadSharedActionPresets(token, { forceFresh, returnMeta: true });
+    const presets = (result.presets || []).map(serializePresetForResponse);
+    res.json({ presets, cache: result.cache || null });
   } catch (error) {
     sendSafeError(res, 500, error);
   }
@@ -346,12 +364,14 @@ app.get('/api/telegram/fetch/action-presets', async (req, res) => {
 
 app.post('/api/telegram/fetch/action-presets', async (req, res) => {
   try {
+    const token = await getAccessToken();
     const preset = normalizeActionPreset(req.body || {});
     if (!preset.name) return res.status(400).json({ error: 'Preset name is required.' });
-    const presets = readActionPresets();
+    const presets = await loadSharedActionPresets(token, { forceFresh: true });
     presets.push(preset);
-    writeActionPresets(presets);
-    res.json({ ok: true, preset: serializePresetForResponse(preset), presets: presets.map(serializePresetForResponse) });
+    await saveSharedActionPresets(token, presets);
+    const snapshot = await loadSharedActionPresets(token, { returnMeta: true });
+    res.json({ ok: true, preset: serializePresetForResponse(preset), presets: snapshot.presets.map(serializePresetForResponse), cache: snapshot.cache || null });
   } catch (error) {
     sendSafeError(res, 500, error);
   }
@@ -359,15 +379,17 @@ app.post('/api/telegram/fetch/action-presets', async (req, res) => {
 
 app.put('/api/telegram/fetch/action-presets/:id', async (req, res) => {
   try {
+    const token = await getAccessToken();
     const presetId = compactString(req.params.id);
-    const presets = readActionPresets();
+    const presets = await loadSharedActionPresets(token, { forceFresh: true });
     const index = presets.findIndex((entry) => compactString(entry.id) === presetId);
     if (index < 0) return res.status(404).json({ error: 'Preset not found.' });
     const nextPreset = normalizeActionPreset(req.body || {}, presets[index]);
     if (!nextPreset.name) return res.status(400).json({ error: 'Preset name is required.' });
     presets[index] = nextPreset;
-    writeActionPresets(presets);
-    res.json({ ok: true, preset: serializePresetForResponse(nextPreset), presets: presets.map(serializePresetForResponse) });
+    await saveSharedActionPresets(token, presets);
+    const snapshot = await loadSharedActionPresets(token, { returnMeta: true });
+    res.json({ ok: true, preset: serializePresetForResponse(nextPreset), presets: snapshot.presets.map(serializePresetForResponse), cache: snapshot.cache || null });
   } catch (error) {
     sendSafeError(res, 500, error);
   }
@@ -375,12 +397,14 @@ app.put('/api/telegram/fetch/action-presets/:id', async (req, res) => {
 
 app.delete('/api/telegram/fetch/action-presets/:id', async (req, res) => {
   try {
+    const token = await getAccessToken();
     const presetId = compactString(req.params.id);
-    const presets = readActionPresets();
+    const presets = await loadSharedActionPresets(token, { forceFresh: true });
     const nextPresets = presets.filter((entry) => compactString(entry.id) !== presetId);
     if (nextPresets.length === presets.length) return res.status(404).json({ error: 'Preset not found.' });
-    writeActionPresets(nextPresets);
-    res.json({ ok: true, presets: nextPresets.map(serializePresetForResponse) });
+    await saveSharedActionPresets(token, nextPresets);
+    const snapshot = await loadSharedActionPresets(token, { returnMeta: true });
+    res.json({ ok: true, presets: snapshot.presets.map(serializePresetForResponse), cache: snapshot.cache || null });
   } catch (error) {
     sendSafeError(res, 500, error);
   }
@@ -429,10 +453,9 @@ app.post('/api/telegram/fetch/action-presets/apply', async (req, res) => {
       return res.status(400).json({ error: 'Choose at least one collection to apply the preset to.' });
     }
 
-    const preset = readActionPresets().find((entry) => compactString(entry.id) === presetId);
-    if (!preset) return res.status(404).json({ error: 'Preset not found.' });
-
     const token = await getAccessToken();
+    const preset = (await loadSharedActionPresets(token)).find((entry) => compactString(entry.id) === presetId);
+    if (!preset) return res.status(404).json({ error: 'Preset not found.' });
     const actionSheet = await loadActionSheetRows(token, spreadsheet.spreadsheetId, sheetName);
     const targetCollections = actionSheet.rows.filter((row) =>
       leaderRowIndexes.includes(Number(row.leaderRowIndex)) || collectionNames.includes(compactString(row.collection))

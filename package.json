@@ -7,6 +7,8 @@
     "start": "node server.js",
     "worker": "python workers/telegram/worker.py",
     "dev:local": "powershell -ExecutionPolicy Bypass -File ./scripts/start-local.ps1",
+    "dev:server": "powershell -ExecutionPolicy Bypass -File ./start-local-server.ps1",
+    "dev:worker": "powershell -ExecutionPolicy Bypass -File ./start-local-worker.ps1",
     "migrate:exam-session": "node scripts/backfill-exam-session.js",
     "normalize:status": "node scripts/normalize-status-column.js"
   },

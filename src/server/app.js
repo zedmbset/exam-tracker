@@ -55,8 +55,15 @@ const WORKER_PROXY_ERROR = WORKER_URL_VALID
 const FETCH_CHANNELS_CACHE_PATH = path.join(ROOT_DIR, 'workers', 'telegram', 'runtime_data', 'fetch_channels_cache.json');
 const FETCH_SHEETS_CACHE_PATH = path.join(ROOT_DIR, 'workers', 'telegram', 'runtime_data', 'fetch_sheets_cache.json');
 const ACTION_PRESETS_PATH = path.join(ROOT_DIR, 'workers', 'telegram', 'runtime_data', 'collection_action_presets.json');
+const ACTION_PRESETS_CACHE_PATH = path.join(ROOT_DIR, 'workers', 'telegram', 'runtime_data', 'action_presets_cache.json');
+const FETCH_CHANNELS_CACHE_TTL_MS = 5 * 60 * 1000;
 const FETCH_SHEETS_CACHE_TTL_MS = 5 * 60 * 1000;
+const ACTION_PRESETS_CACHE_TTL_MS = 5 * 60 * 1000;
 const HIDDEN_FETCH_CHANNEL_TAG = 'not load';
+const ACTION_PRESETS_SPREADSHEET_ID = process.env.ACTION_PRESETS_SPREADSHEET_ID || DRAFT_SPREADSHEET_ID || TELEGRAM_SPREADSHEET_ID || '';
+const ACTION_PRESETS_SHEET_NAME = process.env.ACTION_PRESETS_SHEET_NAME || 'Cache_presets';
+const ACTION_PRESETS_SHEET_HEADERS = ['Key', 'JSON', 'Updated_At'];
+const ACTION_PRESETS_STORAGE_KEY = 'collection_action_presets';
 
 if (!WORKER_URL_VALID) {
   console.error(WORKER_PROXY_ERROR);
@@ -365,6 +372,22 @@ function writeFetchSheetsCache(sheetsBySpreadsheetKey) {
   });
 }
 
+function buildCacheDescriptor(updatedAt, ttlMs, source, extra = {}) {
+  const normalizedUpdatedAt = compactString(updatedAt);
+  const updatedMs = normalizedUpdatedAt ? new Date(normalizedUpdatedAt).getTime() : NaN;
+  const ageMs = Number.isFinite(updatedMs) ? Math.max(0, Date.now() - updatedMs) : null;
+  const ttlSeconds = ttlMs > 0 ? Math.round(ttlMs / 1000) : 0;
+  const ageSeconds = ageMs == null ? null : Math.round(ageMs / 1000);
+  return {
+    source: compactString(source) || 'unknown',
+    updatedAt: normalizedUpdatedAt,
+    ageSeconds,
+    ttlSeconds,
+    isFresh: ageMs != null && ttlMs > 0 ? ageMs < ttlMs : false,
+    ...extra,
+  };
+}
+
 function readActionPresets() {
   const parsed = readJsonFileSafe(ACTION_PRESETS_PATH, []);
   return Array.isArray(parsed) ? parsed : [];
@@ -372,6 +395,112 @@ function readActionPresets() {
 
 function writeActionPresets(presets) {
   return writeJsonFileSafe(ACTION_PRESETS_PATH, presets);
+}
+
+function readActionPresetsCache() {
+  const parsed = readJsonFileSafe(ACTION_PRESETS_CACHE_PATH, null);
+  if (!parsed || typeof parsed !== 'object') return null;
+  return {
+    updatedAt: compactString(parsed.updatedAt),
+    source: compactString(parsed.source),
+    presets: Array.isArray(parsed.presets) ? parsed.presets : [],
+  };
+}
+
+function writeActionPresetsCache(presets, meta = {}) {
+  return writeJsonFileSafe(ACTION_PRESETS_CACHE_PATH, {
+    updatedAt: nowIso(),
+    source: compactString(meta.source) || 'google_sheets',
+    presets: Array.isArray(presets) ? presets : [],
+  });
+}
+
+async function saveSharedActionPresets(token, presets) {
+  const normalizedPresets = Array.isArray(presets) ? presets : [];
+  if (!ACTION_PRESETS_SPREADSHEET_ID) {
+    writeActionPresets(normalizedPresets);
+    writeActionPresetsCache(normalizedPresets, { source: 'local_file' });
+    return normalizedPresets;
+  }
+  await ensureSheetTab(token, ACTION_PRESETS_SPREADSHEET_ID, ACTION_PRESETS_SHEET_NAME, ACTION_PRESETS_SHEET_HEADERS);
+  await writeWholeSheet(token, ACTION_PRESETS_SPREADSHEET_ID, ACTION_PRESETS_SHEET_NAME, ACTION_PRESETS_SHEET_HEADERS, [{
+    Key: ACTION_PRESETS_STORAGE_KEY,
+    JSON: JSON.stringify(normalizedPresets, null, 2),
+    Updated_At: nowIso(),
+  }]);
+  writeActionPresets(normalizedPresets);
+  writeActionPresetsCache(normalizedPresets, { source: 'google_sheets' });
+  return normalizedPresets;
+}
+
+async function loadSharedActionPresets(token, options = {}) {
+  const forceFresh = Boolean(options?.forceFresh);
+  const returnMeta = Boolean(options?.returnMeta);
+  const cache = readActionPresetsCache();
+  const isFresh = !forceFresh && cache?.updatedAt && (Date.now() - new Date(cache.updatedAt).getTime()) < ACTION_PRESETS_CACHE_TTL_MS;
+  if (isFresh) {
+    const payload = {
+      presets: cache.presets,
+      cache: buildCacheDescriptor(cache.updatedAt, ACTION_PRESETS_CACHE_TTL_MS, cache.source || 'cache', { hit: true }),
+    };
+    return returnMeta ? payload : payload.presets;
+  }
+
+  const legacyPresets = readActionPresets();
+  if (!ACTION_PRESETS_SPREADSHEET_ID) {
+    const written = writeActionPresetsCache(legacyPresets, { source: 'local_file' });
+    const payload = {
+      presets: legacyPresets,
+      cache: buildCacheDescriptor(written?.updatedAt, ACTION_PRESETS_CACHE_TTL_MS, 'local_file', { hit: false }),
+    };
+    return returnMeta ? payload : payload.presets;
+  }
+
+  try {
+    await ensureSheetTab(token, ACTION_PRESETS_SPREADSHEET_ID, ACTION_PRESETS_SHEET_NAME, ACTION_PRESETS_SHEET_HEADERS);
+    const rows = await loadSheetObjects(token, ACTION_PRESETS_SPREADSHEET_ID, ACTION_PRESETS_SHEET_NAME, ACTION_PRESETS_SHEET_HEADERS);
+    const record = rows.find((row) => compactString(row.Key) === ACTION_PRESETS_STORAGE_KEY) || null;
+    const rawJson = compactString(record?.JSON);
+    if (!rawJson) {
+      if (legacyPresets.length) {
+        await saveSharedActionPresets(token, legacyPresets);
+        const writtenCache = readActionPresetsCache();
+        const payload = {
+          presets: legacyPresets,
+          cache: buildCacheDescriptor(writtenCache?.updatedAt, ACTION_PRESETS_CACHE_TTL_MS, 'google_sheets', { hit: false }),
+        };
+        return returnMeta ? payload : payload.presets;
+      }
+      const written = writeActionPresetsCache([], { source: 'google_sheets' });
+      const payload = {
+        presets: [],
+        cache: buildCacheDescriptor(written?.updatedAt, ACTION_PRESETS_CACHE_TTL_MS, 'google_sheets', { hit: false }),
+      };
+      return returnMeta ? payload : payload.presets;
+    }
+    const parsed = JSON.parse(rawJson);
+    const presets = Array.isArray(parsed) ? parsed : [];
+    writeActionPresets(presets);
+    const written = writeActionPresetsCache(presets, { source: 'google_sheets' });
+    const payload = {
+      presets,
+      cache: buildCacheDescriptor(written?.updatedAt, ACTION_PRESETS_CACHE_TTL_MS, 'google_sheets', { hit: false }),
+    };
+    return returnMeta ? payload : payload.presets;
+  } catch (error) {
+    if (cache?.presets?.length) {
+      const payload = {
+        presets: cache.presets,
+        cache: buildCacheDescriptor(cache.updatedAt, ACTION_PRESETS_CACHE_TTL_MS, 'stale_cache', { hit: true, fallback: true }),
+      };
+      return returnMeta ? payload : payload.presets;
+    }
+    const payload = {
+      presets: legacyPresets,
+      cache: buildCacheDescriptor('', ACTION_PRESETS_CACHE_TTL_MS, 'local_file_fallback', { hit: false, fallback: true }),
+    };
+    return returnMeta ? payload : payload.presets;
+  }
 }
 
 function buildActionPresetSummary(preset) {
@@ -464,17 +593,23 @@ function writeFetchChannelsCache(channels, meta = {}) {
 function buildFetchChannelsResponse(channels, meta = {}) {
   const visibleChannels = channels.filter((channel) => !isHiddenFetchChannel(channel));
   const groups = [...new Set(visibleChannels.flatMap((channel) => channel.tags || []))].sort((a, b) => a.localeCompare(b));
+  const cache = buildCacheDescriptor(compactString(meta.updatedAt), FETCH_CHANNELS_CACHE_TTL_MS, compactString(meta.source) || 'cache', {
+    hit: ['cache', 'stale_cache'].includes(compactString(meta.source)),
+    visibleChannels: visibleChannels.length,
+    totalChannels: channels.length,
+  });
   return {
     spreadsheetId: TELEGRAM_FETCH_CHANNELS_SPREADSHEET_ID,
     sheetName: TELEGRAM_FETCH_CHANNELS_SHEET_NAME,
     groups,
     channels: visibleChannels,
+    cache,
     summary: {
       totalChannels: channels.length,
       visibleChannels: visibleChannels.length,
       hiddenChannels: channels.length - visibleChannels.length,
-      cacheUpdatedAt: compactString(meta.updatedAt),
-      source: compactString(meta.source) || 'cache',
+      cacheUpdatedAt: cache.updatedAt,
+      source: cache.source,
       inserted: Number(meta.inserted || 0),
       updated: Number(meta.updated || 0),
       discovered: Number(meta.discovered || 0),
@@ -491,15 +626,16 @@ async function listSpreadsheetTabs(token, spreadsheetId) {
   })).filter((sheet) => sheet.title);
 }
 
-async function listSpreadsheetTabsCached(token, spreadsheet) {
+async function listSpreadsheetTabsCached(token, spreadsheet, options = {}) {
   const cache = readFetchSheetsCache();
   const key = compactString(spreadsheet?.key);
   const cachedSheets = key ? cache?.sheetsBySpreadsheetKey?.[key] : null;
-  const isFresh = cache?.updatedAt && (Date.now() - new Date(cache.updatedAt).getTime()) < FETCH_SHEETS_CACHE_TTL_MS;
+  const forceFresh = Boolean(options?.forceFresh);
+  const isFresh = !forceFresh && cache?.updatedAt && (Date.now() - new Date(cache.updatedAt).getTime()) < FETCH_SHEETS_CACHE_TTL_MS;
   if (isFresh && Array.isArray(cachedSheets) && cachedSheets.length) {
     return {
       sheets: cachedSheets,
-      cache: { hit: true, updatedAt: cache.updatedAt, source: 'cache' },
+      cache: buildCacheDescriptor(cache.updatedAt, FETCH_SHEETS_CACHE_TTL_MS, 'cache', { hit: true }),
     };
   }
   try {
@@ -511,13 +647,13 @@ async function listSpreadsheetTabsCached(token, spreadsheet) {
     const written = writeFetchSheetsCache(sheetsBySpreadsheetKey);
     return {
       sheets,
-      cache: { hit: false, updatedAt: written.updatedAt, source: 'google_sheets' },
+      cache: buildCacheDescriptor(written.updatedAt, FETCH_SHEETS_CACHE_TTL_MS, 'google_sheets', { hit: false }),
     };
   } catch (error) {
     if (Array.isArray(cachedSheets) && cachedSheets.length) {
       return {
         sheets: cachedSheets,
-        cache: { hit: true, updatedAt: cache?.updatedAt || '', source: 'stale_cache' },
+        cache: buildCacheDescriptor(cache?.updatedAt || '', FETCH_SHEETS_CACHE_TTL_MS, 'stale_cache', { hit: true, fallback: true }),
       };
     }
     throw error;
@@ -1482,7 +1618,10 @@ async function getWorkerHealth() {
     };
   }
   try {
-    const response = await fetch(`${TELEGRAM_WORKER_URL}/health`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
+    const response = await fetch(`${TELEGRAM_WORKER_URL}/health`, { signal: controller.signal });
+    clearTimeout(timeout);
     const text = await response.text();
     const data = text ? JSON.parse(text) : {};
     return { ok: response.ok, ...data };
@@ -1500,6 +1639,10 @@ async function getWorkerHealth() {
 
 const routeDeps = {
   ACTION_PRESETS_PATH,
+  ACTION_PRESETS_CACHE_PATH,
+  ACTION_PRESETS_CACHE_TTL_MS,
+  ACTION_PRESETS_SHEET_NAME,
+  ACTION_PRESETS_SPREADSHEET_ID,
   aggregateContacts,
   APP_URL,
   appendSheetObject,
@@ -1587,6 +1730,7 @@ const routeDeps = {
   loadFetchChannels,
   loadFetchChannelSheetState,
   loadSheetObjects,
+  loadSharedActionPresets,
   makeContactVersion,
   makeId,
   matchJoinToContactId,
@@ -1652,10 +1796,12 @@ const routeDeps = {
   WORKER_PROXY_ERROR,
   WORKER_URL_VALID,
   writeActionPresets,
+  writeActionPresetsCache,
   writeFetchChannelsCache,
   writeFetchSheetsCache,
   writeJsonFileSafe,
-  writeWholeSheet
+  writeWholeSheet,
+  saveSharedActionPresets,
 };
 
 registerStaticRoutes(app, routeDeps);

@@ -12,6 +12,7 @@
   selectedActionRowIndex:null,
   selectedActionRows:new Set(),
   isCollectionsRoute:false,
+  isCacheRoute:false,
   collectionSearch:'',
   collectionView:'toggle',
   collectionListSort:'sheet',
@@ -22,8 +23,14 @@
   actionPresets:[],
   selectedPresetId:'',
   presetManagerOpen:false,
+  collectionCustomizeOpen:false,
   addChannelSaving:false,
   seenJobLogCounts:new Map(),
+  cacheMeta:{
+    sheets:null,
+    channels:null,
+    presets:null,
+  },
 };
 const MAX_POLL_ERRORS = 5;
 const POLL_INTERVAL = 3000;
@@ -86,6 +93,8 @@ const els = {
   actionCommentJoinUsModeSelect: document.getElementById('actionCommentJoinUsModeSelect'),
   actionPreviewOutput: document.getElementById('actionPreviewOutput'),
   actionPreviewSummary: document.getElementById('actionPreviewSummary'),
+  toggleCollectionCustomizeBtn: document.getElementById('toggleCollectionCustomizeBtn'),
+  collectionCustomizePanel: document.getElementById('collectionCustomizePanel'),
   collectionSearchInput: document.getElementById('collectionSearchInput'),
   collectionViewTabs: document.getElementById('collectionViewTabs'),
   collectionSortTools: document.getElementById('collectionSortTools'),
@@ -121,10 +130,28 @@ const els = {
   selectedPresetMatch: document.getElementById('selectedPresetMatch'),
   fetchWorkspace: document.getElementById('fetchWorkspace'),
   collectionsWorkspace: document.getElementById('collectionsWorkspace'),
+  cacheWorkspace: document.getElementById('cacheWorkspace'),
   collectionsHero: document.getElementById('collectionsHero'),
   fetchTabLink: document.getElementById('fetchTabLink'),
   collectionsTabLink: document.getElementById('collectionsTabLink'),
+  cacheTabLink: document.getElementById('cacheTabLink'),
   tabSummary: document.getElementById('tabSummary'),
+  activityLogCard: document.getElementById('activityLogCard'),
+  defaultLogMount: document.getElementById('defaultLogMount'),
+  collectionsLogMount: document.getElementById('collectionsLogMount'),
+  sheetTabsCachePill: document.getElementById('sheetTabsCachePill'),
+  sheetTabsCacheSummary: document.getElementById('sheetTabsCacheSummary'),
+  sheetTabsCacheMeta: document.getElementById('sheetTabsCacheMeta'),
+  refreshSheetTabsCacheBtn: document.getElementById('refreshSheetTabsCacheBtn'),
+  channelsCachePill: document.getElementById('channelsCachePill'),
+  channelsCacheSummary: document.getElementById('channelsCacheSummary'),
+  channelsCacheMeta: document.getElementById('channelsCacheMeta'),
+  refreshChannelsFromSheetBtn: document.getElementById('refreshChannelsFromSheetBtn'),
+  refreshChannelsFromTelegramCacheBtn: document.getElementById('refreshChannelsFromTelegramCacheBtn'),
+  presetsCachePill: document.getElementById('presetsCachePill'),
+  presetsCacheSummary: document.getElementById('presetsCacheSummary'),
+  presetsCacheMeta: document.getElementById('presetsCacheMeta'),
+  refreshPresetsCacheBtn: document.getElementById('refreshPresetsCacheBtn'),
 };
 
 const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -543,6 +570,43 @@ function renderPresetPicker() {
   }
 }
 
+function setCollectionCustomizeOpen(open) {
+  state.collectionCustomizeOpen = Boolean(open);
+  els.collectionCustomizePanel?.classList.toggle('section-hidden', !state.collectionCustomizeOpen);
+  if (els.toggleCollectionCustomizeBtn) {
+    els.toggleCollectionCustomizeBtn.textContent = state.collectionCustomizeOpen
+      ? 'Hide Customization'
+      : 'Customize Selected Collection';
+  }
+}
+
+function applyPresetToActionEditor(preset, options = {}) {
+  if (!preset) return;
+  const preserveDestination = options.preserveDestination !== false;
+  const currentDestination = preserveDestination ? getResolvedDestinationInputValue() : '';
+  if (preset.mode === 'raw_override') {
+    els.actionModeSelect.value = 'raw_override';
+    els.actionRawActionInput.value = String(preset.rawAction || '').trim();
+  } else {
+    const model = preset.actionModel || {};
+    els.actionModeSelect.value = 'structured';
+    els.actionRawActionInput.value = '';
+    els.actionGroupedInput.checked = Boolean(model.grouped ?? true);
+    els.actionTransferModeSelect.value = model.transferMode || 'comments';
+    els.actionPubLnkEnabledInput.checked = Boolean(model.pubLnk?.enabled);
+    els.actionPubLinkModeSelect.value = inferPubLinkMode(model);
+    els.actionNumSequenceInput.checked = Boolean(model.pubLnk?.numSequence);
+    els.actionPunctBlankInput.checked = true;
+    syncPunctControls(els.actionPunctPresetSelect, els.actionPunctValueInput, model.pubLnk?.punctValue || '');
+    els.actionJoinUsInput.checked = Boolean(model.pubLnk?.joinUs);
+    els.actionCommentJoinUsModeSelect.value = model.pubLnk?.commentJoinUsMode || 'append_joinus';
+  }
+  if (preserveDestination) {
+    renderActionDestinationChoices(currentDestination);
+  }
+  renderActionPreview();
+}
+
 function log(message) {
   const timestamp = new Date().toLocaleTimeString();
   els.log.textContent = `[${timestamp}] ${message}\n` + els.log.textContent;
@@ -627,8 +691,112 @@ function presentError(error, fallback = 'Something went wrong.') {
   return message || fallback;
 }
 
+function formatRelativeAge(ageSeconds) {
+  if (ageSeconds == null || Number.isNaN(Number(ageSeconds))) return 'Unknown age';
+  const seconds = Math.max(0, Number(ageSeconds));
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatCacheSource(source) {
+  const value = String(source || '').trim();
+  if (!value) return 'Unknown source';
+  return value
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function renderCacheCard(kind, meta, options = {}) {
+  const pill = els[`${kind}CachePill`];
+  const summary = els[`${kind}CacheSummary`];
+  const metaEl = els[`${kind}CacheMeta`];
+  if (!pill || !summary || !metaEl) return;
+
+  if (!meta) {
+    pill.className = 'pill warn';
+    pill.textContent = 'Not loaded';
+    if (options.emptySummary) summary.textContent = options.emptySummary;
+    metaEl.innerHTML = '<div class="cache-meta-line">No cache metadata loaded yet.</div>';
+    return;
+  }
+
+  const sourceLabel = formatCacheSource(meta.source);
+  const freshness = meta.isFresh ? 'Fresh' : (meta.fallback ? 'Fallback' : 'Needs refresh');
+  pill.className = `pill ${meta.isFresh ? 'ok' : (meta.fallback ? 'warn' : 'warn')}`;
+  pill.textContent = freshness;
+
+  const summaryParts = [];
+  summaryParts.push(`${sourceLabel}`);
+  if (meta.updatedAt) summaryParts.push(`updated ${formatRelativeAge(meta.ageSeconds)}`);
+  if (options.countText) summaryParts.push(options.countText);
+  summary.textContent = summaryParts.join(' · ');
+
+  const lines = [];
+  lines.push(`<div class="cache-meta-line"><strong>Source:</strong> ${escapeHtml(sourceLabel)}</div>`);
+  lines.push(`<div class="cache-meta-line"><strong>Updated:</strong> ${escapeHtml(meta.updatedAt ? new Date(meta.updatedAt).toLocaleString() : 'Unknown')}</div>`);
+  if (meta.ageSeconds != null) {
+    lines.push(`<div class="cache-meta-line"><strong>Age:</strong> ${escapeHtml(formatRelativeAge(meta.ageSeconds))}</div>`);
+  }
+  if (meta.ttlSeconds) {
+    lines.push(`<div class="cache-meta-line"><strong>TTL:</strong> ${escapeHtml(`${meta.ttlSeconds}s`)}</div>`);
+  }
+  if (typeof options.extraLines === 'function') {
+    lines.push(...options.extraLines(meta));
+  }
+  metaEl.innerHTML = lines.join('');
+}
+
+function renderCacheWorkspace() {
+  renderCacheCard('sheetTabs', state.cacheMeta.sheets, {
+    emptySummary: 'The app will show whether the current spreadsheet tabs came from live Google Sheets or cached JSON.',
+    countText: state.sheets.length ? `${state.sheets.length} tabs loaded` : '',
+    extraLines: (meta) => [
+      `<div class="cache-meta-line"><strong>Spreadsheet:</strong> ${escapeHtml(els.spreadsheetSelect.value || 'Not selected')}</div>`,
+      `<div class="cache-meta-line"><strong>Fresh cache:</strong> ${escapeHtml(meta.isFresh ? 'Yes' : 'No')}</div>`,
+    ],
+  });
+  renderCacheCard('channels', state.cacheMeta.channels, {
+    emptySummary: 'This cache drives destination search and the channel picker for quick posting.',
+    countText: state.channels.length ? `${state.channels.length} visible channels loaded` : '',
+    extraLines: (meta) => [
+      `<div class="cache-meta-line"><strong>Visible channels:</strong> ${escapeHtml(String(meta.visibleChannels ?? state.channels.length ?? 0))}</div>`,
+      `<div class="cache-meta-line"><strong>Total cached:</strong> ${escapeHtml(String(meta.totalChannels ?? state.channels.length ?? 0))}</div>`,
+    ],
+  });
+  renderCacheCard('presets', state.cacheMeta.presets, {
+    emptySummary: 'Shared source of truth: Draft spreadsheet tab Cache_presets.',
+    countText: state.actionPresets.length ? `${state.actionPresets.length} presets loaded` : '',
+    extraLines: (meta) => [
+      `<div class="cache-meta-line"><strong>Presets:</strong> ${escapeHtml(String(state.actionPresets.length || 0))}</div>`,
+      `<div class="cache-meta-line"><strong>Shared sheet:</strong> Cache_presets</div>`,
+    ],
+  });
+}
+
+function moveActivityLogCard() {
+  if (!els.activityLogCard) return;
+  const target = state.isCollectionsRoute
+    ? els.collectionsLogMount
+    : els.defaultLogMount;
+  if (!target) return;
+  if (els.activityLogCard.parentElement !== target) {
+    target.appendChild(els.activityLogCard);
+  }
+}
+
 function renderWorkerStatus() {
   const health = state.config?.workerHealth || {};
+  if (!Object.keys(health).length) {
+    els.workerPill.className = 'pill warn';
+    els.workerPill.textContent = 'Checking worker...';
+    els.workerSummary.textContent = 'Loading worker health in the background.';
+    return;
+  }
   const connected = Boolean(health.telethonConnected);
   els.workerPill.className = `pill ${connected ? 'ok' : (health.ok ? 'warn' : 'err')}`;
   els.workerPill.textContent = connected ? 'Worker connected' : (health.ok ? 'Worker reachable' : 'Worker unavailable');
@@ -668,16 +836,29 @@ function renderSheets() {
 }
 
 function applyRouteLayout() {
-  state.isCollectionsRoute = window.location.pathname.replace(/\/+$/, '') === '/telegram/collections';
+  const route = window.location.pathname.replace(/\/+$/, '') || '/telegram';
+  const routeTab = new URLSearchParams(window.location.search).get('tab');
+  state.isCollectionsRoute = routeTab === 'collections' || route === '/telegram/collections';
+  state.isCacheRoute = routeTab === 'cache' || route === '/telegram/cache';
   document.body.classList.toggle('collections-route', state.isCollectionsRoute);
-  els.fetchTabLink.classList.toggle('active', !state.isCollectionsRoute);
+  els.fetchTabLink.classList.toggle('active', !state.isCollectionsRoute && !state.isCacheRoute);
   els.collectionsTabLink.classList.toggle('active', state.isCollectionsRoute);
-  els.fetchWorkspace.classList.toggle('section-hidden', state.isCollectionsRoute);
+  els.cacheTabLink.classList.toggle('active', state.isCacheRoute);
+  els.fetchWorkspace.classList.toggle('section-hidden', state.isCollectionsRoute || state.isCacheRoute);
+  els.collectionsWorkspace.classList.toggle('section-hidden', state.isCacheRoute);
+  els.cacheWorkspace.classList.toggle('section-hidden', !state.isCacheRoute);
   els.collectionsHero.classList.toggle('section-hidden', !state.isCollectionsRoute);
-  document.title = state.isCollectionsRoute ? 'Telegram Collections' : 'Telegram Fetcher';
+  moveActivityLogCard();
+  document.title = state.isCollectionsRoute
+    ? 'Telegram Collections'
+    : state.isCacheRoute
+      ? 'Telegram Cache Controls'
+      : 'Telegram Fetcher';
   els.tabSummary.textContent = state.isCollectionsRoute
     ? 'Collections tab: all collection groups in one dedicated workspace.'
-    : 'Fetch tab: sheets, channels, and jobs with the collection builder kept below.';
+    : state.isCacheRoute
+      ? 'Cache tab: refresh fast local caches without cluttering the posting flow.'
+      : 'Fetch tab: sheets, channels, and jobs with the collection builder kept below.';
 }
 
 function renderGroups() {
@@ -739,9 +920,16 @@ function getActionDestinationLabel(channel) {
 function syncChannelStateFromResponse(data) {
   state.channels = data.channels || [];
   state.groups = data.groups || [];
+  state.cacheMeta.channels = data.cache || {
+    source: data.summary?.source || 'cache',
+    updatedAt: data.summary?.cacheUpdatedAt || '',
+    visibleChannels: data.summary?.visibleChannels || state.channels.length,
+    totalChannels: data.summary?.totalChannels || state.channels.length,
+  };
   renderGroups();
   renderChannels();
   renderActionDestinationChoices(getSelectedActionRow()?.destination || '');
+  renderCacheWorkspace();
 }
 
 function findChannelByDestinationValue(value) {
@@ -1083,6 +1271,16 @@ async function loadConfig() {
   state.spreadsheets = state.config.spreadsheets || [];
   renderWorkerStatus();
   renderSpreadsheets();
+  renderCacheWorkspace();
+}
+
+async function loadWorkerHealth() {
+  const data = await api('/api/telegram/fetch/worker-health');
+  state.config = {
+    ...(state.config || {}),
+    workerHealth: data.workerHealth || {},
+  };
+  renderWorkerStatus();
 }
 
 async function loadSheets() {
@@ -1094,9 +1292,16 @@ async function loadSheets() {
   }
   const data = await api(`/api/telegram/fetch/sheets?spreadsheet=${encodeURIComponent(spreadsheetKey)}`);
   state.sheets = data.sheets || [];
+  state.cacheMeta.sheets = data.cache || null;
   renderSheets();
+  renderCacheWorkspace();
   if (data.cache?.source) {
-    log(`Loaded ${state.sheets.length} sheet tabs from ${data.cache.source === 'cache' ? 'JSON cache' : 'Google Sheets'} for ${spreadsheetKey}.`);
+    const sourceLabel = data.cache.source === 'cache'
+      ? 'JSON cache'
+      : data.cache.source === 'stale_cache'
+        ? 'stale JSON cache fallback'
+        : 'Google Sheets';
+    log(`Loaded ${state.sheets.length} sheet tabs from ${sourceLabel} for ${spreadsheetKey}.`);
   }
 }
 
@@ -1106,22 +1311,90 @@ async function loadChannels() {
   log(`Loaded ${state.channels.length} channels from ${data.sheetName || 'channel sheet'}.`);
 }
 
-async function refreshChannelsFromTelegram() {
-  const originalLabel = els.refreshChannelsFromTelegramBtn.textContent;
-  els.refreshChannelsFromTelegramBtn.disabled = true;
-  els.refreshChannelsFromTelegramBtn.textContent = 'Refreshing...';
+async function refreshSheetTabsCache() {
+  const spreadsheetKey = els.spreadsheetSelect.value;
+  if (!spreadsheetKey) {
+    alert('Choose a spreadsheet first.');
+    return;
+  }
+  const originalLabel = els.refreshSheetTabsCacheBtn.textContent;
+  els.refreshSheetTabsCacheBtn.disabled = true;
+  els.refreshSheetTabsCacheBtn.textContent = 'Refreshing...';
+  try {
+    const data = await api(`/api/telegram/fetch/sheets?spreadsheet=${encodeURIComponent(spreadsheetKey)}&refresh=1`);
+    state.sheets = data.sheets || [];
+    state.cacheMeta.sheets = data.cache || null;
+    renderSheets();
+    renderCacheWorkspace();
+    log(`Sheet tabs refreshed from Google Sheets for ${spreadsheetKey}.`);
+  } finally {
+    els.refreshSheetTabsCacheBtn.disabled = false;
+    els.refreshSheetTabsCacheBtn.textContent = originalLabel;
+  }
+}
+
+async function refreshChannelsCache(mode = 'telegram') {
+  const targets = [
+    els.refreshChannelsFromTelegramBtn,
+    els.refreshChannelsFromTelegramCacheBtn,
+    els.refreshChannelsFromSheetBtn,
+  ].filter(Boolean);
+  const activeButtons = mode === 'telegram'
+    ? [els.refreshChannelsFromTelegramBtn, els.refreshChannelsFromTelegramCacheBtn].filter(Boolean)
+    : [els.refreshChannelsFromSheetBtn].filter(Boolean);
+  activeButtons.forEach((button) => {
+    button.dataset.originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Refreshing...';
+  });
   try {
     const data = await api('/api/telegram/fetch/channels/refresh', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'telegram' }),
+      body: JSON.stringify({ mode }),
     });
     syncChannelStateFromResponse(data);
     const summary = data.refreshSummary || {};
-    log(`Telegram refresh complete: ${summary.discovered || 0} discovered, ${summary.inserted || 0} inserted, ${summary.updated || 0} updated.`);
+    if (mode === 'telegram') {
+      log(`Telegram refresh complete: ${summary.discovered || 0} discovered, ${summary.inserted || 0} inserted, ${summary.updated || 0} updated.`);
+    } else {
+      log(`Channels cache rebuilt from sheet: ${state.channels.length} visible channels ready.`);
+    }
   } finally {
-    els.refreshChannelsFromTelegramBtn.disabled = false;
-    els.refreshChannelsFromTelegramBtn.textContent = originalLabel;
+    targets.forEach((button) => {
+      if (!button?.dataset?.originalLabel) return;
+      button.disabled = false;
+      button.textContent = button.dataset.originalLabel;
+      delete button.dataset.originalLabel;
+    });
+  }
+}
+
+async function refreshChannelsFromTelegram() {
+  return refreshChannelsCache('telegram');
+}
+
+async function refreshChannelsFromSheet() {
+  return refreshChannelsCache('sheet');
+}
+
+async function refreshPresetsCache() {
+  const originalLabel = els.refreshPresetsCacheBtn.textContent;
+  els.refreshPresetsCacheBtn.disabled = true;
+  els.refreshPresetsCacheBtn.textContent = 'Refreshing...';
+  try {
+    const data = await api('/api/telegram/fetch/action-presets?refresh=1');
+    state.actionPresets = data.presets || [];
+    state.cacheMeta.presets = data.cache || null;
+    if (state.selectedPresetId && !state.actionPresets.some((preset) => preset.id === state.selectedPresetId)) {
+      state.selectedPresetId = '';
+    }
+    renderPresetPicker();
+    renderCacheWorkspace();
+    log(`Presets refreshed from shared sheet. ${state.actionPresets.length} preset(s) available.`);
+  } finally {
+    els.refreshPresetsCacheBtn.disabled = false;
+    els.refreshPresetsCacheBtn.textContent = originalLabel;
   }
 }
 
@@ -1184,10 +1457,12 @@ async function submitAddChannelForm(event) {
 async function loadActionPresets() {
   const data = await api('/api/telegram/fetch/action-presets');
   state.actionPresets = data.presets || [];
+  state.cacheMeta.presets = data.cache || null;
   if (state.selectedPresetId && !state.actionPresets.some((preset) => preset.id === state.selectedPresetId)) {
     state.selectedPresetId = '';
   }
   renderPresetPicker();
+  renderCacheWorkspace();
 }
 
 async function saveCurrentAsPreset() {
@@ -1229,8 +1504,10 @@ async function createPreset() {
     body: JSON.stringify(payload),
   });
   state.actionPresets = data.presets || [];
+  state.cacheMeta.presets = data.cache || state.cacheMeta.presets;
   state.selectedPresetId = data.preset?.id || '';
   renderPresetPicker();
+  renderCacheWorkspace();
   log(`Created preset "${data.preset?.name || payload.name}".`);
 }
 
@@ -1252,7 +1529,9 @@ async function updatePreset() {
     body: JSON.stringify(payload),
   });
   state.actionPresets = data.presets || [];
+  state.cacheMeta.presets = data.cache || state.cacheMeta.presets;
   renderPresetPicker();
+  renderCacheWorkspace();
   log(`Updated preset "${data.preset?.name || payload.name}".`);
 }
 
@@ -1269,6 +1548,7 @@ async function deletePreset() {
   state.selectedPresetId = '';
   renderPresetPicker();
   populatePresetEditor(null);
+  renderCacheWorkspace();
   log(`Deleted preset "${presetName}".`);
 }
 
@@ -1397,6 +1677,10 @@ function openSheet() {
 
 document.getElementById('reloadChannelsBtn').addEventListener('click', () => loadChannels().catch((error) => alert(presentError(error))));
 els.refreshChannelsFromTelegramBtn.addEventListener('click', () => refreshChannelsFromTelegram().catch((error) => alert(presentError(error))));
+els.refreshSheetTabsCacheBtn?.addEventListener('click', () => refreshSheetTabsCache().catch((error) => alert(presentError(error))));
+els.refreshChannelsFromSheetBtn?.addEventListener('click', () => refreshChannelsFromSheet().catch((error) => alert(presentError(error))));
+els.refreshChannelsFromTelegramCacheBtn?.addEventListener('click', () => refreshChannelsFromTelegram().catch((error) => alert(presentError(error))));
+els.refreshPresetsCacheBtn?.addEventListener('click', () => refreshPresetsCache().catch((error) => alert(presentError(error))));
 els.addChannelBtn.addEventListener('click', openAddChannelModal);
 els.closeAddChannelModalBtn.addEventListener('click', closeAddChannelModal);
 els.cancelAddChannelBtn.addEventListener('click', closeAddChannelModal);
@@ -1489,14 +1773,27 @@ els.presetSelect.addEventListener('change', (event) => {
     const preset = state.actionPresets.find((entry) => entry.id === state.selectedPresetId) || null;
     populatePresetEditor(preset);
   }
+  if (state.collectionCustomizeOpen) {
+    const preset = state.actionPresets.find((entry) => entry.id === state.selectedPresetId) || null;
+    if (preset) applyPresetToActionEditor(preset);
+  }
 });
-els.applyPresetBtn.addEventListener('click', () => applyPresetToSelectedCollections().catch((error) => alert(presentError(error))));
+els.applyPresetBtn?.addEventListener('click', () => applyPresetToSelectedCollections().catch((error) => alert(presentError(error))));
 els.savePresetBtn.addEventListener('click', () => saveCurrentAsPreset().catch((error) => alert(presentError(error))));
 els.togglePresetManagerBtn.addEventListener('click', () => {
   state.presetManagerOpen = !state.presetManagerOpen;
   els.presetManager.classList.toggle('section-hidden', !state.presetManagerOpen);
   if (state.presetManagerOpen) {
     populatePresetEditor(state.actionPresets.find((preset) => preset.id === state.selectedPresetId) || null);
+  }
+});
+els.toggleCollectionCustomizeBtn?.addEventListener('click', () => {
+  const nextOpen = !state.collectionCustomizeOpen;
+  setCollectionCustomizeOpen(nextOpen);
+  if (nextOpen) {
+    const preset = state.actionPresets.find((entry) => entry.id === state.selectedPresetId) || null;
+    if (preset) applyPresetToActionEditor(preset);
+    else populateActionEditor(getSelectedActionRow());
   }
 });
 [
@@ -1690,7 +1987,9 @@ window.addEventListener('pagehide', () => [...state.timers.keys()].forEach(stopP
   try {
     applyPersistedInputs();
     applyRouteLayout();
+    setCollectionCustomizeOpen(false);
     await loadConfig();
+    loadWorkerHealth().catch((error) => log(`Worker health: ${presentError(error)}`));
     await loadSheets();
     await loadChannels();
     await loadActionPresets().catch((error) => log(`Presets: ${presentError(error)}`));
@@ -1713,9 +2012,7 @@ getSelectedActionRow = function getSelectedActionRowCollection() {
 
 setActionEditorEnabled = function setActionEditorEnabledCollection(enabled) {
   [
-    els.saveActionRowBtn,
     els.actionGroupedInput,
-    els.actionDestinationInput,
     els.actionExtraMsgInput,
     els.actionTransferModeSelect,
     els.actionPubLnkEnabledInput,
@@ -1735,7 +2032,9 @@ populateActionEditor = function populateActionEditorCollection(row) {
     els.actionModeSelect.value = 'structured';
     els.actionRawActionInput.value = '';
     els.actionGroupedInput.checked = true;
-    renderActionDestinationChoices('');
+    if (state.collectionCustomizeOpen || !getResolvedDestinationInputValue()) {
+      renderActionDestinationChoices('');
+    }
     hideDestinationSuggestions();
     els.actionExtraMsgInput.value = '';
     els.actionTransferModeSelect.value = 'comments';
@@ -1761,7 +2060,12 @@ populateActionEditor = function populateActionEditorCollection(row) {
   els.actionModeSelect.value = useRawOverride ? 'raw_override' : 'structured';
   els.actionRawActionInput.value = useRawOverride ? rowAction : '';
   els.actionGroupedInput.checked = row.action ? Boolean(model.grouped) : true;
-  renderActionDestinationChoices(row.destination || '');
+  if (state.collectionCustomizeOpen) {
+    renderActionDestinationChoices(row.destination || '');
+  } else {
+    const currentDestination = getResolvedDestinationInputValue();
+    renderActionDestinationChoices(currentDestination || row.destination || '');
+  }
   els.actionExtraMsgInput.value = row.extraMsg || '';
   els.actionTransferModeSelect.value = model.transferMode || 'comments';
   els.actionPubLnkEnabledInput.checked = row.action ? Boolean(model.pubLnk?.enabled) : true;
@@ -1932,6 +2236,10 @@ loadActionRows = async function loadActionRowsCollection() {
 };
 
 saveSelectedActionRow = async function saveSelectedActionRowCollection() {
+  if (state.selectedPresetId && !state.collectionCustomizeOpen) {
+    await applyPresetToSelectedCollections();
+    return;
+  }
   const targetRows = getTargetCollectionRowsForSave();
   if (!targetRows.length) {
     alert('Select a Collection group first.');
