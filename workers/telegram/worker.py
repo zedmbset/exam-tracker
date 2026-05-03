@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import queue
 import re
 import signal
 import sys
@@ -29,6 +30,10 @@ SHEETS_JOB_LOCK = threading.Lock()
 ACTIVE_SHEETS_JOB = None
 STORE = None
 STORE_LOCK = threading.Lock()
+PERSIST_QUEUE = queue.Queue()
+PERSIST_THREAD = None
+PERSIST_LOCK = threading.Lock()
+PERSIST_DISABLED = False
 
 API_ID = int(os.environ.get("TELEGRAM_API_ID", "0"))
 API_HASH = os.environ.get("TELEGRAM_API_HASH", "")
@@ -123,22 +128,69 @@ def base_job(job_id, job_type, channel=""):
 
 
 def persist_job(job):
+    if PERSIST_DISABLED:
+        return
+    start_persist_worker()
+    snapshot = {
+        "ID_Job": job["jobId"],
+        "Type": job["type"],
+        "Channel": job["channel"],
+        "Status": job["status"],
+        "Progress": str(job["progress"]),
+        "Total": str(job["total"]),
+        "Started": job["started"],
+        "Finished": job["finished"],
+        "Error": redact_sensitive_text(job["error"]),
+        "Summary_JSON": redact_sensitive_text(job["summary"]),
+        "Worker_Job_ID": job["jobId"],
+    }
+    try:
+        PERSIST_QUEUE.put_nowait(snapshot)
+    except Exception:
+        pass
+
+
+def _persist_job_sync(payload):
     store = get_store()
     store.upsert_job(
         {
-            "ID_Job": job["jobId"],
-            "Type": job["type"],
-            "Channel": job["channel"],
-            "Status": job["status"],
-            "Progress": str(job["progress"]),
-            "Total": str(job["total"]),
-            "Started": job["started"],
-            "Finished": job["finished"],
-            "Error": redact_sensitive_text(job["error"]),
-            "Summary_JSON": redact_sensitive_text(job["summary"]),
-            "Worker_Job_ID": job["jobId"],
+            "ID_Job": payload["ID_Job"],
+            "Type": payload["Type"],
+            "Channel": payload["Channel"],
+            "Status": payload["Status"],
+            "Progress": payload["Progress"],
+            "Total": payload["Total"],
+            "Started": payload["Started"],
+            "Finished": payload["Finished"],
+            "Error": payload["Error"],
+            "Summary_JSON": payload["Summary_JSON"],
+            "Worker_Job_ID": payload["Worker_Job_ID"],
         }
     )
+
+
+def persist_worker_loop():
+    global PERSIST_DISABLED
+    while True:
+        payload = PERSIST_QUEUE.get()
+        try:
+            _persist_job_sync(payload)
+        except Exception as error:
+            PERSIST_DISABLED = True
+            print(f"Warning: disabling job persistence after failure: {redact_sensitive_text(error)}")
+        finally:
+            PERSIST_QUEUE.task_done()
+
+
+def start_persist_worker():
+    global PERSIST_THREAD
+    if PERSIST_DISABLED:
+        return
+    with PERSIST_LOCK:
+        if PERSIST_THREAD and PERSIST_THREAD.is_alive():
+            return
+        PERSIST_THREAD = threading.Thread(target=persist_worker_loop, daemon=True, name="telegram-worker-persist")
+        PERSIST_THREAD.start()
 
 
 def _should_persist_logs(job, level="info", force=False):

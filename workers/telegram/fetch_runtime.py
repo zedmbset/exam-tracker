@@ -91,13 +91,16 @@ class WorkerTelegramFetcherAdapter:
             raise RuntimeError("Channel reference is empty.")
 
         errors = []
-        direct_candidates = [ref]
+        direct_candidates = []
+        if ref.startswith("-100") and len(ref) > 4:
+            direct_candidates.append(int(ref))
+        elif ref.lstrip("-").isdigit():
+            direct_candidates.append(int(ref))
+
+        direct_candidates.append(ref)
         stripped = ref.lstrip("@")
         if stripped and stripped != ref:
             direct_candidates.insert(0, stripped)
-
-        if ref.startswith("-100") and len(ref) > 4:
-            direct_candidates.append(int(ref))
 
         for candidate in direct_candidates:
             try:
@@ -127,14 +130,17 @@ class WorkerTelegramFetcherAdapter:
         self.entity_name = getattr(self.entity, "title", str(channel_id))
         return self.entity, self.entity_name
 
-    async def fetch_messages(self, start_message_id=None, end_message_id=None, start_date=None):
+    async def fetch_messages(self, start_message_id=None, end_message_id=None, start_date=None, progress_cb=None):
         if not self.entity:
             raise RuntimeError("Channel entity not initialized.")
 
         messages = []
+        heartbeat_every = 200
         if start_date:
             async for message in self.client.iter_messages(self.entity, offset_date=start_date, reverse=True, limit=None):
                 messages.append(message)
+                if progress_cb and len(messages) % heartbeat_every == 0:
+                    progress_cb(len(messages))
         else:
             iter_params = {}
             if start_message_id:
@@ -143,7 +149,11 @@ class WorkerTelegramFetcherAdapter:
                 iter_params["max_id"] = int(end_message_id) + 1
             async for message in self.client.iter_messages(self.entity, **iter_params):
                 messages.append(message)
+                if progress_cb and len(messages) % heartbeat_every == 0:
+                    progress_cb(len(messages))
             messages = list(reversed(messages))
+        if progress_cb:
+            progress_cb(len(messages))
         return messages
 
     async def get_forward_entity_info(self, forward_obj):
@@ -229,7 +239,7 @@ async def fetch_messages_to_sheet(
     all_rows = []
     total_channels = len(channels)
     for index, channel in enumerate(channels, start=1):
-        channel_ref = channel.get("username") or channel.get("id") or channel.get("name")
+        channel_ref = channel.get("id") or channel.get("username") or channel.get("name")
         if log_cb:
             log_cb(f'Preparing channel {index}/{total_channels}: {channel.get("name") or channel_ref}')
         await adapter.get_channel_entity(channel_ref)
@@ -243,12 +253,16 @@ async def fetch_messages_to_sheet(
             target_name = channel.get("name") or adapter.entity_name or channel_ref
             if range_mode == "date":
                 log_cb(f"Fetching messages from {target_name} using date range starting at {date_from or 'the beginning'}.")
+                if not date_from:
+                    log_cb(f"Date range is empty for {target_name}, so Telegram history will be scanned from the beginning.")
             else:
                 log_cb(f"Fetching messages from {target_name} using message ids {start_message_id or 'start'} to {end_message_id or 'latest'}.")
         messages = await adapter.fetch_messages(
             start_message_id=start_message_id if range_mode == "message_id" else None,
             end_message_id=end_message_id if range_mode == "message_id" else None,
             start_date=start_dt if range_mode == "date" else None,
+            progress_cb=(lambda count, target_name=channel.get("name") or adapter.entity_name or channel_ref:
+                log_cb(f"Still fetching from {target_name}: {count} message(s) scanned so far.") if log_cb and count else None),
         )
         if fetch_comments:
             rows = await parser.parse_messages_with_comments(
