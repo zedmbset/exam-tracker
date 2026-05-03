@@ -795,12 +795,13 @@ function sanitizeFetchJobPayload(body, spreadsheet) {
   })).filter((channel) => channel.id || channel.username || channel.name);
   if (!normalizedChannels.length) throw new Error('Selected channels are invalid.');
 
-  const rangeMode = compactString(body?.rangeMode) === 'message_id' ? 'message_id' : 'date';
-  const dateFrom = compactString(body?.dateFrom);
+  let rangeMode = compactString(body?.rangeMode) === 'message_id' ? 'message_id' : 'date';
+  let dateFrom = compactString(body?.dateFrom);
   const startMessageId = compactString(body?.startMessageId);
   const endMessageId = compactString(body?.endMessageId);
   if (rangeMode === 'message_id' && !startMessageId && !endMessageId) {
-    throw new Error('Provide at least one message ID boundary.');
+    rangeMode = 'date';
+    dateFrom = '';
   }
   return {
     spreadsheetKey: spreadsheet.key,

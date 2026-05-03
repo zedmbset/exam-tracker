@@ -56,6 +56,7 @@ const els = {
   saveAddChannelBtn: document.getElementById('saveAddChannelBtn'),
   workerPill: document.getElementById('workerPill'),
   workerSummary: document.getElementById('workerSummary'),
+  workerMeta: document.getElementById('workerMeta'),
   jobs: document.getElementById('jobs'),
   log: document.getElementById('log'),
   copyLogBtn: document.getElementById('copyLogBtn'),
@@ -795,6 +796,7 @@ function renderWorkerStatus() {
     els.workerPill.className = 'pill warn';
     els.workerPill.textContent = 'Checking worker...';
     els.workerSummary.textContent = 'Loading worker health in the background.';
+    if (els.workerMeta) els.workerMeta.textContent = '';
     return;
   }
   const connected = Boolean(health.telethonConnected);
@@ -803,6 +805,20 @@ function renderWorkerStatus() {
   els.workerSummary.textContent = connected
     ? 'Telethon is connected and ready for fetch/action jobs.'
     : (health.error || 'Worker is reachable but Telethon is not fully connected yet.');
+  if (els.workerMeta) {
+    const buildLabel = String(health.workerBuildLabel || '').trim();
+    const shortSha = String(health.workerGitSha || '').trim().slice(0, 7);
+    const deploymentId = String(health.workerDeploymentId || '').trim();
+    const codeUpdatedAt = String(health.workerCodeUpdatedAt || '').trim();
+    const startedAt = String(health.workerStartedAt || '').trim();
+    const parts = [];
+    if (buildLabel) parts.push(`Build ${buildLabel}`);
+    if (shortSha && !buildLabel.includes(shortSha)) parts.push(`SHA ${shortSha}`);
+    if (deploymentId) parts.push(`Deploy ${deploymentId.slice(0, 8)}`);
+    if (codeUpdatedAt) parts.push(`Code ${new Date(codeUpdatedAt).toLocaleString()}`);
+    if (startedAt) parts.push(`Started ${new Date(startedAt).toLocaleString()}`);
+    els.workerMeta.textContent = parts.join(' • ');
+  }
 }
 
 function renderSpreadsheets() {
@@ -845,7 +861,7 @@ function applyRouteLayout() {
   els.collectionsTabLink.classList.toggle('active', state.isCollectionsRoute);
   els.cacheTabLink.classList.toggle('active', state.isCacheRoute);
   els.fetchWorkspace.classList.toggle('section-hidden', state.isCollectionsRoute || state.isCacheRoute);
-  els.collectionsWorkspace.classList.toggle('section-hidden', state.isCacheRoute);
+  els.collectionsWorkspace.classList.toggle('section-hidden', !state.isCollectionsRoute);
   els.cacheWorkspace.classList.toggle('section-hidden', !state.isCacheRoute);
   els.collectionsHero.classList.toggle('section-hidden', !state.isCollectionsRoute);
   moveActivityLogCard();
@@ -858,7 +874,7 @@ function applyRouteLayout() {
     ? 'Collections tab: all collection groups in one dedicated workspace.'
     : state.isCacheRoute
       ? 'Cache tab: refresh fast local caches without cluttering the posting flow.'
-      : 'Fetch tab: sheets, channels, and jobs with the collection builder kept below.';
+      : 'Fetch tab: choose the spreadsheet, channels, range, and comment options for message fetching only.';
 }
 
 function renderGroups() {
@@ -1704,7 +1720,6 @@ document.getElementById('clearVisibleBtn').addEventListener('click', () => {
   renderChannels();
 });
 document.getElementById('fetchMessagesBtn').addEventListener('click', () => startJob('fetch-messages').catch((error) => alert(presentError(error))));
-document.getElementById('executeActionsBtn').addEventListener('click', () => startJob('execute-actions').catch((error) => alert(presentError(error))));
 document.getElementById('collectionsExecuteActionsBtn').addEventListener('click', () => startJob('execute-actions').catch((error) => alert(presentError(error))));
 els.copyLogBtn?.addEventListener('click', () => copyActivityLog().catch((error) => {
   log(`Copy log failed: ${presentError(error)}`);
@@ -1713,12 +1728,16 @@ els.copyLogBtn?.addEventListener('click', () => copyActivityLog().catch((error) 
 els.spreadsheetSelect.addEventListener('change', () => {
   savePersistedUi();
   loadSheets()
-    .then(() => loadActionRows().catch((error) => log(`Action builder: ${presentError(error)}`)))
+    .then(() => (state.isCollectionsRoute
+      ? loadActionRows().catch((error) => log(`Action builder: ${presentError(error)}`))
+      : null))
     .catch((error) => alert(presentError(error)));
 });
 els.sheetSelect.addEventListener('change', () => {
   savePersistedUi();
-  loadActionRows().catch((error) => log(`Action builder: ${presentError(error)}`));
+  if (state.isCollectionsRoute) {
+    loadActionRows().catch((error) => log(`Action builder: ${presentError(error)}`));
+  }
 });
 els.channelSearch.addEventListener('input', () => {
   savePersistedUi();
@@ -1993,7 +2012,9 @@ window.addEventListener('pagehide', () => [...state.timers.keys()].forEach(stopP
     await loadSheets();
     await loadChannels();
     await loadActionPresets().catch((error) => log(`Presets: ${presentError(error)}`));
-    await loadActionRows().catch((error) => log(`Action builder: ${presentError(error)}`));
+    if (state.isCollectionsRoute) {
+      await loadActionRows().catch((error) => log(`Action builder: ${presentError(error)}`));
+    }
     renderPresetPreview();
   } catch (error) {
     const message = presentError(error);

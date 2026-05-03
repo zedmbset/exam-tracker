@@ -62,6 +62,23 @@ def configure_stdio():
 
 configure_stdio()
 
+WORKER_FILE = Path(__file__).resolve()
+WORKER_STARTED_AT = now_iso() if 'now_iso' in globals() else datetime.now(timezone.utc).isoformat()
+WORKER_CODE_UPDATED_AT = datetime.fromtimestamp(WORKER_FILE.stat().st_mtime, timezone.utc).isoformat()
+WORKER_GIT_SHA = (
+    os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")
+    or os.environ.get("SOURCE_VERSION", "")
+    or os.environ.get("GIT_COMMIT_SHA", "")
+).strip()
+WORKER_DEPLOYMENT_ID = (
+    os.environ.get("RAILWAY_DEPLOYMENT_ID", "")
+    or os.environ.get("RAILWAY_REPLICA_ID", "")
+).strip()
+WORKER_BUILD_LABEL = (
+    os.environ.get("TELEGRAM_WORKER_BUILD_LABEL", "").strip()
+    or (f"git:{WORKER_GIT_SHA[:7]}" if WORKER_GIT_SHA else "local")
+)
+
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -439,6 +456,11 @@ def health():
             "telethonConnected": client_ready,
             "contactsSheetConfigured": bool(os.environ.get("CONTACTS_SHEET_ID")),
             "workerAuthConfigured": bool(WORKER_AUTH_TOKEN),
+            "workerBuildLabel": WORKER_BUILD_LABEL,
+            "workerGitSha": WORKER_GIT_SHA,
+            "workerDeploymentId": WORKER_DEPLOYMENT_ID,
+            "workerCodeUpdatedAt": WORKER_CODE_UPDATED_AT,
+            "workerStartedAt": WORKER_STARTED_AT,
         }
     )
 
