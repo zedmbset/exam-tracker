@@ -90,6 +90,22 @@ class WorkerTelegramFetcherAdapter:
         if not ref:
             raise RuntimeError("Channel reference is empty.")
 
+        errors = []
+        direct_candidates = [ref]
+        stripped = ref.lstrip("@")
+        if stripped and stripped != ref:
+            direct_candidates.insert(0, stripped)
+
+        if ref.startswith("-100") and len(ref) > 4:
+            direct_candidates.append(int(ref))
+
+        for candidate in direct_candidates:
+            try:
+                entity = await self.client.get_entity(candidate)
+                return entity
+            except Exception as error:
+                errors.append(str(error))
+
         cache = await self._ensure_dialog_cache()
         normalized_keys = {
             ref,
@@ -103,14 +119,6 @@ class WorkerTelegramFetcherAdapter:
             entity = cache.get(key)
             if entity is not None:
                 return entity
-
-        errors = []
-        for candidate in (ref.lstrip("@"), ref):
-            try:
-                entity = await self.client.get_entity(candidate)
-                return entity
-            except Exception as error:
-                errors.append(str(error))
 
         raise RuntimeError(f'Cannot find any entity corresponding to "{ref}"')
 
