@@ -1671,11 +1671,23 @@ async function startJob(type) {
     payload.fetchComments = els.fetchCommentsInput.checked;
     payload.maxCommentsPerPost = Number(els.maxCommentsInput.value || 50);
   }
+  const pendingJobId = `pending-${type}-${Date.now()}`;
+  state.jobs.set(pendingJobId, {
+    jobId: pendingJobId,
+    type,
+    status: 'queued',
+    channel: sheetName,
+    summary: 'Contacting server...',
+    logs: [],
+  });
+  renderJobs();
+  log(`Starting ${type} job for ${sheetName}...`);
   const result = await api('/api/telegram/fetch/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+  state.jobs.delete(pendingJobId);
   state.jobs.set(result.jobId, { jobId: result.jobId, type, status: 'queued', channel: sheetName, summary: 'Queued...' });
   state.seenJobLogCounts.set(result.jobId, 0);
   renderJobs();
