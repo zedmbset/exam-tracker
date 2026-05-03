@@ -1,7 +1,10 @@
 import asyncio
+import contextlib
+import io
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 from telethon.utils import get_peer_id
 
@@ -15,6 +18,40 @@ import google_sheets_helper as gsh
 from telegram_client.action_executor import ActionExecutor
 from telegram_client.comment_fetcher import CommentFetcher
 from telegram_client.message_parser import MessageParser
+
+
+class _CallbackLogStream(io.TextIOBase):
+    def __init__(self, callback):
+        super().__init__()
+        self._callback = callback
+        self._buffer = ""
+
+    def writable(self):
+        return True
+
+    def write(self, text):
+        chunk = str(text or "")
+        if not chunk:
+            return 0
+        self._buffer += chunk
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            cleaned = line.rstrip("\r").strip()
+            if cleaned:
+                self._callback(cleaned)
+        return len(chunk)
+
+    def flush(self):
+        cleaned = self._buffer.rstrip("\r").strip()
+        if cleaned:
+            self._callback(cleaned)
+        self._buffer = ""
+
+
+def _make_executor_log_stream(log_cb) -> Optional[_CallbackLogStream]:
+    if not log_cb:
+        return None
+    return _CallbackLogStream(log_cb)
 
 
 class WorkerTelegramFetcherAdapter:
@@ -176,6 +213,7 @@ async def fetch_messages_to_sheet(
     fetch_comments,
     max_comments_per_post,
     progress_cb=None,
+    log_cb=None,
 ):
     adapter = WorkerTelegramFetcherAdapter(client)
     parser = MessageParser(adapter)
@@ -184,6 +222,8 @@ async def fetch_messages_to_sheet(
     total_channels = len(channels)
     for index, channel in enumerate(channels, start=1):
         channel_ref = channel.get("username") or channel.get("id") or channel.get("name")
+        if log_cb:
+            log_cb(f'Preparing channel {index}/{total_channels}: {channel.get("name") or channel_ref}')
         await adapter.get_channel_entity(channel_ref)
         start_dt = None
         if range_mode == "date" and date_from:
@@ -191,6 +231,12 @@ async def fetch_messages_to_sheet(
             if start_dt:
                 from datetime import datetime, timezone
                 start_dt = datetime.fromtimestamp(start_dt, tz=timezone.utc)
+        if log_cb:
+            target_name = channel.get("name") or adapter.entity_name or channel_ref
+            if range_mode == "date":
+                log_cb(f"Fetching messages from {target_name} using date range starting at {date_from or 'the beginning'}.")
+            else:
+                log_cb(f"Fetching messages from {target_name} using message ids {start_message_id or 'start'} to {end_message_id or 'latest'}.")
         messages = await adapter.fetch_messages(
             start_message_id=start_message_id if range_mode == "message_id" else None,
             end_message_id=end_message_id if range_mode == "message_id" else None,
@@ -210,7 +256,11 @@ async def fetch_messages_to_sheet(
         if progress_cb:
             progress_cb(index, total_channels, channel.get("name") or adapter.entity_name, len(messages), len(rows))
 
+    if log_cb:
+        log_cb(f"Upserting {len(all_rows)} total row(s) into Google Sheets tab {sheet_name}.")
     stats = gsh.upsert_messages_to_all_msgs(spreadsheet_id, all_rows, sheet_name=sheet_name)
+    if log_cb:
+        log_cb("Google Sheets upsert finished.")
     return {
         "channels": total_channels,
         "rows": len(all_rows),
@@ -220,7 +270,18 @@ async def fetch_messages_to_sheet(
     }
 
 
-async def execute_sheet_actions(client, spreadsheet_id, sheet_name):
+async def execute_sheet_actions(client, spreadsheet_id, sheet_name, log_cb=None):
+    if log_cb:
+        log_cb(f"Loading action rows from {sheet_name}.")
     executor = ActionExecutor(client)
-    stats = await executor.execute_actions(spreadsheet_id, sheet_name=sheet_name)
+    stream = _make_executor_log_stream(log_cb)
+    if stream:
+        with contextlib.redirect_stdout(stream), contextlib.redirect_stderr(stream):
+            stats = await executor.execute_actions(spreadsheet_id, sheet_name=sheet_name)
+        stream.flush()
+    else:
+        stats = await executor.execute_actions(spreadsheet_id, sheet_name=sheet_name)
+
+    if log_cb:
+        log_cb(f"Action executor returned stats for {sheet_name}.")
     return stats

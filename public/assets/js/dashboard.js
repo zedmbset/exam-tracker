@@ -623,6 +623,73 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+function getParticipantDisplayName(participant) {
+  if (!participant || typeof participant !== 'object') {
+    const raw = String(participant || '').trim();
+    return raw.includes('@') ? raw.split('@')[0].replace(/[._-]+/g, ' ').trim() || raw : raw;
+  }
+
+  const name = String(participant.name || '').trim();
+  if (name) return name;
+
+  const email = String(participant.email || '').trim();
+  if (!email) return '';
+  return email.split('@')[0].replace(/[._-]+/g, ' ').trim() || email;
+}
+
+function getParticipantLastActivityMs(participant) {
+  let latest = 0;
+  const noteTime = (value) => {
+    const parsed = Date.parse(String(value || ''));
+    if (!Number.isNaN(parsed)) latest = Math.max(latest, parsed);
+  };
+
+  if (Array.isArray(participant?.timeline)) {
+    participant.timeline.forEach(entry => noteTime(entry?.at));
+  }
+
+  const steps = participant?.steps && typeof participant.steps === 'object' ? participant.steps : {};
+  Object.values(steps).forEach(step => {
+    if (step && typeof step === 'object') {
+      noteTime(step.lastAt || step.firstAt);
+    }
+  });
+
+  return latest;
+}
+
+function formatSavedByName(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  if (raw.startsWith('{') || raw.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(raw);
+      const participants = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.participants)
+          ? parsed.participants
+          : [];
+
+      const latest = participants
+        .map((participant, index) => ({
+          participant,
+          index,
+          lastActivityMs: getParticipantLastActivityMs(participant),
+        }))
+        .sort((a, b) => (b.lastActivityMs - a.lastActivityMs) || (b.index - a.index))[0];
+
+      const label = getParticipantDisplayName(latest?.participant);
+      if (label) return label;
+    } catch (e) {
+      // Fall through to the legacy formatter below.
+    }
+  }
+
+  const legacyName = raw.split(/\s+-\s+/)[0].trim();
+  return getParticipantDisplayName(legacyName || raw);
+}
+
 function getStatusBadgeHtml(status) {
   const cleanStatus = normalizeStatusValue(status);
   if (!cleanStatus) return `<span class="badge badge-gray">Empty</span>`;
@@ -716,6 +783,8 @@ function renderTable() {
       : '<span class="empty-val">&mdash;</span>';
     const idx    = sheetData.indexOf(r);
     const examId = cell(r,'ID_Exams') || r._rowIndex;
+    const savedByRaw = cell(r,'Membre');
+    const savedByName = formatSavedByName(savedByRaw);
     return `<tr class="${comp?'complete':'has-missing'}" onclick="location.href='/exam?id='+encodeURIComponent('${examId}')" style="cursor:pointer;">
       <td>${wilayaBadge(cell(r,'Wilaya'))}</td>
       <td>${cell(r,'Year')}</td>
@@ -724,7 +793,7 @@ function renderTable() {
       <td>${getStatusBadgeHtml(status)}</td>
       <td>${drive?`<div class="link-cell"><a href="${drive}" target="_blank" onclick="event.stopPropagation()">Drive &nearr;</a></div>`:'<span class="empty-val">&mdash;</span>'}</td>
       <td>${quiz?`<div class="link-cell"><a href="${quiz}" target="_blank" onclick="event.stopPropagation()">Quiz &nearr;</a></div>`:'<span class="empty-val">&mdash;</span>'}</td>
-      <td onclick="event.stopPropagation()">${cell(r,'Membre')?`<span class="saver-cell" title="${escapeHtml(cell(r,'Membre'))}">${escapeHtml(cell(r,'Membre'))}</span>`:'<span class="empty-val">&mdash;</span>'}</td>
+      <td onclick="event.stopPropagation()">${savedByName?`<span class="saver-cell" title="${escapeHtml(savedByRaw)}">${escapeHtml(savedByName)}</span>`:'<span class="empty-val">&mdash;</span>'}</td>
       <td style="text-align:center;">${nqst||'<span class="empty-val">&mdash;</span>'}</td>
       <td style="text-align:center;">${missingQstsLabel}</td>
       <td onclick="event.stopPropagation()" style="text-align:center;padding:6px 8px;">
@@ -871,10 +940,11 @@ function openFill(idx){
     <div class="field-hint">Paste tab-separated data from Excel/Sheets. It will be converted to CSV and saved to Drive automatically.</div>`, true);
 
   // â”€â”€ Last saved by â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const membreVal = cell(row,'Membre') || '';
+  const membreRaw = cell(row,'Membre') || '';
+  const membreVal = formatSavedByName(membreRaw);
   if (membreVal) {
     addRow(quizGrid, `
-      <div class="last-saved-info">
+      <div class="last-saved-info" title="${escapeHtml(membreRaw)}">
         <span class="ls-icon">👤</span>
         <span><strong>Last saved by:</strong> ${escapeHtml(membreVal)}</span>
       </div>`);

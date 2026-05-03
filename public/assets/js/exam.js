@@ -333,15 +333,24 @@
       }
       function readExamSessionFromForm(row) {
         if (!window.ExamSessionUtils) throw new Error("ExamSession helper failed to load.");
-        const family = document.getElementById("examSession_family")?.value || "";
+        const currentSession = getExamSessionForRow(row);
+        const family = document.getElementById("examSession_family")?.value || getSessionFamilyValue(currentSession);
         const level = cell(row, "Level");
+        const fallbackRotation = family === "clinical" ? (currentSession?.groupValue || "") : "";
+        const fallbackPeriod = family === "clinical" ? (currentSession?.period || "") : "";
+        const fallbackSemester = family === "preclinical" ? (currentSession?.groupValue || "") : "";
+        const fallbackSpecialType = family === "rattrapage"
+          ? "RTRPG"
+          : family === "synthese"
+            ? "SYNTH"
+            : (currentSession?.specialType || "");
         return window.ExamSessionUtils.buildExamSession({
           family,
           level,
-          rotation: document.getElementById("examSession_rotation")?.value || "",
-          period: document.getElementById("examSession_period")?.value || "",
-          semester: document.getElementById("examSession_semester")?.value || "",
-          specialType: family === "rattrapage" ? "RTRPG" : family === "synthese" ? "SYNTH" : "",
+          rotation: document.getElementById("examSession_rotation")?.value || fallbackRotation,
+          period: document.getElementById("examSession_period")?.value || fallbackPeriod,
+          semester: document.getElementById("examSession_semester")?.value || fallbackSemester,
+          specialType: fallbackSpecialType,
         }, { level });
       }
 
@@ -1605,6 +1614,7 @@
                     <option value="P1" ${examSession?.period === "P1" ? "selected" : ""}>P1</option>
                     <option value="P2" ${examSession?.period === "P2" ? "selected" : ""}>P2</option>
                     <option value="P3" ${examSession?.period === "P3" ? "selected" : ""}>P3</option>
+                    <option value="UNK" ${examSession?.period === "UNK" ? "selected" : ""}>Unknown period</option>
                   </select>
                 </div>
               </div>

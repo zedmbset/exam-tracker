@@ -23,6 +23,7 @@
   selectedPresetId:'',
   presetManagerOpen:false,
   addChannelSaving:false,
+  seenJobLogCounts:new Map(),
 };
 const MAX_POLL_ERRORS = 5;
 const POLL_INTERVAL = 3000;
@@ -50,6 +51,7 @@ const els = {
   workerSummary: document.getElementById('workerSummary'),
   jobs: document.getElementById('jobs'),
   log: document.getElementById('log'),
+  copyLogBtn: document.getElementById('copyLogBtn'),
   dateFromInput: document.getElementById('dateFromInput'),
   startMessageInput: document.getElementById('startMessageInput'),
   endMessageInput: document.getElementById('endMessageInput'),
@@ -126,7 +128,7 @@ const els = {
 };
 
 const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-const DEFAULT_PUNCT_SYMBOLS = ['*', '-', 'â€¢', '>>', 'ًں”¹'];
+const DEFAULT_PUNCT_SYMBOLS = ['*', '-', '\u2022', '>>', '\u{1F539}'];
 
 function getChannelSelectionKey(channel) {
   return channel?.id || channel?.username || channel?.name || '';
@@ -290,9 +292,9 @@ function normalizeActionEditorLabels() {
     if (options[0]) options[0].text = 'Choose a symbol';
     if (options[1]) options[1].text = '*  Star';
     if (options[2]) options[2].text = '-  Dash';
-    if (options[3]) options[3].text = 'â€¢  Bullet';
+    if (options[3]) options[3].text = '\u2022  Bullet';
     if (options[4]) options[4].text = '>>  Double chevron';
-    if (options[5]) options[5].text = 'ًں”¹  Blue diamond';
+    if (options[5]) options[5].text = '\u{1F539}  Blue diamond';
     if (options[3]) options[3].value = '\u2022';
     if (options[5]) options[5].value = '\u{1F539}';
   }
@@ -301,9 +303,9 @@ function normalizeActionEditorLabels() {
     if (options[0]) options[0].text = 'Choose a symbol';
     if (options[1]) options[1].text = '*  Star';
     if (options[2]) options[2].text = '-  Dash';
-    if (options[3]) options[3].text = 'â€¢  Bullet';
+    if (options[3]) options[3].text = '\u2022  Bullet';
     if (options[4]) options[4].text = '>>  Double chevron';
-    if (options[5]) options[5].text = 'ًں”¹  Blue diamond';
+    if (options[5]) options[5].text = '\u{1F539}  Blue diamond';
     if (options[3]) options[3].value = '\u2022';
     if (options[5]) options[5].value = '\u{1F539}';
   }
@@ -546,6 +548,59 @@ function log(message) {
   els.log.textContent = `[${timestamp}] ${message}\n` + els.log.textContent;
 }
 
+async function copyActivityLog() {
+  const logText = String(els.log?.textContent || '').trim();
+  if (!logText) {
+    log('Copy log skipped because the activity log is empty.');
+    return;
+  }
+
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(logText);
+  } else {
+    const helper = document.createElement('textarea');
+    helper.value = logText;
+    helper.setAttribute('readonly', 'readonly');
+    helper.style.position = 'fixed';
+    helper.style.opacity = '0';
+    document.body.appendChild(helper);
+    helper.select();
+    helper.setSelectionRange(0, helper.value.length);
+    const copied = document.execCommand('copy');
+    document.body.removeChild(helper);
+    if (!copied) throw new Error('Clipboard copy is not supported in this browser.');
+  }
+
+  const originalLabel = els.copyLogBtn?.textContent || 'Copy Log';
+  if (els.copyLogBtn) {
+    els.copyLogBtn.textContent = 'Copied';
+    window.setTimeout(() => {
+      if (els.copyLogBtn) els.copyLogBtn.textContent = originalLabel;
+    }, 1400);
+  }
+  log('Activity log copied to clipboard for debugging.');
+}
+
+function formatJobLogTime(value) {
+  if (!value) return new Date().toLocaleTimeString();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleTimeString();
+}
+
+function flushJobLogs(job) {
+  if (!job?.jobId) return;
+  const logs = Array.isArray(job.logs) ? job.logs : [];
+  const seen = Number(state.seenJobLogCounts.get(job.jobId) || 0);
+  if (logs.length <= seen) return;
+  logs.slice(seen).forEach((entry) => {
+    const prefix = `[${formatJobLogTime(entry?.time)}] [${job.type}]`;
+    const level = String(entry?.level || '').toLowerCase();
+    const suffix = level === 'error' ? ' ERROR' : '';
+    log(`${prefix}${suffix} ${entry?.message || ''}`.trim());
+  });
+  state.seenJobLogCounts.set(job.jobId, logs.length);
+}
+
 async function api(url, options = {}) {
   const response = await fetch(url, options);
   const text = await response.text();
@@ -604,7 +659,7 @@ function renderSheets() {
   }
   const spreadsheet = state.spreadsheets.find((entry) => entry.key === els.spreadsheetSelect.value);
   els.sheetHint.textContent = spreadsheet
-    ? `${spreadsheet.label} â†’ ${spreadsheet.spreadsheetId}`
+    ? `${spreadsheet.label} -> ${spreadsheet.spreadsheetId}`
     : '';
   savePersistedUi();
   if (spreadsheet) {
@@ -758,6 +813,7 @@ function renderJobs() {
       </div>
       <div class="muted" style="margin-top:6px;">${escapeHtml(job.channel || '')}</div>
       <div class="muted" style="margin-top:6px;">${escapeHtml(job.summary || job.error || '')}</div>
+      <div class="muted" style="margin-top:6px;">${escapeHtml(`${Array.isArray(job.logs) ? job.logs.length : 0} log line(s)`)}</div>
       <div class="progress"><div style="width:${pct}%"></div></div>
     </div>`;
   }).join('');
@@ -1285,6 +1341,7 @@ async function pollJob(jobId) {
   try {
     const job = await api(`/api/telegram/fetch/jobs/${encodeURIComponent(jobId)}`);
     state.jobs.set(jobId, job);
+    flushJobLogs(job);
     renderJobs();
     if (!['done', 'error'].includes(job.status)) {
       state.timers.set(jobId, { failures: 0, timer: setTimeout(() => pollJob(jobId), POLL_INTERVAL) });
@@ -1324,6 +1381,7 @@ async function startJob(type) {
     body: JSON.stringify(payload),
   });
   state.jobs.set(result.jobId, { jobId: result.jobId, type, status: 'queued', channel: sheetName, summary: 'Queued...' });
+  state.seenJobLogCounts.set(result.jobId, 0);
   renderJobs();
   log(`Started ${type} job ${result.jobId}.`);
   pollJob(result.jobId);
@@ -1364,6 +1422,10 @@ document.getElementById('clearVisibleBtn').addEventListener('click', () => {
 document.getElementById('fetchMessagesBtn').addEventListener('click', () => startJob('fetch-messages').catch((error) => alert(presentError(error))));
 document.getElementById('executeActionsBtn').addEventListener('click', () => startJob('execute-actions').catch((error) => alert(presentError(error))));
 document.getElementById('collectionsExecuteActionsBtn').addEventListener('click', () => startJob('execute-actions').catch((error) => alert(presentError(error))));
+els.copyLogBtn?.addEventListener('click', () => copyActivityLog().catch((error) => {
+  log(`Copy log failed: ${presentError(error)}`);
+  alert(presentError(error));
+}));
 els.spreadsheetSelect.addEventListener('change', () => {
   savePersistedUi();
   loadSheets()
@@ -1801,7 +1863,7 @@ renderActionRows = function renderActionRowsCollection() {
           <div class="related-row-top">
             <div class="related-row-title">${escapeHtml(item.title || `Row ${item.rowIndex}`)}</div>
             <div class="related-row-tail">
-              <span class="drag-handle" title="Drag to reorder">â‹®â‹®</span>
+              <span class="drag-handle" title="Drag to reorder">\u22EE\u22EE</span>
               <span class="action-pill neutral">${escapeHtml(`Row ${item.rowIndex}`)}</span>
               ${item.messageLink ? `<a class="link-pill" href="${escapeHtml(item.messageLink)}" target="_blank" rel="noopener">Post</a>` : ''}
               <label class="include-check">

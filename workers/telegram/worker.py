@@ -3,6 +3,7 @@ import json
 import os
 import re
 import signal
+import sys
 import threading
 from pathlib import Path
 from datetime import datetime, timezone
@@ -41,6 +42,24 @@ CLIENT = None
 CLIENT_LOCK = threading.Lock()
 
 
+def configure_stdio():
+    """
+    Force stdout/stderr into a Unicode-safe mode on Windows so legacy prints
+    from the Telegram executor cannot crash the worker with charmap errors.
+    """
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None:
+            continue
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
+configure_stdio()
+
+
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
 
@@ -75,6 +94,7 @@ def base_job(job_id, job_type, channel=""):
         "finished": "",
         "error": "",
         "summary": "",
+        "logs": [],
     }
 
 
@@ -106,6 +126,22 @@ def set_job(job_id, **updates):
     return snapshot
 
 
+def append_job_log(job_id, message, level="info"):
+    entry = {
+        "time": now_iso(),
+        "level": str(level or "info").strip() or "info",
+        "message": redact_sensitive_text(message),
+    }
+    with LOCK:
+        job = JOBS[job_id]
+        logs = list(job.get("logs") or [])
+        logs.append(entry)
+        job["logs"] = logs[-200:]
+        snapshot = dict(job)
+        persist_job(snapshot)
+    return entry
+
+
 def set_active_sheets_job(job_id):
     global ACTIVE_SHEETS_JOB
     with LOCK:
@@ -130,6 +166,7 @@ def create_job(job_type, channel=""):
     with LOCK:
         JOBS[job_id] = job
         persist_job(job)
+    append_job_log(job_id, f"Job created for {job_type}.")
     return job_id
 
 
@@ -279,6 +316,7 @@ def run_async_job(job_id, coroutine_factory):
             run_async(coroutine_factory())
         except Exception as error:
             message = redact_sensitive_text(error)
+            append_job_log(job_id, message, level="error")
             set_job(job_id, status="error", error=message, finished=now_iso(), summary=message)
 
     thread = threading.Thread(target=runner, daemon=True)
@@ -295,6 +333,7 @@ async def run_serialized_sheets_job(job_id, wait_summary, coroutine_factory):
         suffix = f" Waiting for job {active_job} to finish..." if active_job else " Waiting for another sheet job to finish..."
         if not announced_wait:
             set_job(job_id, status="queued", summary=f"{wait_summary}.{suffix}")
+            append_job_log(job_id, f"{wait_summary}.{suffix}")
             announced_wait = True
         await asyncio.sleep(2)
 
@@ -364,10 +403,12 @@ def start_list_channels():
     async def work():
         client = await init_client()
         set_job(job_id, status="running", summary="Listing channels...")
+        append_job_log(job_id, "Connected to Telegram. Listing available channels...")
         channels = await list_channels(client, timeout_seconds=ASYNC_TIMEOUT_SECONDS)
         store = get_store()
         store.write_channels(channels)
         summary = json.dumps({"channels": len(channels)})
+        append_job_log(job_id, f"Channel listing complete. Found {len(channels)} channels.")
         set_job(job_id, status="done", progress=len(channels), total=len(channels), finished=now_iso(), summary=summary)
 
     run_async_job(job_id, work)
@@ -390,6 +431,7 @@ def start_fetch_members():
     async def work():
         client = await init_client()
         set_job(job_id, status="running", summary=f"Fetching members for {label}...")
+        append_job_log(job_id, f"Connected to Telegram. Fetching members for {label}.")
         result = await fetch_members(
             client,
             channel_ref,
@@ -400,6 +442,7 @@ def start_fetch_members():
         store = get_store()
         summary_payload = store.import_members(result["members"])
         summary = json.dumps(summary_payload)
+        append_job_log(job_id, f"Fetched {result['total']} members for {result['channel_name']}.")
         set_job(
             job_id,
             status="done",
@@ -440,6 +483,8 @@ def start_fetch_messages():
         async def run_job():
             client = await init_client()
             set_job(job_id, status="running", total=len(channels), summary=f"Fetching Telegram messages into {sheet_name}...")
+            append_job_log(job_id, f"Connected to Telegram. Starting fetch into sheet {sheet_name}.")
+            append_job_log(job_id, f"Selected {len(channels)} channel(s). Range mode: {range_mode}.")
 
             def progress_cb(done_channels, total_channels, channel_name, message_count, row_count):
                 summary = json.dumps({
@@ -449,6 +494,10 @@ def start_fetch_messages():
                     "messages_fetched": message_count,
                     "rows_buffered": row_count,
                 })
+                append_job_log(
+                    job_id,
+                    f"Channel {done_channels}/{total_channels}: {channel_name} -> {message_count} message(s), {row_count} row(s).",
+                )
                 set_job(job_id, status="running", progress=done_channels, total=total_channels, summary=summary)
 
             result = await fetch_messages_to_sheet(
@@ -463,8 +512,13 @@ def start_fetch_messages():
                 fetch_comments=fetch_comments,
                 max_comments_per_post=max_comments_per_post,
                 progress_cb=progress_cb,
+                log_cb=lambda message: append_job_log(job_id, message),
             )
             summary = json.dumps(result)
+            append_job_log(
+                job_id,
+                f"Fetch complete. Wrote {result.get('rows', 0)} row(s) across {result.get('channels', 0)} channel(s) to {sheet_name}.",
+            )
             set_job(job_id, status="done", progress=len(channels), total=len(channels), finished=now_iso(), summary=summary)
 
         await run_serialized_sheets_job(
@@ -491,8 +545,15 @@ def start_execute_actions():
         async def run_job():
             client = await init_client()
             set_job(job_id, status="running", summary=f"Executing sheet actions from {sheet_name}...")
-            stats = await execute_sheet_actions(client, spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)
+            append_job_log(job_id, f"Connected to Telegram. Executing actions from {sheet_name}.")
+            stats = await execute_sheet_actions(
+                client,
+                spreadsheet_id=spreadsheet_id,
+                sheet_name=sheet_name,
+                log_cb=lambda message: append_job_log(job_id, message),
+            )
             summary = json.dumps(stats)
+            append_job_log(job_id, f"Action execution complete for {sheet_name}.")
             set_job(job_id, status="done", progress=int(stats.get("total", 0) or 0), total=int(stats.get("total", 0) or 0), finished=now_iso(), summary=summary)
 
         await run_serialized_sheets_job(
@@ -513,6 +574,14 @@ def get_job(job_id):
         snapshot = dict(job)
         snapshot["error"] = redact_sensitive_text(snapshot.get("error"))
         snapshot["summary"] = redact_sensitive_text(snapshot.get("summary"))
+        snapshot["logs"] = [
+            {
+                "time": entry.get("time", ""),
+                "level": entry.get("level", "info"),
+                "message": redact_sensitive_text(entry.get("message", "")),
+            }
+            for entry in (snapshot.get("logs") or [])
+        ]
         return jsonify(snapshot)
 
     store = get_store()
@@ -531,6 +600,7 @@ def get_job(job_id):
                     "finished": row.get("Finished", ""),
                     "error": redact_sensitive_text(row.get("Error", "")),
                     "summary": redact_sensitive_text(row.get("Summary_JSON", "")),
+                    "logs": [],
                 }
             )
     return jsonify({"error": "Job not found."}), 404
